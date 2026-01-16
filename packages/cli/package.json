@@ -1,0 +1,25 @@
+{
+  "name": "@kopai/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "kopai": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "lint": "eslint src",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kopai/core": "workspace:*",
+    "@kopai/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@kopai/tsconfig": "workspace:*",
+    "tsdown": "^0.19.0"
+  }
+}

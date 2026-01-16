@@ -1,0 +1,3 @@
+{
+  "extends": "@kopai/tsconfig/base.json"
+}

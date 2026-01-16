@@ -1,0 +1,36 @@
+# Dependencies
+node_modules
+
+# Build
+dist
+*.tsbuildinfo
+
+# Turborepo
+.turbo
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test
+coverage
+
+# Misc
+*.local
+*.claude

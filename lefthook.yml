@@ -1,0 +1,6 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint-staged:
+      glob: "*.{ts,tsx,js,jsx,mjs,json,md,yaml,yml}"
+      run: pnpm lint-staged

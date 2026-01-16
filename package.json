@@ -1,0 +1,47 @@
+{
+  "name": "kopai-mono",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^24.0.0",
+      "onFail": "download"
+    }
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "type-check": "turbo run type-check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.8",
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.39.0",
+    "lefthook": "^2.0.15",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.0",
+    "turbo": "^2.7.4",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.53.0",
+    "vitest": "^4.0.17"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yaml,yml}": [
+      "prettier --write"
+    ]
+  }
+}
