@@ -91,6 +91,9 @@ importers:
       '@kopai/core':
         specifier: workspace:*
         version: link:../core
+      '@kopai/sqlite-datasource':
+        specifier: workspace:*
+        version: link:../sqlite-datasource
       fastify:
         specifier: ^5.7.0
         version: 5.7.0
@@ -1866,8 +1869,7 @@ packages:
           targets:
             - cpu: x64
               os: win32
-    version: 24.13.0
-    hasBin: true
+    version: 0.0.0
 
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}

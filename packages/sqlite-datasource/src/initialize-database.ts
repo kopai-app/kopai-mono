@@ -1,20 +1,14 @@
 import type { PathLike } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
+import { ddl as openetelemetryTablesSchemaDdl } from "./sqlite-opentelemetry-ddl.js";
 
 type DatabaseSyncParams = ConstructorParameters<typeof DatabaseSync>;
 
-export async function initializeDatabase(
+export function initializeDatabase(
   path: PathLike,
-  opts: DatabaseSyncParams[1]
+  opts?: DatabaseSyncParams[1]
 ) {
-  const database = new DatabaseSync(path, opts);
-  const openetelemetryTablesSchemaDdl = await readFile(
-    "./sqlite-opentelemetry-ddl.sql",
-    {
-      encoding: "utf8",
-    }
-  );
+  const database = new DatabaseSync(path, opts ?? {});
 
   database.exec(openetelemetryTablesSchemaDdl);
 

@@ -1,9 +1,7 @@
 import z from "zod";
 
 const envSchema = z.object({
-  NODE_ENV: z.string().optional(),
   HOST: z.string().optional(),
-  SQLITE_DB_FILE_PATH: z.string(),
   PORT: z
     .string()
     .transform((val) => parseInt(val))

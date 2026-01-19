@@ -11,6 +11,10 @@ import fastifySwaggerUI from "@fastify/swagger-ui";
 import { env } from "./config.js";
 import { apiRoutes } from "./routes/index.js";
 import { otelCollectorRoutes } from "./collector/index.js";
+import {
+  initializeDatabase,
+  NodeSqliteTelemetryDatasource,
+} from "@kopai/sqlite-datasource";
 
 const apiServer = fastify({
   logger: true,
@@ -73,8 +77,13 @@ const collectorServer = fastify({
 collectorServer.setValidatorCompiler(validatorCompiler);
 collectorServer.setSerializerCompiler(serializerCompiler);
 
-collectorServer.register(otelCollectorRoutes, {
-  dbURl: "testDbUrl",
+collectorServer.after(async () => {
+  const sqliteDatabase = initializeDatabase(env.SQLITE_DB_FILE_PATH);
+  const telemetryDatasource = new NodeSqliteTelemetryDatasource(sqliteDatabase);
+
+  collectorServer.register(otelCollectorRoutes, {
+    telemetryDatasource,
+  });
 });
 
 async function run() {
