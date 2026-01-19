@@ -39,13 +39,14 @@ export class NodeSqliteTelemetryDatasource implements TelemetryDatasource {
     const gaugeRows: Insertable<OtelMetricsGauge>[] = [];
 
     for (const resourceMetric of metricsData.resourceMetrics ?? []) {
-      const resource = resourceMetric.resource;
-      const resourceSchemaUrl = resourceMetric.schemaUrl;
+      const { resource, schemaUrl: resourceSchemaUrl } = resourceMetric;
+
       for (const scopeMetric of resourceMetric.scopeMetrics ?? []) {
-        const scope = scopeMetric.scope;
-        const scopeSchemaUrl = scopeMetric.schemaUrl;
+        const { scope, schemaUrl: scopeSchemaUrl } = scopeMetric;
+
         for (const metric of scopeMetric.metrics ?? []) {
           if (metric.gauge) {
+            // Gauge rows
             for (const dataPoint of metric.gauge.dataPoints ?? []) {
               gaugeRows.push(
                 toGaugeRow(
@@ -59,6 +60,7 @@ export class NodeSqliteTelemetryDatasource implements TelemetryDatasource {
               );
             }
           }
+          // Histogram rows
         }
       }
     }

@@ -61,7 +61,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
           {
             resource: {
               attributes: [
-                { key: "service.name", value: { stringValue: testServiceName } },
+                {
+                  key: "service.name",
+                  value: { stringValue: testServiceName },
+                },
                 { key: "host.name", value: { stringValue: testHostName } },
               ],
             },
@@ -72,7 +75,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
                   name: testScopeName,
                   version: testScopeVersion,
                   attributes: [
-                    { key: testScopeAttrKey, value: { stringValue: testScopeAttrVal } },
+                    {
+                      key: testScopeAttrKey,
+                      value: { stringValue: testScopeAttrVal },
+                    },
                   ],
                   droppedAttributesCount: testScopeDroppedAttrCount,
                 },
@@ -86,7 +92,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
                       dataPoints: [
                         {
                           attributes: [
-                            { key: testDpAttrKey, value: { stringValue: testDpAttrVal } },
+                            {
+                              key: testDpAttrKey,
+                              value: { stringValue: testDpAttrVal },
+                            },
                           ],
                           startTimeUnixNano: testStartTimeUnixNano,
                           timeUnixNano: testTimeUnixNano,
@@ -117,7 +126,11 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ],
       };
 
-      await datasource.writeMetrics(metricsData);
+      const result = await datasource.writeMetrics(metricsData);
+
+      expect(result).toEqual({
+        rejectedDataPoints: "",
+      });
 
       const rows = testConnection
         .prepare("SELECT * FROM otel_metrics_gauge")
@@ -146,7 +159,9 @@ describe("NodeSqliteTelemetryDatasource", () => {
         "Exemplars.TimeUnix": `[${Number(BigInt(testExTimeUnixNano) / 1_000_000n)}]`,
         "Exemplars.Value": `[${testExValue}]`,
         "Exemplars.SpanId": `["${testExSpanId}"]`,
-        "Exemplars.TraceId": `["${Array.from(testExTraceId).map((b) => b.toString(16).padStart(2, "0")).join("")}"]`,
+        "Exemplars.TraceId": `["${Array.from(testExTraceId)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")}"]`,
       });
     });
   });
