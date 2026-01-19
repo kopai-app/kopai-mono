@@ -1,5 +1,5 @@
 {
-  "name": "@kopai/api",
+  "name": "@kopai/collector",
   "version": "0.0.0",
   "type": "module",
   "exports": {
@@ -22,8 +22,6 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@fastify/swagger": "^9.6.1",
-    "@fastify/swagger-ui": "^5.2.4",
     "@kopai/core": "workspace:*",
     "fastify": "^5.7.0",
     "fastify-type-provider-zod": "^6.1.0"

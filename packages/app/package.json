@@ -1,14 +1,7 @@
 {
-  "name": "@kopai/api",
+  "name": "@kopai/app",
   "version": "0.0.0",
   "type": "module",
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
-    }
-  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -19,12 +12,16 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "lint": "eslint src",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "start": "node ./dist/index.js",
+    "start:dev": "node --env-file=.env --watch-path=./dist ./dist/index.mjs"
   },
   "dependencies": {
     "@fastify/swagger": "^9.6.1",
     "@fastify/swagger-ui": "^5.2.4",
     "@kopai/core": "workspace:*",
+    "@kopai/api": "workspace:*",
+    "@kopai/collector": "workspace:*",
     "fastify": "^5.7.0",
     "fastify-type-provider-zod": "^6.1.0"
   },

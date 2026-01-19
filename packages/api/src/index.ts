@@ -1,1 +1,1 @@
-export const name = "@kopai/api";
+export { apiRoutes } from "./routes/index.js";
