@@ -1,4 +1,5 @@
-interface MetricsData {} // this should come from a Zod schema
+import type { MetricsData } from "./otlp-generated.js";
+export type { MetricsData } from "./otlp-metrics-generated.js";
 
 /*
  * example:
@@ -8,7 +9,7 @@ interface MetricsData {} // this should come from a Zod schema
  * "errorMessage": "quota exceeded for tenant abc123"
  * }
  */
-interface PartialSuccess {
+export interface MetricsPartialSuccess {
   // The number of rejected data points.
   rejectedDataPoints?: string;
 
@@ -16,7 +17,8 @@ interface PartialSuccess {
   errorMessage?: string;
 }
 
-// TODO: implementations: console.log, sequelize, clickhouse
 export interface WriteMetricsDatasource {
-  writeMetrics(metricsData: MetricsData): Promise<PartialSuccess>;
+  writeMetrics(metricsData: MetricsData): Promise<MetricsPartialSuccess>;
 }
+
+export type TelemetryDatasource = WriteMetricsDatasource; // & WriteTraceDatasource & ReadTracesDatasource ...

@@ -16,7 +16,7 @@ import { CollectorError } from "./errors.js";
 
 export function collectorErrorHandler(
   error: FastifyError | Error | string,
-  _request: FastifyRequest,
+  request: FastifyRequest,
   reply: FastifyReply
 ) {
   if (isValidationError(error)) {
@@ -38,6 +38,9 @@ export function collectorErrorHandler(
       message: error.message,
     } satisfies ErrorResponse);
   }
+
+  request.log.error(error);
+  reply.status(500).send({ error: "Internal Server Error" });
 }
 
 function isFastifyError(error: unknown): error is FastifyError {
