@@ -6,6 +6,7 @@ import {
 } from "fastify-type-provider-zod";
 
 import { metricsRoute } from "./routes/metrics.js";
+import { tracesRoute } from "./routes/traces.js";
 import { collectorErrorHandler } from "./routes/error-handler.js";
 
 export const collectorRoutes: FastifyPluginAsyncZod<{
@@ -17,5 +18,9 @@ export const collectorRoutes: FastifyPluginAsyncZod<{
 
   fastify.register(metricsRoute, {
     writeMetricsDatasource: opts.telemetryDatasource,
+  });
+
+  fastify.register(tracesRoute, {
+    writeTracesDatasource: opts.telemetryDatasource,
   });
 };

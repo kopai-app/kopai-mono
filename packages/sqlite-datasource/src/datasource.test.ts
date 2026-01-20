@@ -436,4 +436,251 @@ describe("NodeSqliteTelemetryDatasource", () => {
       });
     });
   });
+
+  describe("writeTraces", () => {
+    let testConnection: DatabaseSync;
+    let ds: datasource.TelemetryDatasource;
+
+    beforeEach(() => {
+      testConnection = initializeDatabase(":memory:");
+      ds = new NodeSqliteTelemetryDatasource(testConnection);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("stores spans with all fields", async () => {
+      const testTraceId = "0102030405060708090a0b0c0d0e0f10";
+      const testSpanId = "1112131415161718";
+      const testParentSpanId = "2122232425262728";
+      const testTraceState = "vendor=value";
+      const testSpanName = "GET /api/users";
+      const testServiceName = "test-service";
+      const testScopeName = "test-scope";
+      const testScopeVersion = "1.0.0";
+      const testStartTimeUnixNano = "1704067200000000000"; // 2024-01-01 00:00:00
+      const testEndTimeUnixNano = "1704067260000000000"; // 60 seconds later
+      const testStatusMessage = "success";
+
+      const tracesData: datasource.TracesData = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                {
+                  key: "service.name",
+                  value: { stringValue: testServiceName },
+                },
+                { key: "host.name", value: { stringValue: "test-host" } },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: {
+                  name: testScopeName,
+                  version: testScopeVersion,
+                },
+                spans: [
+                  {
+                    traceId: testTraceId,
+                    spanId: testSpanId,
+                    parentSpanId: testParentSpanId,
+                    traceState: testTraceState,
+                    name: testSpanName,
+                    kind: otlp.SpanKind.SPAN_KIND_SERVER,
+                    startTimeUnixNano: testStartTimeUnixNano,
+                    endTimeUnixNano: testEndTimeUnixNano,
+                    status: {
+                      code: otlp.StatusCode.STATUS_CODE_OK,
+                      message: testStatusMessage,
+                    },
+                    attributes: [
+                      { key: "http.method", value: { stringValue: "GET" } },
+                      { key: "http.status_code", value: { intValue: 200 } },
+                    ],
+                    events: [
+                      {
+                        name: "exception",
+                        timeUnixNano: "1704067230000000000",
+                        attributes: [
+                          {
+                            key: "exception.message",
+                            value: { stringValue: "test error" },
+                          },
+                        ],
+                      },
+                    ],
+                    links: [
+                      {
+                        traceId: "linked0102030405060708",
+                        spanId: "linked11121314",
+                        traceState: "linked=state",
+                        attributes: [
+                          { key: "link.attr", value: { stringValue: "val" } },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await ds.writeTraces(tracesData);
+
+      expect(result).toEqual({ rejectedSpans: "" });
+
+      const rows = testConnection.prepare("SELECT * FROM otel_traces").all();
+      expect(rows).toHaveLength(1);
+
+      const row = rows[0] as Record<string, unknown>;
+      expect(row).toMatchObject({
+        TraceId: testTraceId,
+        SpanId: testSpanId,
+        ParentSpanId: testParentSpanId,
+        TraceState: testTraceState,
+        SpanName: testSpanName,
+        SpanKind: "SPAN_KIND_SERVER",
+        ServiceName: testServiceName,
+        ResourceAttributes: `{"service.name":"${testServiceName}","host.name":"test-host"}`,
+        ScopeName: testScopeName,
+        ScopeVersion: testScopeVersion,
+        SpanAttributes: '{"http.method":"GET","http.status_code":200}',
+        Timestamp: Number(BigInt(testStartTimeUnixNano) / 1_000_000n),
+        Duration: 60000, // 60 seconds in ms
+        StatusCode: "STATUS_CODE_OK",
+        StatusMessage: testStatusMessage,
+        "Events.Timestamp": `[${Number(BigInt("1704067230000000000") / 1_000_000n)}]`,
+        "Events.Name": '["exception"]',
+        "Events.Attributes": '[{"exception.message":"test error"}]',
+        "Links.TraceId": '["linked0102030405060708"]',
+        "Links.SpanId": '["linked11121314"]',
+        "Links.TraceState": '["linked=state"]',
+        "Links.Attributes": '[{"link.attr":"val"}]',
+      });
+    });
+
+    it("updates trace_id_ts lookup table", async () => {
+      const testTraceId = "trace123";
+
+      const tracesData: datasource.TracesData = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                { key: "service.name", value: { stringValue: "test-service" } },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: { name: "test-scope" },
+                spans: [
+                  {
+                    traceId: testTraceId,
+                    spanId: "span1",
+                    name: "first-span",
+                    startTimeUnixNano: "1000000000", // 1000ms in nanos
+                    endTimeUnixNano: "2000000000",
+                  },
+                  {
+                    traceId: testTraceId,
+                    spanId: "span2",
+                    name: "second-span",
+                    startTimeUnixNano: "3000000000", // 3000ms in nanos
+                    endTimeUnixNano: "4000000000",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await ds.writeTraces(tracesData);
+
+      const lookupRows = testConnection
+        .prepare("SELECT * FROM otel_traces_trace_id_ts")
+        .all();
+      expect(lookupRows).toHaveLength(1);
+
+      const lookupRow = lookupRows[0] as Record<string, unknown>;
+      expect(lookupRow).toMatchObject({
+        TraceId: testTraceId,
+        Start: 1000, // min timestamp in ms
+        End: 3000, // max timestamp in ms
+      });
+    });
+
+    it("merges trace_id_ts on subsequent writes", async () => {
+      const testTraceId = "trace456";
+
+      // First write
+      await ds.writeTraces({
+        resourceSpans: [
+          {
+            resource: { attributes: [] },
+            scopeSpans: [
+              {
+                scope: { name: "scope" },
+                spans: [
+                  {
+                    traceId: testTraceId,
+                    spanId: "span1",
+                    name: "span",
+                    startTimeUnixNano: "2000000000", // 2000ms in nanos
+                    endTimeUnixNano: "3000000000",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      // Second write with earlier and later timestamps
+      await ds.writeTraces({
+        resourceSpans: [
+          {
+            resource: { attributes: [] },
+            scopeSpans: [
+              {
+                scope: { name: "scope" },
+                spans: [
+                  {
+                    traceId: testTraceId,
+                    spanId: "span2",
+                    name: "earlier-span",
+                    startTimeUnixNano: "1000000000", // 1000ms in nanos (earlier)
+                    endTimeUnixNano: "1500000000",
+                  },
+                  {
+                    traceId: testTraceId,
+                    spanId: "span3",
+                    name: "later-span",
+                    startTimeUnixNano: "5000000000", // 5000ms in nanos (later)
+                    endTimeUnixNano: "6000000000",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const lookupRows = testConnection
+        .prepare("SELECT * FROM otel_traces_trace_id_ts")
+        .all();
+      expect(lookupRows).toHaveLength(1);
+
+      const lookupRow = lookupRows[0] as Record<string, unknown>;
+      expect(lookupRow).toMatchObject({
+        TraceId: testTraceId,
+        Start: 1000, // min across all writes
+        End: 5000, // max across all writes
+      });
+    });
+  });
 });

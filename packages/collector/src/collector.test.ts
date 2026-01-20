@@ -25,6 +25,7 @@ describe("collectorRoutes", () => {
       server.register(collectorRoutes, {
         telemetryDatasource: {
           writeMetrics: writeMetricsSpy,
+          writeTraces: vi.fn(),
         },
       });
 
@@ -255,6 +256,7 @@ describe("collectorRoutes", () => {
       server.register(collectorRoutes, {
         telemetryDatasource: {
           writeMetrics: writeMetricsSpy,
+          writeTraces: vi.fn(),
         },
       });
 
@@ -319,6 +321,7 @@ describe("collectorRoutes", () => {
                 grpcStatusCode.INTERNAL
               )
             ),
+          writeTraces: vi.fn(),
         },
       });
 
@@ -339,6 +342,7 @@ describe("collectorRoutes", () => {
       server.register(collectorRoutes, {
         telemetryDatasource: {
           writeMetrics: vi.fn().mockRejectedValue(new Error("unexpected")),
+          writeTraces: vi.fn(),
         },
       });
 
@@ -346,6 +350,200 @@ describe("collectorRoutes", () => {
         method: "POST",
         url: "/v1/metrics",
         payload: { resourceMetrics: [] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        error: "Internal Server Error",
+      });
+    });
+  });
+
+  describe("POST /v1/traces", () => {
+    let server: FastifyInstance;
+    beforeEach(() => {
+      server = fastify();
+    });
+
+    afterEach(() => {
+      server.close();
+    });
+
+    it("returns OK and calls telemetryDatasource.writeTraces", async () => {
+      const writeTracesSpy = vi.fn().mockResolvedValue({
+        rejectedSpans: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: writeTracesSpy,
+        },
+      });
+
+      const tracesPayload: datasource.TracesData = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                { key: "service.name", value: { stringValue: "test-service" } },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: { name: "test-instrumentation" },
+                spans: [
+                  {
+                    traceId: "abc123",
+                    spanId: "def456",
+                    name: "test-span",
+                    kind: 2, // SPAN_KIND_SERVER
+                    startTimeUnixNano: "1704067200000000000",
+                    endTimeUnixNano: "1704067260000000000",
+                    status: { code: 1 }, // STATUS_CODE_OK
+                    attributes: [
+                      { key: "http.method", value: { stringValue: "GET" } },
+                    ],
+                    events: [
+                      {
+                        name: "exception",
+                        timeUnixNano: "1704067230000000000",
+                        attributes: [
+                          {
+                            key: "exception.message",
+                            value: { stringValue: "error" },
+                          },
+                        ],
+                      },
+                    ],
+                    links: [
+                      {
+                        traceId: "linked123",
+                        spanId: "linkedspan456",
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        payload: tracesPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        partialSuccess: {
+          rejectedSpans: undefined,
+          errorMessage: undefined,
+        },
+      });
+
+      expect(writeTracesSpy).toHaveBeenCalledWith(tracesPayload);
+    });
+
+    it("returns 400 and response body as specified in otel collector spec for invalid payload", async () => {
+      const writeTracesSpy = vi.fn().mockResolvedValue({
+        rejectedSpans: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: writeTracesSpy,
+        },
+      });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        payload: {
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      // Invalid: kind should be number, not string
+                      kind: "not-a-valid-kind",
+                      startTimeUnixNano: "1704067260000000000",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        code: 3, // INVALID_ARGUMENT
+        message: "Invalid data",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.BadRequest",
+            fieldViolations: [
+              {
+                description: "Invalid input",
+                field: "resourceSpans",
+                reason: "invalid_union",
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(writeTracesSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns 500 with gRPC status when writeTraces throws CollectorError", async () => {
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: vi
+            .fn()
+            .mockRejectedValue(
+              new CollectorError(
+                "Database connection failed",
+                grpcStatusCode.INTERNAL
+              )
+            ),
+        },
+      });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        payload: { resourceSpans: [] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        code: grpcStatusCode.INTERNAL,
+        message: "Database connection failed",
+      });
+    });
+
+    it("returns 500 with generic error when writeTraces throws unexpected error", async () => {
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: vi.fn().mockRejectedValue(new Error("unexpected")),
+        },
+      });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        payload: { resourceSpans: [] },
       });
 
       expect(response.statusCode).toBe(500);

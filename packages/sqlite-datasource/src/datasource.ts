@@ -17,6 +17,7 @@ import type {
   OtelMetricsHistogram,
   OtelMetricsExponentialHistogram,
   OtelMetricsSummary,
+  OtelTraces,
 } from "./db-types.js";
 
 const queryBuilder = new Kysely<DB>({
@@ -135,23 +136,143 @@ export class NodeSqliteTelemetryDatasource
         { table: "otel_metrics_summary", rows: summaryRows },
       ] as const) {
         for (const row of rows) {
-          try {
-            const { sql, parameters } = queryBuilder
-              .insertInto(table)
-              .values(row)
-              .compile();
-            this.sqliteConnection
-              .prepare(sql)
-              .run(...(parameters as (string | number | null)[]));
-          } catch (err) {
-            throw err;
-          }
+          const { sql, parameters } = queryBuilder
+            .insertInto(table)
+            .values(row)
+            .compile();
+          this.sqliteConnection
+            .prepare(sql)
+            .run(...(parameters as (string | number | null)[]));
         }
       }
     }
 
     return { rejectedDataPoints: "" };
   }
+
+  async writeTraces(
+    tracesData: datasource.TracesData
+  ): Promise<datasource.TracesPartialSuccess> {
+    const spanRows: Insertable<OtelTraces>[] = [];
+    const traceTimestamps = new Map<string, { min: number; max: number }>();
+
+    for (const resourceSpan of tracesData.resourceSpans ?? []) {
+      const { resource } = resourceSpan;
+
+      for (const scopeSpan of resourceSpan.scopeSpans ?? []) {
+        const { scope } = scopeSpan;
+
+        for (const span of scopeSpan.spans ?? []) {
+          const row = toSpanRow(resource, scope, span);
+          spanRows.push(row);
+
+          // Track min/max timestamps per traceId
+          const traceId = span.traceId ?? "";
+          if (traceId) {
+            const timestamp = row.Timestamp;
+            const existing = traceTimestamps.get(traceId);
+            if (existing) {
+              existing.min = Math.min(existing.min, timestamp);
+              existing.max = Math.max(existing.max, timestamp);
+            } else {
+              traceTimestamps.set(traceId, { min: timestamp, max: timestamp });
+            }
+          }
+        }
+      }
+    }
+
+    // Insert span rows
+    for (const row of spanRows) {
+      const { sql, parameters } = queryBuilder
+        .insertInto("otel_traces")
+        .values(row)
+        .compile();
+      this.sqliteConnection
+        .prepare(sql)
+        .run(...(parameters as (string | number | null)[]));
+    }
+
+    // Upsert trace_id_ts lookup table
+    for (const [traceId, { min, max }] of traceTimestamps) {
+      const { sql, parameters } = queryBuilder
+        .insertInto("otel_traces_trace_id_ts")
+        .values({ TraceId: traceId, Start: min, End: max })
+        .onConflict((oc) =>
+          oc.column("TraceId").doUpdateSet({
+            Start: (eb) =>
+              eb.fn("min", [
+                eb.ref("otel_traces_trace_id_ts.Start"),
+                eb.val(min),
+              ]),
+            End: (eb) =>
+              eb.fn("max", [
+                eb.ref("otel_traces_trace_id_ts.End"),
+                eb.val(max),
+              ]),
+          })
+        )
+        .compile();
+      this.sqliteConnection
+        .prepare(sql)
+        .run(...(parameters as (string | number | null)[]));
+    }
+
+    return { rejectedSpans: "" };
+  }
+}
+
+function toSpanRow(
+  resource: otlp.Resource | undefined,
+  scope: otlp.InstrumentationScope | undefined,
+  span: otlp.Span
+): Insertable<OtelTraces> {
+  const events = span.events ?? [];
+  const links = span.links ?? [];
+  const startNanos = BigInt(span.startTimeUnixNano ?? "0");
+  const endNanos = BigInt(span.endTimeUnixNano ?? "0");
+  const durationMs = Number((endNanos - startNanos) / 1_000_000n);
+
+  return {
+    TraceId: span.traceId ?? "",
+    SpanId: span.spanId ?? "",
+    ParentSpanId: span.parentSpanId ?? "",
+    TraceState: span.traceState ?? "",
+    SpanName: span.name ?? "",
+    SpanKind: spanKindToString(span.kind),
+    ServiceName: extractServiceName(resource),
+    ResourceAttributes: keyValueArrayToJson(resource?.attributes),
+    ScopeName: scope?.name ?? "",
+    ScopeVersion: scope?.version ?? "",
+    SpanAttributes: keyValueArrayToJson(span.attributes),
+    Timestamp: Number(startNanos / 1_000_000n),
+    Duration: durationMs,
+    StatusCode: statusCodeToString(span.status?.code),
+    StatusMessage: span.status?.message ?? "",
+    "Events.Timestamp": JSON.stringify(
+      events.map((e) => nanosToUnix(e.timeUnixNano))
+    ),
+    "Events.Name": JSON.stringify(events.map((e) => e.name ?? "")),
+    "Events.Attributes": JSON.stringify(
+      events.map((e) => keyValueArrayToObject(e.attributes))
+    ),
+    "Links.TraceId": JSON.stringify(links.map((l) => l.traceId ?? "")),
+    "Links.SpanId": JSON.stringify(links.map((l) => l.spanId ?? "")),
+    "Links.TraceState": JSON.stringify(links.map((l) => l.traceState ?? "")),
+    "Links.Attributes": JSON.stringify(
+      links.map((l) => keyValueArrayToObject(l.attributes))
+    ),
+  };
+}
+
+function spanKindToString(kind: otlp.SpanKind | undefined): string {
+  if (kind === undefined) return "";
+  return otlp.SpanKind[kind] ?? "";
+}
+
+function statusCodeToString(code: otlp.StatusCode | undefined): string {
+  if (code === undefined) return "";
+  return otlp.StatusCode[code] ?? "";
 }
 
 function toGaugeRow(
