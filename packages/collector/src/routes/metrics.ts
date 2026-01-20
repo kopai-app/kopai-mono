@@ -26,7 +26,6 @@ export const metricsRoute: FastifyPluginAsyncZod<{
       },
     },
     handler: async (req, res) => {
-      // TODO: metrics datasource needs to return the rejectedDataPoints and errorMessage[]
       const { rejectedDataPoints, errorMessage } =
         await opts.writeMetricsDatasource.writeMetrics(req.body);
 
