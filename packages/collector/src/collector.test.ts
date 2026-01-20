@@ -3,7 +3,7 @@ import fastify, { type FastifyInstance } from "fastify";
 import { collectorRoutes } from "./index.js";
 import { CollectorError } from "./routes/errors.js";
 import { grpcStatusCode } from "./routes/otlp-schemas.js";
-import type { MetricsData } from "@kopai/core";
+import type { datasource } from "@kopai/core";
 
 describe("collectorRoutes", () => {
   describe("POST /v1/metrics", () => {
@@ -28,7 +28,7 @@ describe("collectorRoutes", () => {
         },
       });
 
-      const metricsPayload: MetricsData = {
+      const metricsPayload: datasource.MetricsData = {
         resourceMetrics: [
           {
             resource: {

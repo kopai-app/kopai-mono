@@ -1,18 +1,17 @@
 /// <reference types="vitest/globals" />
 import { DatabaseSync } from "node:sqlite";
 import { NodeSqliteTelemetryDatasource } from "./datasource.js";
-import type { TelemetryDatasource, MetricsData } from "@kopai/core";
-import { AggregationTemporality } from "@kopai/core";
+import { otlp, type datasource } from "@kopai/core";
 import { initializeDatabase } from "./initialize-database.js";
 
 describe("NodeSqliteTelemetryDatasource", () => {
   describe("writeMetrics", () => {
     let testConnection: DatabaseSync;
-    let datasource: TelemetryDatasource;
+    let ds: datasource.TelemetryDatasource;
 
     beforeEach(() => {
       testConnection = initializeDatabase(":memory:");
-      datasource = new NodeSqliteTelemetryDatasource(testConnection);
+      ds = new NodeSqliteTelemetryDatasource(testConnection);
     });
 
     afterEach(() => {
@@ -57,7 +56,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
         0x0d, 0x0e, 0x0f, 0x10,
       ]);
 
-      const metricsData: MetricsData = {
+      const metricsData: datasource.MetricsData = {
         resourceMetrics: [
           {
             resource: {
@@ -127,7 +126,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ],
       };
 
-      const result = await datasource.writeMetrics(metricsData);
+      const result = await ds.writeMetrics(metricsData);
 
       expect(result).toEqual({
         rejectedDataPoints: "",
@@ -167,7 +166,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
     });
 
     it("stores sum metrics", async () => {
-      const metricsData: MetricsData = {
+      const metricsData: datasource.MetricsData = {
         resourceMetrics: [
           {
             resource: {
@@ -197,7 +196,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
                         },
                       ],
                       aggregationTemporality:
-                        AggregationTemporality.AGGREGATION_TEMPORALITY_CUMULATIVE,
+                        otlp.AggregationTemporality
+                          .AGGREGATION_TEMPORALITY_CUMULATIVE,
                       isMonotonic: true,
                     },
                   },
@@ -208,7 +208,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ],
       };
 
-      await datasource.writeMetrics(metricsData);
+      await ds.writeMetrics(metricsData);
 
       const rows = testConnection
         .prepare("SELECT * FROM otel_metrics_sum")
@@ -226,7 +226,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
     });
 
     it("stores histogram metrics", async () => {
-      const metricsData: MetricsData = {
+      const metricsData: datasource.MetricsData = {
         resourceMetrics: [
           {
             resource: {
@@ -263,7 +263,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
                         },
                       ],
                       aggregationTemporality:
-                        AggregationTemporality.AGGREGATION_TEMPORALITY_DELTA,
+                        otlp.AggregationTemporality
+                          .AGGREGATION_TEMPORALITY_DELTA,
                     },
                   },
                 ],
@@ -273,7 +274,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ],
       };
 
-      await datasource.writeMetrics(metricsData);
+      await ds.writeMetrics(metricsData);
 
       const rows = testConnection
         .prepare("SELECT * FROM otel_metrics_histogram")
@@ -295,7 +296,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
     });
 
     it("stores exponential histogram metrics", async () => {
-      const metricsData: MetricsData = {
+      const metricsData: datasource.MetricsData = {
         resourceMetrics: [
           {
             resource: {
@@ -336,7 +337,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
                         },
                       ],
                       aggregationTemporality:
-                        AggregationTemporality.AGGREGATION_TEMPORALITY_CUMULATIVE,
+                        otlp.AggregationTemporality
+                          .AGGREGATION_TEMPORALITY_CUMULATIVE,
                     },
                   },
                 ],
@@ -346,7 +348,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ],
       };
 
-      await datasource.writeMetrics(metricsData);
+      await ds.writeMetrics(metricsData);
 
       const rows = testConnection
         .prepare("SELECT * FROM otel_metrics_exponential_histogram")
@@ -373,7 +375,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
     });
 
     it("stores summary metrics", async () => {
-      const metricsData: MetricsData = {
+      const metricsData: datasource.MetricsData = {
         resourceMetrics: [
           {
             resource: {
@@ -416,7 +418,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ],
       };
 
-      await datasource.writeMetrics(metricsData);
+      await ds.writeMetrics(metricsData);
 
       const rows = testConnection
         .prepare("SELECT * FROM otel_metrics_summary")

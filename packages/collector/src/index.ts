@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import type { TelemetryDatasource } from "@kopai/core";
+import type { datasource } from "@kopai/core";
 import {
   serializerCompiler,
   validatorCompiler,
@@ -9,7 +9,7 @@ import { metricsRoute } from "./routes/metrics.js";
 import { collectorErrorHandler } from "./routes/error-handler.js";
 
 export const collectorRoutes: FastifyPluginAsyncZod<{
-  telemetryDatasource: TelemetryDatasource;
+  telemetryDatasource: datasource.TelemetryDatasource;
 }> = async function (fastify, opts) {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);

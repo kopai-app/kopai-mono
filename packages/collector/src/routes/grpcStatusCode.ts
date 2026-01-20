@@ -1,4 +1,4 @@
-import type { z } from "../../../../node_modules/zod/v4/classic/external.cjs";
+import { z } from "zod";
 
 export const grpcStatusCode = {
   OK: 0,

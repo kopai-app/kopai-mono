@@ -8,25 +8,7 @@ import {
   type Insertable,
 } from "kysely";
 
-import type {
-  MetricsData,
-  TelemetryDatasource,
-  MetricsPartialSuccess,
-  Resource,
-  InstrumentationScope,
-  KeyValue,
-  AnyValue,
-  Metric,
-  NumberDataPoint,
-  Exemplar,
-} from "@kopai/core";
-import {
-  AggregationTemporality,
-  type HistogramDataPoint,
-  type ExponentialHistogramDataPoint,
-  type SummaryDataPoint,
-  type SummaryDataPoint_ValueAtQuantile,
-} from "@kopai/core";
+import { otlp, type datasource, type otlpMetrics } from "@kopai/core";
 
 import type {
   DB,
@@ -46,10 +28,14 @@ const queryBuilder = new Kysely<DB>({
   },
 });
 
-export class NodeSqliteTelemetryDatasource implements TelemetryDatasource {
+export class NodeSqliteTelemetryDatasource
+  implements datasource.TelemetryDatasource
+{
   constructor(private sqliteConnection: DatabaseSync) {}
 
-  async writeMetrics(metricsData: MetricsData): Promise<MetricsPartialSuccess> {
+  async writeMetrics(
+    metricsData: datasource.MetricsData
+  ): Promise<datasource.MetricsPartialSuccess> {
     const gaugeRows: Insertable<OtelMetricsGauge>[] = [];
     const sumRows: Insertable<OtelMetricsSum>[] = [];
     const histogramRows: Insertable<OtelMetricsHistogram>[] = [];
@@ -168,12 +154,12 @@ export class NodeSqliteTelemetryDatasource implements TelemetryDatasource {
 }
 
 function toGaugeRow(
-  resource: Resource | undefined,
+  resource: otlp.Resource | undefined,
   resourceSchemaUrl: string | undefined,
-  scope: InstrumentationScope | undefined,
+  scope: otlp.InstrumentationScope | undefined,
   scopeSchemaUrl: string | undefined,
-  metric: Metric,
-  dataPoint: NumberDataPoint
+  metric: otlpMetrics.Metric,
+  dataPoint: otlpMetrics.NumberDataPoint
 ): Insertable<OtelMetricsGauge> {
   const exemplars = dataPoint.exemplars ?? [];
   return {
@@ -211,13 +197,13 @@ function toGaugeRow(
 }
 
 function toSumRow(
-  resource: Resource | undefined,
+  resource: otlp.Resource | undefined,
   resourceSchemaUrl: string | undefined,
-  scope: InstrumentationScope | undefined,
+  scope: otlp.InstrumentationScope | undefined,
   scopeSchemaUrl: string | undefined,
-  metric: Metric,
-  dataPoint: NumberDataPoint,
-  aggregationTemporality: AggregationTemporality | undefined,
+  metric: otlpMetrics.Metric,
+  dataPoint: otlpMetrics.NumberDataPoint,
+  aggregationTemporality: otlp.AggregationTemporality | undefined,
   isMonotonic: boolean | undefined
 ): Insertable<OtelMetricsSum> {
   const exemplars = dataPoint.exemplars ?? [];
@@ -258,13 +244,13 @@ function toSumRow(
 }
 
 function toHistogramRow(
-  resource: Resource | undefined,
+  resource: otlp.Resource | undefined,
   resourceSchemaUrl: string | undefined,
-  scope: InstrumentationScope | undefined,
+  scope: otlp.InstrumentationScope | undefined,
   scopeSchemaUrl: string | undefined,
-  metric: Metric,
-  dataPoint: HistogramDataPoint,
-  aggregationTemporality: AggregationTemporality | undefined
+  metric: otlpMetrics.Metric,
+  dataPoint: otlpMetrics.HistogramDataPoint,
+  aggregationTemporality: otlp.AggregationTemporality | undefined
 ): Insertable<OtelMetricsHistogram> {
   const exemplars = dataPoint.exemplars ?? [];
   return {
@@ -307,13 +293,13 @@ function toHistogramRow(
 }
 
 function toExpHistogramRow(
-  resource: Resource | undefined,
+  resource: otlp.Resource | undefined,
   resourceSchemaUrl: string | undefined,
-  scope: InstrumentationScope | undefined,
+  scope: otlp.InstrumentationScope | undefined,
   scopeSchemaUrl: string | undefined,
-  metric: Metric,
-  dataPoint: ExponentialHistogramDataPoint,
-  aggregationTemporality: AggregationTemporality | undefined
+  metric: otlpMetrics.Metric,
+  dataPoint: otlpMetrics.ExponentialHistogramDataPoint,
+  aggregationTemporality: otlp.AggregationTemporality | undefined
 ): Insertable<OtelMetricsExponentialHistogram> {
   const exemplars = dataPoint.exemplars ?? [];
   return {
@@ -365,12 +351,12 @@ function toExpHistogramRow(
 }
 
 function toSummaryRow(
-  resource: Resource | undefined,
+  resource: otlp.Resource | undefined,
   resourceSchemaUrl: string | undefined,
-  scope: InstrumentationScope | undefined,
+  scope: otlp.InstrumentationScope | undefined,
   scopeSchemaUrl: string | undefined,
-  metric: Metric,
-  dataPoint: SummaryDataPoint
+  metric: otlpMetrics.Metric,
+  dataPoint: otlpMetrics.SummaryDataPoint
 ): Insertable<OtelMetricsSummary> {
   const quantileValues = dataPoint.quantileValues ?? [];
   return {
@@ -392,23 +378,25 @@ function toSummaryRow(
     Sum: dataPoint.sum ?? 0,
     "ValueAtQuantiles.Quantile": JSON.stringify(
       quantileValues.map(
-        (q: SummaryDataPoint_ValueAtQuantile) => q.quantile ?? 0
+        (q: otlpMetrics.SummaryDataPoint_ValueAtQuantile) => q.quantile ?? 0
       )
     ),
     "ValueAtQuantiles.Value": JSON.stringify(
-      quantileValues.map((q: SummaryDataPoint_ValueAtQuantile) => q.value ?? 0)
+      quantileValues.map(
+        (q: otlpMetrics.SummaryDataPoint_ValueAtQuantile) => q.value ?? 0
+      )
     ),
   };
 }
 
 function aggTemporalityToString(
-  agg: AggregationTemporality | undefined
+  agg: otlp.AggregationTemporality | undefined
 ): string {
   if (agg === undefined) return "";
-  return AggregationTemporality[agg] ?? "";
+  return otlp.AggregationTemporality[agg] ?? "";
 }
 
-function anyValueToSimple(value: AnyValue | undefined): unknown {
+function anyValueToSimple(value: otlp.AnyValue | undefined): unknown {
   if (!value) return null;
   if (value.stringValue !== undefined) return value.stringValue;
   if (value.boolValue !== undefined) return value.boolValue;
@@ -429,7 +417,7 @@ function anyValueToSimple(value: AnyValue | undefined): unknown {
 }
 
 function keyValueArrayToObject(
-  attrs: KeyValue[] | undefined
+  attrs: otlp.KeyValue[] | undefined
 ): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
   if (!attrs) return obj;
@@ -439,12 +427,12 @@ function keyValueArrayToObject(
   return obj;
 }
 
-function keyValueArrayToJson(attrs: KeyValue[] | undefined): string {
+function keyValueArrayToJson(attrs: otlp.KeyValue[] | undefined): string {
   if (!attrs || attrs.length === 0) return "{}";
   return JSON.stringify(keyValueArrayToObject(attrs));
 }
 
-function extractServiceName(resource: Resource | undefined): string {
+function extractServiceName(resource: otlp.Resource | undefined): string {
   if (!resource?.attributes) return "";
   for (const kv of resource.attributes) {
     if (kv.key === "service.name" && kv.value?.stringValue) {
@@ -460,8 +448,8 @@ function nanosToUnix(nanos: string | undefined): number {
 }
 
 function exemplarsArrayToJson<T>(
-  exemplars: Exemplar[],
-  extractor: (e: Exemplar) => T
+  exemplars: otlpMetrics.Exemplar[],
+  extractor: (e: otlpMetrics.Exemplar) => T
 ): string {
   if (exemplars.length === 0) return "[]";
   return JSON.stringify(exemplars.map(extractor));
