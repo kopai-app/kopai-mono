@@ -300,8 +300,9 @@ describe("collectorRoutes", () => {
             "@type": "type.googleapis.com/google.rpc.BadRequest",
             fieldViolations: [
               {
-                description: "Invalid input",
-                field: "resourceMetrics",
+                description: "expected number",
+                field:
+                  "resourceMetrics[0].scopeMetrics[0].metrics[0].gauge.dataPoints[0].asDouble",
                 reason: "invalid_union",
               },
             ],
@@ -499,7 +500,7 @@ describe("collectorRoutes", () => {
             fieldViolations: [
               {
                 description: "Invalid input",
-                field: "resourceSpans",
+                field: "resourceSpans[0].scopeSpans[0].spans[0].kind",
                 reason: "invalid_union",
               },
             ],
@@ -678,7 +679,8 @@ describe("collectorRoutes", () => {
             fieldViolations: [
               {
                 description: "Invalid input",
-                field: "resourceLogs",
+                field:
+                  "resourceLogs[0].scopeLogs[0].logRecords[0].severityNumber",
                 reason: "invalid_union",
               },
             ],

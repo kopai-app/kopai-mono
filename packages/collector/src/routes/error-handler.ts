@@ -2,15 +2,14 @@ import {
   type FastifyError,
   type FastifyReply,
   type FastifyRequest,
-  type FastifySchemaValidationError,
 } from "fastify";
 
 import {
   type OtlpBadRequestErrorResponse,
   grpcStatusCode,
-  type FieldViolation,
   type ErrorResponse,
 } from "./otlp-schemas.js";
+import { toFieldViolation } from "./field-violation.js";
 
 import { CollectorError } from "./errors.js";
 
@@ -60,19 +59,4 @@ function isValidationError(
     "validation" in error &&
     Array.isArray((error as FastifyError).validation)
   );
-}
-
-function toFieldViolation(error: FastifySchemaValidationError): FieldViolation {
-  const field =
-    error.keyword === "required"
-      ? ((error.params as { missingProperty?: string }).missingProperty ??
-        error.instancePath)
-      : // Converts instancePath from /path/to/field → path.to.field
-        error.instancePath.replace(/^\//, "").replace(/\//g, ".");
-
-  return {
-    field: field || "unknown",
-    description: error.message ?? "Validation failed",
-    reason: error.keyword,
-  };
 }
