@@ -18,6 +18,7 @@ import type {
   OtelMetricsExponentialHistogram,
   OtelMetricsSummary,
   OtelTraces,
+  OtelLogs,
 } from "./db-types.js";
 
 const queryBuilder = new Kysely<DB>({
@@ -220,6 +221,44 @@ export class NodeSqliteTelemetryDatasource
 
     return { rejectedSpans: "" };
   }
+
+  async writeLogs(
+    logsData: datasource.LogsData
+  ): Promise<datasource.LogsPartialSuccess> {
+    const logRows: Insertable<OtelLogs>[] = [];
+
+    for (const resourceLog of logsData.resourceLogs ?? []) {
+      const { resource, schemaUrl: resourceSchemaUrl } = resourceLog;
+
+      for (const scopeLog of resourceLog.scopeLogs ?? []) {
+        const { scope, schemaUrl: scopeSchemaUrl } = scopeLog;
+
+        for (const logRecord of scopeLog.logRecords ?? []) {
+          logRows.push(
+            toLogRow(
+              resource,
+              resourceSchemaUrl,
+              scope,
+              scopeSchemaUrl,
+              logRecord
+            )
+          );
+        }
+      }
+    }
+
+    for (const row of logRows) {
+      const { sql, parameters } = queryBuilder
+        .insertInto("otel_logs")
+        .values(row)
+        .compile();
+      this.sqliteConnection
+        .prepare(sql)
+        .run(...(parameters as (string | number | null)[]));
+    }
+
+    return { rejectedLogRecords: "" };
+  }
 }
 
 function toSpanRow(
@@ -262,6 +301,32 @@ function toSpanRow(
     "Links.Attributes": JSON.stringify(
       links.map((l) => keyValueArrayToObject(l.attributes))
     ),
+  };
+}
+
+function toLogRow(
+  resource: otlp.Resource | undefined,
+  resourceSchemaUrl: string | undefined,
+  scope: otlp.InstrumentationScope | undefined,
+  scopeSchemaUrl: string | undefined,
+  logRecord: otlp.LogRecord
+): Insertable<OtelLogs> {
+  return {
+    Timestamp: nanosToUnix(logRecord.timeUnixNano),
+    TraceId: logRecord.traceId ?? "",
+    SpanId: logRecord.spanId ?? "",
+    TraceFlags: logRecord.flags ?? 0,
+    SeverityText: logRecord.severityText ?? "",
+    SeverityNumber: logRecord.severityNumber ?? 0,
+    Body: JSON.stringify(anyValueToSimple(logRecord.body)),
+    LogAttributes: keyValueArrayToJson(logRecord.attributes),
+    ResourceAttributes: keyValueArrayToJson(resource?.attributes),
+    ResourceSchemaUrl: resourceSchemaUrl ?? "",
+    ServiceName: extractServiceName(resource),
+    ScopeName: scope?.name ?? "",
+    ScopeVersion: scope?.version ?? "",
+    ScopeAttributes: keyValueArrayToJson(scope?.attributes),
+    ScopeSchemaUrl: scopeSchemaUrl ?? "",
   };
 }
 

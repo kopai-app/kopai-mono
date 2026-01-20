@@ -683,4 +683,148 @@ describe("NodeSqliteTelemetryDatasource", () => {
       });
     });
   });
+
+  describe("writeLogs", () => {
+    let testConnection: DatabaseSync;
+    let ds: datasource.TelemetryDatasource;
+
+    beforeEach(() => {
+      testConnection = initializeDatabase(":memory:");
+      ds = new NodeSqliteTelemetryDatasource(testConnection);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("stores log records with all fields", async () => {
+      const testTraceId = "0102030405060708090a0b0c0d0e0f10";
+      const testSpanId = "1112131415161718";
+      const testTimeUnixNano = "1704067200000000000";
+      const testSeverityNumber = 9; // INFO
+      const testSeverityText = "INFO";
+      const testBodyString = "Test log message";
+      const testServiceName = "test-service";
+      const testScopeName = "test-scope";
+      const testScopeVersion = "1.0.0";
+      const testResourceSchemaUrl = "https://example.com/resource/v1";
+      const testScopeSchemaUrl = "https://example.com/scope/v1";
+      const testFlags = 1;
+
+      const logsData: datasource.LogsData = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                {
+                  key: "service.name",
+                  value: { stringValue: testServiceName },
+                },
+                { key: "host.name", value: { stringValue: "test-host" } },
+              ],
+            },
+            schemaUrl: testResourceSchemaUrl,
+            scopeLogs: [
+              {
+                scope: {
+                  name: testScopeName,
+                  version: testScopeVersion,
+                  attributes: [
+                    { key: "scope.attr", value: { stringValue: "scope-val" } },
+                  ],
+                },
+                schemaUrl: testScopeSchemaUrl,
+                logRecords: [
+                  {
+                    timeUnixNano: testTimeUnixNano,
+                    severityNumber: testSeverityNumber,
+                    severityText: testSeverityText,
+                    body: { stringValue: testBodyString },
+                    attributes: [
+                      { key: "log.attr", value: { stringValue: "attr-val" } },
+                    ],
+                    traceId: testTraceId,
+                    spanId: testSpanId,
+                    flags: testFlags,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await ds.writeLogs(logsData);
+
+      expect(result).toEqual({ rejectedLogRecords: "" });
+
+      const rows = testConnection.prepare("SELECT * FROM otel_logs").all();
+      expect(rows).toHaveLength(1);
+
+      const row = rows[0] as Record<string, unknown>;
+      expect(row).toMatchObject({
+        Timestamp: Number(BigInt(testTimeUnixNano) / 1_000_000n),
+        TraceId: testTraceId,
+        SpanId: testSpanId,
+        TraceFlags: testFlags,
+        SeverityText: testSeverityText,
+        SeverityNumber: testSeverityNumber,
+        Body: `"${testBodyString}"`,
+        LogAttributes: '{"log.attr":"attr-val"}',
+        ResourceAttributes: `{"service.name":"${testServiceName}","host.name":"test-host"}`,
+        ResourceSchemaUrl: testResourceSchemaUrl,
+        ServiceName: testServiceName,
+        ScopeName: testScopeName,
+        ScopeVersion: testScopeVersion,
+        ScopeAttributes: '{"scope.attr":"scope-val"}',
+        ScopeSchemaUrl: testScopeSchemaUrl,
+      });
+    });
+
+    it("handles logs without optional fields", async () => {
+      const logsData: datasource.LogsData = {
+        resourceLogs: [
+          {
+            resource: { attributes: [] },
+            scopeLogs: [
+              {
+                scope: { name: "minimal-scope" },
+                logRecords: [
+                  {
+                    timeUnixNano: "1000000000",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await ds.writeLogs(logsData);
+
+      expect(result).toEqual({ rejectedLogRecords: "" });
+
+      const rows = testConnection.prepare("SELECT * FROM otel_logs").all();
+      expect(rows).toHaveLength(1);
+
+      const row = rows[0] as Record<string, unknown>;
+      expect(row).toMatchObject({
+        Timestamp: 1000,
+        TraceId: "",
+        SpanId: "",
+        TraceFlags: 0,
+        SeverityText: "",
+        SeverityNumber: 0,
+        Body: "null",
+        LogAttributes: "{}",
+        ResourceAttributes: "{}",
+        ResourceSchemaUrl: "",
+        ServiceName: "",
+        ScopeName: "minimal-scope",
+        ScopeVersion: "",
+        ScopeAttributes: "{}",
+        ScopeSchemaUrl: "",
+      });
+    });
+  });
 });

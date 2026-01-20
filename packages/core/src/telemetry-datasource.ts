@@ -1,6 +1,6 @@
-import type { MetricsData, TracesData } from "./otlp-generated.js";
+import type { MetricsData, TracesData, LogsData } from "./otlp-generated.js";
 export type { MetricsData } from "./otlp-metrics-generated.js";
-export type { TracesData } from "./otlp-generated.js";
+export type { TracesData, LogsData } from "./otlp-generated.js";
 
 /*
  * example:
@@ -31,5 +31,15 @@ export interface WriteTracesDatasource {
   writeTraces(tracesData: TracesData): Promise<TracesPartialSuccess>;
 }
 
+export interface LogsPartialSuccess {
+  rejectedLogRecords?: string;
+  errorMessage?: string;
+}
+
+export interface WriteLogsDatasource {
+  writeLogs(logsData: LogsData): Promise<LogsPartialSuccess>;
+}
+
 export type TelemetryDatasource = WriteMetricsDatasource &
-  WriteTracesDatasource;
+  WriteTracesDatasource &
+  WriteLogsDatasource;

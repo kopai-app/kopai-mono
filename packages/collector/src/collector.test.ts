@@ -26,6 +26,7 @@ describe("collectorRoutes", () => {
         telemetryDatasource: {
           writeMetrics: writeMetricsSpy,
           writeTraces: vi.fn(),
+          writeLogs: vi.fn(),
         },
       });
 
@@ -257,6 +258,7 @@ describe("collectorRoutes", () => {
         telemetryDatasource: {
           writeMetrics: writeMetricsSpy,
           writeTraces: vi.fn(),
+          writeLogs: vi.fn(),
         },
       });
 
@@ -322,6 +324,7 @@ describe("collectorRoutes", () => {
               )
             ),
           writeTraces: vi.fn(),
+          writeLogs: vi.fn(),
         },
       });
 
@@ -343,6 +346,7 @@ describe("collectorRoutes", () => {
         telemetryDatasource: {
           writeMetrics: vi.fn().mockRejectedValue(new Error("unexpected")),
           writeTraces: vi.fn(),
+          writeLogs: vi.fn(),
         },
       });
 
@@ -379,6 +383,7 @@ describe("collectorRoutes", () => {
         telemetryDatasource: {
           writeMetrics: vi.fn(),
           writeTraces: writeTracesSpy,
+          writeLogs: vi.fn(),
         },
       });
 
@@ -458,6 +463,7 @@ describe("collectorRoutes", () => {
         telemetryDatasource: {
           writeMetrics: vi.fn(),
           writeTraces: writeTracesSpy,
+          writeLogs: vi.fn(),
         },
       });
 
@@ -516,6 +522,7 @@ describe("collectorRoutes", () => {
                 grpcStatusCode.INTERNAL
               )
             ),
+          writeLogs: vi.fn(),
         },
       });
 
@@ -537,6 +544,7 @@ describe("collectorRoutes", () => {
         telemetryDatasource: {
           writeMetrics: vi.fn(),
           writeTraces: vi.fn().mockRejectedValue(new Error("unexpected")),
+          writeLogs: vi.fn(),
         },
       });
 
@@ -544,6 +552,185 @@ describe("collectorRoutes", () => {
         method: "POST",
         url: "/v1/traces",
         payload: { resourceSpans: [] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        error: "Internal Server Error",
+      });
+    });
+  });
+
+  describe("POST /v1/logs", () => {
+    let server: FastifyInstance;
+    beforeEach(() => {
+      server = fastify();
+    });
+
+    afterEach(() => {
+      server.close();
+    });
+
+    it("returns OK and calls telemetryDatasource.writeLogs", async () => {
+      const writeLogsSpy = vi.fn().mockResolvedValue({
+        rejectedLogRecords: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: vi.fn(),
+          writeLogs: writeLogsSpy,
+        },
+      });
+
+      const logsPayload: datasource.LogsData = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: "service.name", value: { stringValue: "test-service" } },
+              ],
+            },
+            scopeLogs: [
+              {
+                scope: { name: "test-instrumentation" },
+                logRecords: [
+                  {
+                    timeUnixNano: "1704067200000000000",
+                    severityNumber: 9, // INFO
+                    severityText: "INFO",
+                    body: { stringValue: "Test log message" },
+                    attributes: [
+                      { key: "log.attr", value: { stringValue: "value" } },
+                    ],
+                    traceId: "abc123",
+                    spanId: "def456",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/logs",
+        payload: logsPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        partialSuccess: {
+          rejectedLogRecords: undefined,
+          errorMessage: undefined,
+        },
+      });
+
+      expect(writeLogsSpy).toHaveBeenCalledWith(logsPayload);
+    });
+
+    it("returns 400 and response body as specified in otel collector spec for invalid payload", async () => {
+      const writeLogsSpy = vi.fn().mockResolvedValue({
+        rejectedLogRecords: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: vi.fn(),
+          writeLogs: writeLogsSpy,
+        },
+      });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/logs",
+        payload: {
+          resourceLogs: [
+            {
+              scopeLogs: [
+                {
+                  logRecords: [
+                    {
+                      // Invalid: severityNumber should be number, not string
+                      severityNumber: "not-a-valid-severity",
+                      timeUnixNano: "1704067260000000000",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        code: 3, // INVALID_ARGUMENT
+        message: "Invalid data",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.BadRequest",
+            fieldViolations: [
+              {
+                description: "Invalid input",
+                field: "resourceLogs",
+                reason: "invalid_union",
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(writeLogsSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns 500 with gRPC status when writeLogs throws CollectorError", async () => {
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: vi.fn(),
+          writeLogs: vi
+            .fn()
+            .mockRejectedValue(
+              new CollectorError(
+                "Database connection failed",
+                grpcStatusCode.INTERNAL
+              )
+            ),
+        },
+      });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/logs",
+        payload: { resourceLogs: [] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        code: grpcStatusCode.INTERNAL,
+        message: "Database connection failed",
+      });
+    });
+
+    it("returns 500 with generic error when writeLogs throws unexpected error", async () => {
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: vi.fn(),
+          writeLogs: vi.fn().mockRejectedValue(new Error("unexpected")),
+        },
+      });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/logs",
+        payload: { resourceLogs: [] },
       });
 
       expect(response.statusCode).toBe(500);
