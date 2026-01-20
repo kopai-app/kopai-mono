@@ -33,7 +33,7 @@ export function collectorErrorHandler(
   }
 
   if (error instanceof CollectorError) {
-    return reply.status(400).send({
+    return reply.status(500).send({
       code: error.code,
       message: error.message,
     } satisfies ErrorResponse);
