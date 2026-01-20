@@ -507,7 +507,7 @@ function toExpHistogramRow(
     Count: Number(dataPoint.count ?? 0),
     Sum: dataPoint.sum ?? 0,
     Scale: dataPoint.scale ?? 0,
-    ZeroCount: dataPoint.zeroCount ?? 0,
+    ZeroCount: Number(dataPoint.zeroCount ?? 0),
     PositiveOffset: dataPoint.positive?.offset ?? 0,
     PositiveBucketCounts: JSON.stringify(
       dataPoint.positive?.bucketCounts ?? []

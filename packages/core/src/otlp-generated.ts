@@ -28,7 +28,7 @@
 export interface AnyValue {
   stringValue?: string | undefined;
   boolValue?: boolean | undefined;
-  intValue?: number | undefined;
+  intValue?: string | number | undefined;
   doubleValue?: number | undefined;
   arrayValue?: ArrayValue | undefined;
   kvlistValue?: KeyValueList | undefined;
@@ -1279,7 +1279,7 @@ export interface HistogramDataPoint {
    * value must be equal to the sum of the "count" fields in buckets if a
    * histogram is provided.
    */
-  count?: string | undefined;
+  count?: string | number | undefined;
   /**
    * sum of the values in the population. If count is zero then this field
    * must be zero.
@@ -1373,7 +1373,7 @@ export interface ExponentialHistogramDataPoint {
    * non-negative. This value must be equal to the sum of the "bucket_counts"
    * values in the positive and negative Buckets plus the "zero_count" field.
    */
-  count?: string | undefined;
+  count?: string | number | undefined;
   /**
    * The sum of the values in the population. If count is zero then this field
    * must be zero.
@@ -1465,7 +1465,7 @@ export interface ExponentialHistogramDataPoint_Buckets {
    * especially zeros, so uint64 has been selected to ensure
    * varint encoding.
    */
-  bucketCounts?: string[] | undefined;
+  bucketCounts?: (string | number)[] | undefined;
 }
 
 /**
@@ -1498,7 +1498,7 @@ export interface SummaryDataPoint {
    */
   timeUnixNano?: string | undefined;
   /** count is the number of values in the population. Must be non-negative. */
-  count?: string | undefined;
+  count?: string | number | undefined;
   /**
    * sum of the values in the population. If count is zero then this field
    * must be zero.

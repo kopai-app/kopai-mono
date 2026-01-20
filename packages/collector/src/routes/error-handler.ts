@@ -32,6 +32,7 @@ export function collectorErrorHandler(
     } satisfies OtlpBadRequestErrorResponse);
   }
 
+  request.log.error(error);
   if (error instanceof CollectorError) {
     return reply.status(500).send({
       code: error.code,
@@ -39,7 +40,6 @@ export function collectorErrorHandler(
     } satisfies ErrorResponse);
   }
 
-  request.log.error(error);
   reply.status(500).send({ error: "Internal Server Error" });
 }
 

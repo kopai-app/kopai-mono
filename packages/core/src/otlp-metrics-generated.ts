@@ -398,7 +398,7 @@ export interface HistogramDataPoint {
    * is when the length of bucket_counts is 0, then the length of explicit_bounds
    * must also be 0.
    */
-  bucketCounts?: number[] | undefined;
+  bucketCounts?: (string | number)[] | undefined;
   /**
    * explicit_bounds specifies buckets with explicitly defined bounds for values.
    *
@@ -509,7 +509,7 @@ export interface ExponentialHistogramDataPoint {
    * Implementations MAY consider the zero bucket to have probability
    * mass equal to (zero_count / count).
    */
-  zeroCount?: number | undefined;
+  zeroCount?: string | number | undefined;
   /** positive carries the positive range of exponential bucket counts. */
   positive?: ExponentialHistogramDataPoint_Buckets | undefined;
   /** negative carries the negative range of exponential bucket counts. */
@@ -561,7 +561,7 @@ export interface ExponentialHistogramDataPoint_Buckets {
    * especially zeros, so uint64 has been selected to ensure
    * varint encoding.
    */
-  bucketCounts?: string[] | undefined;
+  bucketCounts?: (string | number)[] | undefined;
 }
 
 /**

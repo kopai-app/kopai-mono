@@ -72,7 +72,9 @@ export const exponentialHistogramDataPointBucketsSchema: z.ZodSchema<Exponential
      * especially zeros, so uint64 has been selected to ensure
      * varint encoding.
      */
-    bucketCounts: z.union([z.array(z.string()), z.undefined()]).optional(),
+    bucketCounts: z
+      .union([z.array(z.union([z.string(), z.number()])), z.undefined()])
+      .optional(),
   });
 
 /**
@@ -225,7 +227,9 @@ export const histogramDataPointSchema: z.ZodSchema<HistogramDataPoint> = z.lazy(
        * is when the length of bucket_counts is 0, then the length of explicit_bounds
        * must also be 0.
        */
-      bucketCounts: z.union([z.array(z.number()), z.undefined()]).optional(),
+      bucketCounts: z
+        .union([z.array(z.union([z.string(), z.number()])), z.undefined()])
+        .optional(),
       /**
        * explicit_bounds specifies buckets with explicitly defined bounds for values.
        *
@@ -339,7 +343,7 @@ export const exponentialHistogramDataPointSchema: z.ZodSchema<ExponentialHistogr
        * Implementations MAY consider the zero bucket to have probability
        * mass equal to (zero_count / count).
        */
-      zeroCount: z.union([z.number(), z.undefined()]).optional(),
+      zeroCount: z.union([z.string(), z.number(), z.undefined()]).optional(),
       /** positive carries the positive range of exponential bucket counts. */
       positive: z
         .union([exponentialHistogramDataPointBucketsSchema, z.undefined()])

@@ -45,13 +45,21 @@ export const severityNumberSchema = z.enum(SeverityNumber);
 
 export const logRecordFlagsSchema = z.enum(LogRecordFlags);
 
-export const aggregationTemporalitySchema = z.enum(AggregationTemporality);
+export const aggregationTemporalitySchema = z.union([
+  z.enum(AggregationTemporality),
+  z.number(),
+]);
 
-export const dataPointFlagsSchema = z.enum(DataPointFlags);
+export const dataPointFlagsSchema = z.union([
+  z.enum(DataPointFlags),
+  z.number(),
+]);
 
 export const exponentialHistogramDataPointBucketsSchema = z.object({
   offset: z.union([z.number(), z.undefined()]).optional(),
-  bucketCounts: z.union([z.array(z.string()), z.undefined()]).optional(),
+  bucketCounts: z
+    .union([z.array(z.union([z.string(), z.number()])), z.undefined()])
+    .optional(),
 });
 
 export const summaryDataPointValueAtQuantileSchema = z.object({
@@ -68,7 +76,7 @@ export const anyValueSchema: z.ZodSchema<AnyValue> = z.lazy(() =>
   z.object({
     stringValue: z.union([z.string(), z.undefined()]).optional(),
     boolValue: z.union([z.boolean(), z.undefined()]).optional(),
-    intValue: z.union([z.number(), z.undefined()]).optional(),
+    intValue: z.union([z.string(), z.number(), z.undefined()]).optional(),
     doubleValue: z.union([z.number(), z.undefined()]).optional(),
     arrayValue: z.union([arrayValueSchema, z.undefined()]).optional(),
     kvlistValue: z.union([keyValueListSchema, z.undefined()]).optional(),
@@ -232,7 +240,7 @@ export const summaryDataPointSchema: z.ZodSchema<SummaryDataPoint> = z.lazy(
       attributes: z.union([z.array(keyValueSchema), z.undefined()]).optional(),
       startTimeUnixNano: z.union([z.string(), z.undefined()]).optional(),
       timeUnixNano: z.union([z.string(), z.undefined()]).optional(),
-      count: z.union([z.string(), z.undefined()]).optional(),
+      count: z.union([z.string(), z.number(), z.undefined()]).optional(),
       sum: z.union([z.number(), z.undefined()]).optional(),
       quantileValues: z
         .union([z.array(summaryDataPointValueAtQuantileSchema), z.undefined()])
