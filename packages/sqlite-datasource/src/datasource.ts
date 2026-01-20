@@ -126,30 +126,31 @@ export class NodeSqliteTelemetryDatasource
           }
         }
       }
-    }
 
-    this.insertRows("otel_metrics_gauge", gaugeRows);
-    this.insertRows("otel_metrics_sum", sumRows);
-    this.insertRows("otel_metrics_histogram", histogramRows);
-    this.insertRows("otel_metrics_exponential_histogram", expHistogramRows);
-    this.insertRows("otel_metrics_summary", summaryRows);
+      for (const { table, rows } of [
+        { table: "otel_metrics_gauge", rows: gaugeRows },
+        { table: "otel_metrics_sum", rows: sumRows },
+        { table: "otel_metrics_histogram", rows: histogramRows },
+        { table: "otel_metrics_exponential_histogram", rows: expHistogramRows },
+        { table: "otel_metrics_summary", rows: summaryRows },
+      ] as const) {
+        for (const row of rows) {
+          try {
+            const { sql, parameters } = queryBuilder
+              .insertInto(table)
+              .values(row)
+              .compile();
+            this.sqliteConnection
+              .prepare(sql)
+              .run(...(parameters as (string | number | null)[]));
+          } catch (err) {
+            throw err;
+          }
+        }
+      }
+    }
 
     return { rejectedDataPoints: "" };
-  }
-
-  private insertRows<T extends keyof DB>(
-    table: T,
-    rows: Insertable<DB[T]>[]
-  ): void {
-    for (const row of rows) {
-      const { sql, parameters } = queryBuilder
-        .insertInto(table)
-        .values(row as never)
-        .compile();
-      this.sqliteConnection
-        .prepare(sql)
-        .run(...(parameters as (string | number | null)[]));
-    }
   }
 }
 

@@ -315,7 +315,6 @@ describe("collectorRoutes", () => {
             .fn()
             .mockRejectedValue(
               new CollectorError(
-                500,
                 "Database connection failed",
                 grpcStatusCode.INTERNAL
               )
