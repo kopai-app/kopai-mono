@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const attributeValue = z.union([z.string(), z.number(), z.boolean()]);
+
 export const otelTracesSchema = z.object({
   // Required fields
   SpanId: z
@@ -24,35 +26,35 @@ export const otelTracesSchema = z.object({
     .optional()
     .describe("Duration of the span in nanoseconds (end_time - start_time)."),
   "Events.Attributes": z
-    .record(z.string(), z.string())
+    .array(z.record(z.string(), attributeValue))
     .optional()
-    .describe("Attribute key/value pairs on the event."),
+    .describe("Attribute key/value pairs on the event (one object per event)."),
   "Events.Name": z
-    .string()
+    .array(z.string())
     .optional()
     .describe("Name of the event. Semantically required to be non-empty."),
   "Events.Timestamp": z
-    .string()
+    .array(z.number())
     .optional()
     .describe("Time the event occurred."),
   "Links.Attributes": z
-    .record(z.string(), z.string())
+    .array(z.record(z.string(), attributeValue))
     .optional()
-    .describe("Attribute key/value pairs on the link."),
+    .describe("Attribute key/value pairs on the link (one object per link)."),
   "Links.SpanId": z
-    .string()
+    .array(z.string())
     .optional()
     .describe(
       "Unique identifier for the linked span. The ID is an 8-byte array."
     ),
   "Links.TraceId": z
-    .string()
+    .array(z.string())
     .optional()
     .describe(
       "Unique identifier of a trace that the linked span is part of. The ID is a 16-byte array."
     ),
   "Links.TraceState": z
-    .string()
+    .array(z.string())
     .optional()
     .describe("The trace_state associated with the link."),
   ParentSpanId: z
@@ -62,7 +64,7 @@ export const otelTracesSchema = z.object({
       "The span_id of this span's parent span. Empty if this is a root span."
     ),
   ResourceAttributes: z
-    .record(z.string(), z.string())
+    .record(z.string(), attributeValue)
     .optional()
     .describe("Attributes that describe the resource."),
   ScopeName: z
@@ -78,7 +80,7 @@ export const otelTracesSchema = z.object({
     .optional()
     .describe("Service name from resource attributes (service.name)."),
   SpanAttributes: z
-    .record(z.string(), z.string())
+    .record(z.string(), attributeValue)
     .optional()
     .describe("Key/value pairs describing the span."),
   SpanKind: z

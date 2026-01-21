@@ -5,10 +5,18 @@ import {
   SqliteAdapter,
   SqliteIntrospector,
   SqliteQueryCompiler,
+  sql as kyselySql,
   type Insertable,
 } from "kysely";
 
-import { otlp, type datasource, type otlpMetrics } from "@kopai/core";
+import {
+  otlp,
+  type datasource,
+  type otlpMetrics,
+  type dataFilterSchemas,
+  type denormalizedSignals,
+} from "@kopai/core";
+import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
 
 import type {
   DB,
@@ -31,7 +39,7 @@ const queryBuilder = new Kysely<DB>({
 });
 
 export class NodeSqliteTelemetryDatasource
-  implements datasource.WriteTelemetryDatasource
+  implements datasource.TelemetryDatasource
 {
   constructor(private sqliteConnection: DatabaseSync) {}
 
@@ -258,6 +266,105 @@ export class NodeSqliteTelemetryDatasource
     }
 
     return { rejectedLogRecords: "" };
+  }
+
+  async getTraces(filter: dataFilterSchemas.TracesDataFilter): Promise<{
+    data: denormalizedSignals.OtelTracesRow[];
+    nextCursor: string | null;
+  }> {
+    try {
+      const limit = filter.limit ?? 100;
+      const sortOrder = filter.sortOrder ?? "DESC";
+
+      let query = queryBuilder.selectFrom("otel_traces").selectAll();
+
+      // Exact match filters
+      if (filter.traceId) query = query.where("TraceId", "=", filter.traceId);
+      if (filter.spanId) query = query.where("SpanId", "=", filter.spanId);
+      if (filter.parentSpanId)
+        query = query.where("ParentSpanId", "=", filter.parentSpanId);
+      if (filter.serviceName)
+        query = query.where("ServiceName", "=", filter.serviceName);
+      if (filter.spanName)
+        query = query.where("SpanName", "=", filter.spanName);
+      if (filter.spanKind)
+        query = query.where("SpanKind", "=", filter.spanKind);
+      if (filter.statusCode)
+        query = query.where("StatusCode", "=", filter.statusCode);
+      if (filter.scopeName)
+        query = query.where("ScopeName", "=", filter.scopeName);
+
+      // Time range (convert nanos to ms)
+      if (filter.timestampMin != null)
+        query = query.where("Timestamp", ">=", filter.timestampMin / 1_000_000);
+      if (filter.timestampMax != null)
+        query = query.where("Timestamp", "<=", filter.timestampMax / 1_000_000);
+
+      // Duration range (convert nanos to ms)
+      if (filter.durationMin != null)
+        query = query.where("Duration", ">=", filter.durationMin / 1_000_000);
+      if (filter.durationMax != null)
+        query = query.where("Duration", "<=", filter.durationMax / 1_000_000);
+
+      // Cursor pagination
+      if (filter.cursor) {
+        const cursorTs = parseInt(filter.cursor, 10);
+        if (sortOrder === "DESC") {
+          query = query.where("Timestamp", "<", cursorTs);
+        } else {
+          query = query.where("Timestamp", ">", cursorTs);
+        }
+      }
+
+      // Attribute filters (JSON extract - path must be literal, not parameter)
+      if (filter.spanAttributes) {
+        for (const [key, value] of Object.entries(filter.spanAttributes)) {
+          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          query = query.where(
+            kyselySql`json_extract(SpanAttributes, ${kyselySql.lit(jsonPath)})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.resourceAttributes) {
+        for (const [key, value] of Object.entries(filter.resourceAttributes)) {
+          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          query = query.where(
+            kyselySql`json_extract(ResourceAttributes, ${kyselySql.lit(jsonPath)})`,
+            "=",
+            value
+          );
+        }
+      }
+
+      // Sort and limit (+1 for next cursor detection)
+      query = query
+        .orderBy("Timestamp", sortOrder === "ASC" ? "asc" : "desc")
+        .limit(limit + 1);
+
+      // Execute
+      const { sql, parameters } = query.compile();
+      const rows = this.sqliteConnection
+        .prepare(sql)
+        .all(...(parameters as (string | number | null)[])) as Record<
+        string,
+        unknown
+      >[];
+
+      // Determine nextCursor
+      const hasMore = rows.length > limit;
+      const data = hasMore ? rows.slice(0, limit) : rows;
+      const lastRow = data[data.length - 1];
+      const nextCursor = hasMore && lastRow ? String(lastRow.Timestamp) : null;
+
+      // Map rows to OtelTracesRow (parse JSON fields)
+      return { data: data.map(mapRowToOtelTraces), nextCursor };
+    } catch (error) {
+      throw new SqliteDatasourceQueryError("Failed to query traces", {
+        cause: error,
+      });
+    }
   }
 }
 
@@ -646,4 +753,75 @@ function bufferToHex(buf: Uint8Array): string {
   return Array.from(buf)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function mapRowToOtelTraces(
+  row: Record<string, unknown>
+): denormalizedSignals.OtelTracesRow {
+  return {
+    TraceId: row.TraceId as string,
+    SpanId: row.SpanId as string,
+    Timestamp: row.Timestamp as number,
+    ParentSpanId: row.ParentSpanId as string | undefined,
+    TraceState: row.TraceState as string | undefined,
+    SpanName: row.SpanName as string | undefined,
+    SpanKind: row.SpanKind as string | undefined,
+    ServiceName: row.ServiceName as string | undefined,
+    ResourceAttributes: parseJsonField(row.ResourceAttributes),
+    ScopeName: row.ScopeName as string | undefined,
+    ScopeVersion: row.ScopeVersion as string | undefined,
+    SpanAttributes: parseJsonField(row.SpanAttributes),
+    Duration: row.Duration as number | undefined,
+    StatusCode: row.StatusCode as string | undefined,
+    StatusMessage: row.StatusMessage as string | undefined,
+    "Events.Timestamp": parseNumberArrayField(row["Events.Timestamp"]),
+    "Events.Name": parseStringArrayField(row["Events.Name"]),
+    "Events.Attributes": parseJsonArrayField(row["Events.Attributes"]),
+    "Links.TraceId": parseStringArrayField(row["Links.TraceId"]),
+    "Links.SpanId": parseStringArrayField(row["Links.SpanId"]),
+    "Links.TraceState": parseStringArrayField(row["Links.TraceState"]),
+    "Links.Attributes": parseJsonArrayField(row["Links.Attributes"]),
+  };
+}
+
+type AttributeValue = string | number | boolean;
+
+function parseJsonField(
+  value: unknown
+): Record<string, AttributeValue> | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseJsonArrayField(
+  value: unknown
+): Record<string, AttributeValue>[] | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseStringArrayField(value: unknown): string[] | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseNumberArrayField(value: unknown): number[] | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
