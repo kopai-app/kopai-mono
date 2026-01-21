@@ -19,7 +19,7 @@ describe("apiRoutes", () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     server = Fastify();
     await server.register(signalsRoutes, {
-      readTracesDatasource: { getTraces: getTracesSpy },
+      readTelemetryDatasource: { getTraces: getTracesSpy },
     });
     await server.ready();
   });
@@ -38,7 +38,7 @@ describe("apiRoutes", () => {
     };
 
     it("returns traces and calls readTracesDatasource.getTraces", async () => {
-      getTracesSpy.mockResolvedValue([mockTrace]);
+      getTracesSpy.mockResolvedValue({ data: [mockTrace], nextCursor: "abc" });
 
       const filter = { serviceName: "test-service" };
       const response = await server.inject({
@@ -48,7 +48,7 @@ describe("apiRoutes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual([mockTrace]);
+      expect(response.json()).toEqual({ data: [mockTrace], nextCursor: "abc" });
       expect(getTracesSpy).toHaveBeenCalledWith(filter);
     });
 
@@ -101,6 +101,19 @@ describe("apiRoutes", () => {
 
       expect(response.statusCode).toBe(500);
       expect(response.json()).toEqual({ error: "Internal Server Error" });
+    });
+
+    it("returns null nextCursor when no more pages", async () => {
+      getTracesSpy.mockResolvedValue({ data: [mockTrace], nextCursor: null });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ data: [mockTrace], nextCursor: null });
     });
   });
 });

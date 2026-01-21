@@ -1,9 +1,11 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { apiRoutes as kopaiApiRoutes } from "@kopai/api";
+import { signalsRoutes } from "@kopai/api";
+import { type datasource } from "@kopai/core";
 
-export const apiRoutes: FastifyPluginAsyncZod<{ dbURl: string }> =
-  async function (fastify, opts) {
-    fastify.register(kopaiApiRoutes, {
-      dbURl: opts.dbURl,
-    });
-  };
+export const apiRoutes: FastifyPluginAsyncZod<{
+  readTelemetryDatasource: datasource.ReadTelemetryDatasource;
+}> = async function (fastify, opts) {
+  fastify.register(signalsRoutes, {
+    readTelemetryDatasource: opts.readTelemetryDatasource,
+  });
+};

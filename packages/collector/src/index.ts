@@ -11,7 +11,7 @@ import { logsRoute } from "./routes/logs.js";
 import { collectorErrorHandler } from "./routes/error-handler.js";
 
 export const collectorRoutes: FastifyPluginAsyncZod<{
-  telemetryDatasource: datasource.TelemetryDatasource;
+  telemetryDatasource: datasource.WriteTelemetryDatasource;
 }> = async function (fastify, opts) {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);

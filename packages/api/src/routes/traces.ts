@@ -22,11 +22,16 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
       },
     },
     handler: async (req, res) => {
-      const spans = await opts.readTracesDatasource.getTraces({
+      const result = await opts.readTracesDatasource.getTraces({
         traceId: req.params.traceId,
       });
-      res.send(spans);
+      res.send(result.data);
     },
+  });
+
+  const searchResponseSchema = z.object({
+    data: z.array(denormalizedSignals.otelTracesSchema),
+    nextCursor: z.string().nullable(),
   });
 
   fastify.route({
@@ -36,12 +41,12 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
       description: "Search spans matching a filter",
       body: dataFilterSchemas.tracesDataFilterSchema,
       response: {
-        200: z.array(denormalizedSignals.otelTracesSchema),
+        200: searchResponseSchema,
       },
     },
     handler: async (req, res) => {
-      const spans = await opts.readTracesDatasource.getTraces(req.body);
-      res.send(spans);
+      const result = await opts.readTracesDatasource.getTraces(req.body);
+      res.send(result);
     },
   });
 };

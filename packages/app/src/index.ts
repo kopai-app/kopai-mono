@@ -66,9 +66,12 @@ apiServer.register(fastifySwaggerUI, {
   },
 });
 
+const sqliteDatabase = initializeDatabase(env.SQLITE_DB_FILE_PATH);
+
 apiServer.after(() => {
+  const telemetryDatasource = new NodeSqliteTelemetryDatasource(sqliteDatabase);
   apiServer.register(apiRoutes, {
-    dbURl: "testDbUrl",
+    readTelemetryDatasource: telemetryDatasource,
   });
 });
 
@@ -79,12 +82,8 @@ const collectorServer = fastify({
 collectorServer.setValidatorCompiler(validatorCompiler);
 collectorServer.setSerializerCompiler(serializerCompiler);
 
-let sqliteDatabase: DatabaseSync | undefined;
-
 collectorServer.after(async () => {
-  sqliteDatabase = initializeDatabase(env.SQLITE_DB_FILE_PATH);
   const telemetryDatasource = new NodeSqliteTelemetryDatasource(sqliteDatabase);
-
   collectorServer.register(otelCollectorRoutes, {
     telemetryDatasource,
   });

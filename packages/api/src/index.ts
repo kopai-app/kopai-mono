@@ -8,13 +8,13 @@ import { errorHandler } from "./routes/error-handler.js";
 import { tracesRoutes } from "./routes/traces.js";
 
 export const signalsRoutes: FastifyPluginAsyncZod<{
-  readTracesDatasource: datasource.ReadTracesDatasource;
+  readTelemetryDatasource: datasource.ReadTelemetryDatasource;
 }> = async function (fastify, opts) {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
   fastify.setErrorHandler(errorHandler);
 
   fastify.register(tracesRoutes, {
-    readTracesDatasource: opts.readTracesDatasource,
+    readTracesDatasource: opts.readTelemetryDatasource,
   });
 };

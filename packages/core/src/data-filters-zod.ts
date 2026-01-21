@@ -87,6 +87,23 @@ export const tracesDataFilterSchema = z.object({
     .record(z.string(), z.string())
     .optional()
     .describe("Attribute key/value pairs on the link."),
+
+  // Pagination
+  limit: z
+    .number()
+    .int()
+    .positive()
+    .max(1000)
+    .optional()
+    .describe("Max items to return. Default determined by datasource."),
+  cursor: z
+    .string()
+    .optional()
+    .describe("Opaque cursor from previous response for next page."),
+  sortOrder: z
+    .enum(["ASC", "DESC"])
+    .optional()
+    .describe("Sort by timestamp. ASC = oldest first, DESC = newest first."),
 });
 
 export type TracesDataFilter = z.infer<typeof tracesDataFilterSchema>;

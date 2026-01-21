@@ -7,7 +7,7 @@ import { initializeDatabase } from "./initialize-database.js";
 describe("NodeSqliteTelemetryDatasource", () => {
   describe("writeMetrics", () => {
     let testConnection: DatabaseSync;
-    let ds: datasource.TelemetryDatasource;
+    let ds: datasource.WriteTelemetryDatasource;
 
     beforeEach(() => {
       testConnection = initializeDatabase(":memory:");
@@ -439,7 +439,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
   describe("writeTraces", () => {
     let testConnection: DatabaseSync;
-    let ds: datasource.TelemetryDatasource;
+    let ds: datasource.WriteTelemetryDatasource;
 
     beforeEach(() => {
       testConnection = initializeDatabase(":memory:");
@@ -686,7 +686,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
   describe("writeLogs", () => {
     let testConnection: DatabaseSync;
-    let ds: datasource.TelemetryDatasource;
+    let ds: datasource.WriteTelemetryDatasource;
 
     beforeEach(() => {
       testConnection = initializeDatabase(":memory:");

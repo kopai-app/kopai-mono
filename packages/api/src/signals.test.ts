@@ -19,7 +19,7 @@ describe("signalsRoutes", () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     server = Fastify();
     await server.register(signalsRoutes, {
-      readTracesDatasource: { getTraces: getTracesSpy },
+      readTelemetryDatasource: { getTraces: getTracesSpy },
     });
     await server.ready();
   });
@@ -38,7 +38,7 @@ describe("signalsRoutes", () => {
     };
 
     it("returns traces and calls readTracesDatasource.getTraces", async () => {
-      getTracesSpy.mockResolvedValue([mockTrace]);
+      getTracesSpy.mockResolvedValue({ data: [mockTrace], nextCursor: null });
 
       const filter = { serviceName: "test-service" };
       const response = await server.inject({
@@ -48,7 +48,7 @@ describe("signalsRoutes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual([mockTrace]);
+      expect(response.json()).toEqual({ data: [mockTrace], nextCursor: null });
       expect(getTracesSpy).toHaveBeenCalledWith(filter);
     });
 

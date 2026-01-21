@@ -35,9 +35,10 @@ export interface WriteTracesDatasource {
 }
 
 export interface ReadTracesDatasource {
-  getTraces(
-    filter: z.infer<typeof tracesDataFilterSchema>
-  ): Promise<z.infer<typeof otelTracesSchema>[]>;
+  getTraces(filter: z.infer<typeof tracesDataFilterSchema>): Promise<{
+    data: z.infer<typeof otelTracesSchema>[];
+    nextCursor: string | null;
+  }>;
 }
 
 export interface LogsPartialSuccess {
@@ -49,6 +50,11 @@ export interface WriteLogsDatasource {
   writeLogs(logsData: LogsData): Promise<LogsPartialSuccess>;
 }
 
-export type TelemetryDatasource = WriteMetricsDatasource &
+export type ReadTelemetryDatasource = ReadTracesDatasource;
+
+export type WriteTelemetryDatasource = WriteMetricsDatasource &
   WriteTracesDatasource &
   WriteLogsDatasource;
+
+export type TelemetryDatasource = WriteTelemetryDatasource &
+  ReadTelemetryDatasource;

@@ -31,7 +31,7 @@ const queryBuilder = new Kysely<DB>({
 });
 
 export class NodeSqliteTelemetryDatasource
-  implements datasource.TelemetryDatasource
+  implements datasource.WriteTelemetryDatasource
 {
   constructor(private sqliteConnection: DatabaseSync) {}
 

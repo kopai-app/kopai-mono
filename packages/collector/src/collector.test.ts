@@ -499,7 +499,7 @@ describe("collectorRoutes", () => {
             "@type": "type.googleapis.com/google.rpc.BadRequest",
             fieldViolations: [
               {
-                description: "Invalid input",
+                description: "Invalid option: expected one of 0|1|2|3|4|5|-1",
                 field: "resourceSpans[0].scopeSpans[0].spans[0].kind",
                 reason: "invalid_union",
               },
@@ -678,7 +678,7 @@ describe("collectorRoutes", () => {
             "@type": "type.googleapis.com/google.rpc.BadRequest",
             fieldViolations: [
               {
-                description: "Invalid input",
+                description: "Invalid option: expected one of 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|-1",
                 field:
                   "resourceLogs[0].scopeLogs[0].logRecords[0].severityNumber",
                 reason: "invalid_union",

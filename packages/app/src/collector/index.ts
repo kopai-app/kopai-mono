@@ -3,7 +3,7 @@ import { collectorRoutes } from "@kopai/collector";
 import type { datasource } from "@kopai/core";
 
 export const otelCollectorRoutes: FastifyPluginAsyncZod<{
-  telemetryDatasource: datasource.TelemetryDatasource;
+  telemetryDatasource: datasource.WriteTelemetryDatasource;
 }> = async function (fastify, opts) {
   fastify.register(collectorRoutes, opts);
 };
