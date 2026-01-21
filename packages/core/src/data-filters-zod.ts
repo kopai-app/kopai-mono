@@ -36,10 +36,7 @@ export const tracesDataFilterSchema = z.object({
     .describe(
       "Type of span (INTERNAL, SERVER, CLIENT, PRODUCER, CONSUMER). Used to identify relationships between spans."
     ),
-  statusCode: z
-    .string()
-    .optional()
-    .describe("Status code (UNSET, OK, ERROR)."),
+  statusCode: z.string().optional().describe("Status code (UNSET, OK, ERROR)."),
   scopeName: z
     .string()
     .optional()

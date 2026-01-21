@@ -11,24 +11,6 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
 }> = async function (fastify, opts) {
   fastify.route({
     method: "GET",
-    url: "/signals/traces",
-    schema: {
-      description: "Get all spans matching a filter",
-      querystring: z.object({
-        filter: dataFilterSchemas.tracesDataFilterSchema,
-      }),
-      response: {
-        200: z.array(denormalizedSignals.otelTracesSchema),
-      },
-    },
-    handler: async (req, res) => {
-      const spans = await opts.readTracesDatasource.getTraces(req.query.filter);
-      res.send(spans);
-    },
-  });
-
-  fastify.route({
-    method: "GET",
     url: "/signals/traces/:traceId",
     schema: {
       description: "Get all spans for a trace by traceId",
@@ -43,6 +25,22 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
       const spans = await opts.readTracesDatasource.getTraces({
         traceId: req.params.traceId,
       });
+      res.send(spans);
+    },
+  });
+
+  fastify.route({
+    method: "POST",
+    url: "/signals/traces/search",
+    schema: {
+      description: "Search spans matching a filter",
+      body: dataFilterSchemas.tracesDataFilterSchema,
+      response: {
+        200: z.array(denormalizedSignals.otelTracesSchema),
+      },
+    },
+    handler: async (req, res) => {
+      const spans = await opts.readTracesDatasource.getTraces(req.body);
       res.send(spans);
     },
   });

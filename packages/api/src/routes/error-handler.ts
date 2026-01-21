@@ -31,7 +31,7 @@ export function errorHandler(
       //                   }
       //                ]
       //      }
-      type: "about:blank", // TODO: document error
+      type: "https://docs.kopai.app/errors/signals-api-validation-error", // TODO: document error
       status: 400,
       title: "Invalid data",
       detail: error.message,
@@ -41,7 +41,7 @@ export function errorHandler(
   request.log.error(error);
   if (error instanceof SignalsApiError) {
     return reply.status(500).send({
-      type: "about:blank", // TODO: document error as above
+      type: "https://docs.kopai.app/errors/signals-api-internal-error", // TODO: document error
       status: 500,
       title: "Internal server error",
       detail: error.message,

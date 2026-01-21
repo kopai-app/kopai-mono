@@ -42,7 +42,9 @@ export const otelTracesSchema = z.object({
   "Links.SpanId": z
     .string()
     .optional()
-    .describe("Unique identifier for the linked span. The ID is an 8-byte array."),
+    .describe(
+      "Unique identifier for the linked span. The ID is an 8-byte array."
+    ),
   "Links.TraceId": z
     .string()
     .optional()
@@ -91,10 +93,7 @@ export const otelTracesSchema = z.object({
     .describe(
       "Description of the span's operation. E.g., qualified method name or file name with line number."
     ),
-  StatusCode: z
-    .string()
-    .optional()
-    .describe("Status code (UNSET, OK, ERROR)."),
+  StatusCode: z.string().optional().describe("Status code (UNSET, OK, ERROR)."),
   StatusMessage: z
     .string()
     .optional()
