@@ -23,7 +23,8 @@
     "@kopai/collector": "workspace:*",
     "@kopai/core": "workspace:*",
     "@kopai/sqlite-datasource": "workspace:*",
-    "fastify": "^5.7.0",
+    "close-with-grace": "^2.4.0",
+    "fastify": "^5.7.1",
     "fastify-type-provider-zod": "^6.1.0",
     "zod": "^4.3.5"
   },

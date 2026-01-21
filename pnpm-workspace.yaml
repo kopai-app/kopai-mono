@@ -1,8 +1,15 @@
 packages:
-  - "packages/*"
+  - packages/*
+
+ignoredBuiltDependencies:
+  - protobufjs
+
+minimumReleaseAge: 4320
+
 onlyBuiltDependencies:
   - esbuild
   - lefthook
+
 strictDepBuilds: true
-minimumReleaseAge: 4320
+
 trustPolicy: no-downgrade
