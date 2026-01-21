@@ -7,6 +7,7 @@ import {
 } from "fastify-type-provider-zod";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUI from "@fastify/swagger-ui";
+import closeWithGrace from "close-with-grace";
 
 import { env } from "./config.js";
 import { apiRoutes } from "./routes/index.js";
@@ -15,6 +16,7 @@ import {
   initializeDatabase,
   NodeSqliteTelemetryDatasource,
 } from "@kopai/sqlite-datasource";
+import type { DatabaseSync } from "node:sqlite";
 
 const apiServer = fastify({
   logger: true,
@@ -77,8 +79,10 @@ const collectorServer = fastify({
 collectorServer.setValidatorCompiler(validatorCompiler);
 collectorServer.setSerializerCompiler(serializerCompiler);
 
+let sqliteDatabase: DatabaseSync | undefined;
+
 collectorServer.after(async () => {
-  const sqliteDatabase = initializeDatabase(env.SQLITE_DB_FILE_PATH);
+  sqliteDatabase = initializeDatabase(env.SQLITE_DB_FILE_PATH);
   const telemetryDatasource = new NodeSqliteTelemetryDatasource(sqliteDatabase);
 
   collectorServer.register(otelCollectorRoutes, {
@@ -89,35 +93,37 @@ collectorServer.after(async () => {
 async function run() {
   await apiServer.ready();
 
-  const apiPort = env.PORT || 8080;
+  const host = env.HOST || "localhost";
+  const port = env.PORT || 8080;
+  const STANDARD_OTEL_HTTP_COLLECTOR_PORT = 4318;
 
   apiServer.listen(
     {
-      port: apiPort,
+      port,
+      host,
     },
     (err, address) => {
       if (err) {
         console.error(err);
         process.exit(1);
       }
-      console.log(`API server listening at ${address}`);
+      apiServer.log.info(`API server listening at ${address}`);
     }
   );
 
   await collectorServer.ready();
 
-  const STANDARD_OTEL_HTTP_COLLECTOR_PORT = 4318;
-
   collectorServer.listen(
     {
       port: STANDARD_OTEL_HTTP_COLLECTOR_PORT,
+      host,
     },
     (err, address) => {
       if (err) {
         console.error(err);
         process.exit(1);
       }
-      console.log(
+      collectorServer.log.info(
         `OTEL collector server listening at ${address}:${STANDARD_OTEL_HTTP_COLLECTOR_PORT}`
       );
     }
@@ -125,3 +131,22 @@ async function run() {
 }
 
 run();
+
+closeWithGrace(async ({ signal, err }) => {
+  if (err) {
+    collectorServer.log.fatal(
+      { err },
+      "Closing OTEL collector server with error"
+    );
+    apiServer.log.fatal({ err }, "Closing API server with error");
+  } else {
+    collectorServer.log.info(
+      `Received signal ${signal}, closing OTEL collector server`
+    );
+    apiServer.log.info(`Received signal ${signal}, closing API server`);
+  }
+
+  await collectorServer.close();
+  sqliteDatabase?.close();
+  await apiServer.close();
+});
