@@ -1,6 +1,6 @@
 import z from "zod";
 
-const DEFAULT_PORT = 8080;
+const DEFAULT_PORT = 8000;
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
@@ -8,8 +8,7 @@ const envSchema = z.object({
   SQLITE_DB_FILE_PATH: z.string(),
   PORT: z
     .string()
-    .transform((val) => (Number.isInteger(val) ? parseInt(val) : DEFAULT_PORT))
-    .optional(),
+    .transform((val) => (Number.isInteger(val) ? parseInt(val) : DEFAULT_PORT)),
 });
 
 export const env = envSchema.parse(process.env);

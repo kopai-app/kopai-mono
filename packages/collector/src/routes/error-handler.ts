@@ -50,7 +50,6 @@ function isFastifyError(error: unknown): error is FastifyError {
   );
 }
 
-// Type guard for validation error
 function isValidationError(
   error: unknown
 ): error is FastifyError & Required<Pick<FastifyError, "validation">> {

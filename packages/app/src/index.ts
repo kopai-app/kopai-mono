@@ -94,7 +94,7 @@ async function run() {
   await apiServer.ready();
 
   const host = env.HOST || "localhost";
-  const port = env.PORT || 8080;
+  const port = env.PORT;
   const STANDARD_OTEL_HTTP_COLLECTOR_PORT = 4318;
 
   apiServer.listen(

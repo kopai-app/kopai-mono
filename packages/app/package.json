@@ -14,7 +14,7 @@
     "lint": "eslint src",
     "type-check": "tsc --noEmit",
     "start": "node ./dist/index.js",
-    "start:dev": "node --env-file=.env --watch-path=./dist ./dist/index.mjs"
+    "start:dev": "nodemon --watch ./dist --watch '../*/dist' --env-file=.env ./dist/index.mjs"
   },
   "dependencies": {
     "@fastify/swagger": "^9.6.1",
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
+    "nodemon": "^3.1.11",
     "tsdown": "^0.19.0",
     "typescript": "^5.9.3"
   }
