@@ -3,11 +3,53 @@ import {
   type FastifyReply,
   type FastifyRequest,
 } from "fastify";
+import { SignalsApiError } from "./errors.js";
+import type { SignalsApiErrorResponse } from "./error-schema-zod.js";
 export function errorHandler(
   error: FastifyError | Error | string,
   request: FastifyRequest,
   reply: FastifyReply
-) {}
+) {
+  if (isValidationError(error)) {
+    return reply.status(400).send({
+      // https://datatracker.ietf.org/doc/html/rfc9457
+      //      HTTP/1.1 422 Unprocessable Content
+      //      Content-Type: application/problem+json
+      //      Content-Language: en
+      //
+      //      {
+      //       "type": "https://example.net/validation-error",
+      //       "title": "Your request is not valid.",
+      //       "errors": [
+      //                   {
+      //                     "detail": "must be a positive integer",
+      //                     "pointer": "#/age"
+      //                   },
+      //                   {
+      //                     "detail": "must be 'green', 'red' or 'blue'",
+      //                     "pointer": "#/profile/color"
+      //                   }
+      //                ]
+      //      }
+      type: "about:blank", // TODO: document error
+      status: 400,
+      title: "Invalid data",
+      detail: error.message,
+    } satisfies SignalsApiErrorResponse);
+  }
+
+  request.log.error(error);
+  if (error instanceof SignalsApiError) {
+    return reply.status(500).send({
+      type: "about:blank", // TODO: document error as above
+      status: 500,
+      title: "Internal server error",
+      detail: error.message,
+    } satisfies SignalsApiErrorResponse);
+  }
+
+  reply.status(500).send({ error: "Internal Server Error" });
+}
 
 function isFastifyError(error: unknown): error is FastifyError {
   return (

@@ -13,7 +13,6 @@ export const apiRoutes: FastifyPluginAsyncZod<{
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
   fastify.setErrorHandler(errorHandler);
-  // TODO: errorHandler
   // TODO: tests
   fastify.register(tracesRoutes, {
     readTracesDatasource: opts.readTracesDatasource,
