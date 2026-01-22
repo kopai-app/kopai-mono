@@ -135,7 +135,11 @@ describe("signalsRoutes", () => {
       });
 
       expect(response.statusCode).toBe(500);
-      expect(response.json()).toEqual({ error: "Internal Server Error" });
+      expect(response.json()).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-internal-error",
+        status: 500,
+        title: "Internal server error",
+      });
     });
   });
 
@@ -197,7 +201,10 @@ describe("signalsRoutes", () => {
     it("returns metrics and calls readMetricsDatasource.getMetrics", async () => {
       getMetricsSpy.mockResolvedValue({ data: [mockMetric], nextCursor: null });
 
-      const filter = { serviceName: "test-service" };
+      const filter = {
+        metricType: "Gauge" as const,
+        serviceName: "test-service",
+      };
       const response = await server.inject({
         method: "POST",
         url: "/signals/metrics/search",
@@ -235,7 +242,7 @@ describe("signalsRoutes", () => {
       const response = await server.inject({
         method: "POST",
         url: "/signals/metrics/search",
-        payload: {},
+        payload: { metricType: "Gauge" },
       });
 
       expect(response.statusCode).toBe(500);
@@ -253,11 +260,15 @@ describe("signalsRoutes", () => {
       const response = await server.inject({
         method: "POST",
         url: "/signals/metrics/search",
-        payload: {},
+        payload: { metricType: "Gauge" },
       });
 
       expect(response.statusCode).toBe(500);
-      expect(response.json()).toEqual({ error: "Internal Server Error" });
+      expect(response.json()).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-internal-error",
+        status: 500,
+        title: "Internal server error",
+      });
     });
   });
 

@@ -118,7 +118,11 @@ describe("apiRoutes", () => {
       });
 
       expect(response.statusCode).toBe(500);
-      expect(response.json()).toEqual({ error: "Internal Server Error" });
+      expect(response.json()).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-internal-error",
+        status: 500,
+        title: "Internal server error",
+      });
     });
 
     it("returns null nextCursor when no more pages", async () => {

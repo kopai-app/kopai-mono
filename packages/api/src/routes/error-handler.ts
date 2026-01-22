@@ -48,7 +48,11 @@ export function errorHandler(
     } satisfies SignalsApiErrorResponse);
   }
 
-  reply.status(500).send({ error: "Internal Server Error" });
+  return reply.status(500).send({
+    type: "https://docs.kopai.app/errors/signals-api-internal-error", // TODO: document error
+    status: 500,
+    title: "Internal server error",
+  } satisfies SignalsApiErrorResponse);
 }
 
 function isFastifyError(error: unknown): error is FastifyError {
