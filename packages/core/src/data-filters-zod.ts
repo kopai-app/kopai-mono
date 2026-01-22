@@ -202,3 +202,69 @@ export const logsDataFilterSchema = z.object({
 });
 
 export type LogsDataFilter = z.infer<typeof logsDataFilterSchema>;
+
+export const metricsDataFilterSchema = z.object({
+  // Metric type filter (optional - can query across all types)
+  metricType: z
+    .enum(["Gauge", "Sum", "Histogram", "ExponentialHistogram", "Summary"])
+    .optional()
+    .describe("Filter by metric type. If omitted, returns all metric types."),
+
+  // Exact match filters
+  metricName: z.string().optional().describe("The name of the metric."),
+  serviceName: z
+    .string()
+    .optional()
+    .describe("Service name from resource attributes (service.name)."),
+  scopeName: z
+    .string()
+    .optional()
+    .describe("Name denoting the instrumentation scope."),
+
+  // Time range filters
+  timeUnixMin: z
+    .number()
+    .optional()
+    .describe(
+      "Minimum time when the data point was recorded. UNIX Epoch time in nanoseconds."
+    ),
+  timeUnixMax: z
+    .number()
+    .optional()
+    .describe(
+      "Maximum time when the data point was recorded. UNIX Epoch time in nanoseconds."
+    ),
+
+  // Attribute filters
+  attributes: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe("Key/value pairs that uniquely identify the timeseries."),
+  resourceAttributes: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe("Attributes that describe the resource."),
+  scopeAttributes: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe("Attributes of the instrumentation scope."),
+
+  // Pagination
+  limit: z
+    .number()
+    .int()
+    .positive()
+    .max(1000)
+    .optional()
+    .describe("Max items to return. Default determined by datasource."),
+  cursor: z
+    .string()
+    .optional()
+    .describe("Opaque cursor from previous response for next page."),
+  sortOrder: z
+    .enum(["ASC", "DESC"])
+    .optional()
+    .describe("Sort by timestamp. ASC = oldest first, DESC = newest first."),
+});
+
+export type MetricsDataFilter = z.infer<typeof metricsDataFilterSchema>;

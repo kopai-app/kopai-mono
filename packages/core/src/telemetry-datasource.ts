@@ -1,9 +1,11 @@
 import type {
   logsDataFilterSchema,
+  metricsDataFilterSchema,
   tracesDataFilterSchema,
 } from "./data-filters-zod.js";
 import {
   otelLogsSchema,
+  otelMetricsSchema,
   otelTracesSchema,
 } from "./denormalized-signals-zod.js";
 import type { MetricsData, TracesData, LogsData } from "./otlp-generated.js";
@@ -54,6 +56,13 @@ export interface ReadLogsDatasource {
   }>;
 }
 
+export interface ReadMetricsDatasource {
+  getMetrics(filter: z.infer<typeof metricsDataFilterSchema>): Promise<{
+    data: z.infer<typeof otelMetricsSchema>[];
+    nextCursor: string | null;
+  }>;
+}
+
 export interface LogsPartialSuccess {
   rejectedLogRecords?: string;
   errorMessage?: string;
@@ -63,7 +72,9 @@ export interface WriteLogsDatasource {
   writeLogs(logsData: LogsData): Promise<LogsPartialSuccess>;
 }
 
-export type ReadTelemetryDatasource = ReadTracesDatasource & ReadLogsDatasource;
+export type ReadTelemetryDatasource = ReadTracesDatasource &
+  ReadLogsDatasource &
+  ReadMetricsDatasource;
 
 export type WriteTelemetryDatasource = WriteMetricsDatasource &
   WriteTracesDatasource &

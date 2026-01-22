@@ -192,3 +192,196 @@ export const otelLogsSchema = z.object({
 });
 
 export type OtelLogsRow = z.infer<typeof otelLogsSchema>;
+
+// Metrics - common fields shared by all metric types
+const metricsBaseSchema = z.object({
+  TimeUnix: z
+    .number()
+    .describe(
+      "Time when the data point was recorded. UNIX Epoch time in nanoseconds."
+    ),
+  StartTimeUnix: z
+    .number()
+    .describe(
+      "Start time for cumulative/delta metrics. UNIX Epoch time in nanoseconds."
+    ),
+  Attributes: z
+    .record(z.string(), attributeValue)
+    .optional()
+    .describe("Key/value pairs that uniquely identify the timeseries."),
+  MetricName: z.string().optional().describe("The name of the metric."),
+  MetricDescription: z
+    .string()
+    .optional()
+    .describe(
+      "A description of the metric, which can be used in documentation."
+    ),
+  MetricUnit: z
+    .string()
+    .optional()
+    .describe("The unit in which the metric value is reported (UCUM format)."),
+  ResourceAttributes: z
+    .record(z.string(), attributeValue)
+    .optional()
+    .describe("Attributes that describe the resource."),
+  ResourceSchemaUrl: z
+    .string()
+    .optional()
+    .describe("Schema URL for the resource data."),
+  ScopeAttributes: z
+    .record(z.string(), attributeValue)
+    .optional()
+    .describe("Attributes of the instrumentation scope."),
+  ScopeDroppedAttrCount: z
+    .number()
+    .optional()
+    .describe("Number of attributes dropped from the scope."),
+  ScopeName: z
+    .string()
+    .optional()
+    .describe("Name denoting the instrumentation scope."),
+  ScopeSchemaUrl: z
+    .string()
+    .optional()
+    .describe("Schema URL for the scope data."),
+  ScopeVersion: z
+    .string()
+    .optional()
+    .describe("Version of the instrumentation scope."),
+  ServiceName: z
+    .string()
+    .optional()
+    .describe("Service name from resource attributes (service.name)."),
+  "Exemplars.FilteredAttributes": z
+    .array(z.record(z.string(), attributeValue))
+    .optional()
+    .describe("Filtered attributes of exemplars."),
+  "Exemplars.SpanId": z
+    .array(z.string())
+    .optional()
+    .describe("Span IDs associated with exemplars."),
+  "Exemplars.TimeUnix": z
+    .array(z.number())
+    .optional()
+    .describe("Timestamps of exemplars."),
+  "Exemplars.TraceId": z
+    .array(z.string())
+    .optional()
+    .describe("Trace IDs associated with exemplars."),
+  "Exemplars.Value": z
+    .array(z.number())
+    .optional()
+    .describe("Values of exemplars."),
+});
+
+export const otelGaugeSchema = metricsBaseSchema.extend({
+  MetricType: z.literal("Gauge").describe("Gauge metric type."),
+  Value: z.number().describe("Current scalar value."),
+  Flags: z
+    .number()
+    .optional()
+    .describe("Flags that apply to this data point (see DataPointFlags)."),
+});
+
+export const otelSumSchema = metricsBaseSchema.extend({
+  MetricType: z.literal("Sum").describe("Sum metric type."),
+  Value: z.number().describe("Scalar sum value."),
+  Flags: z
+    .number()
+    .optional()
+    .describe("Flags that apply to this data point (see DataPointFlags)."),
+  AggTemporality: z
+    .string()
+    .optional()
+    .describe("Aggregation temporality (DELTA or CUMULATIVE)."),
+  IsMonotonic: z
+    .number()
+    .optional()
+    .describe("Whether the sum is monotonic (0 = false, 1 = true)."),
+});
+
+export const otelHistogramSchema = metricsBaseSchema.extend({
+  MetricType: z.literal("Histogram").describe("Histogram metric type."),
+  Count: z.number().optional().describe("Number of values in the histogram."),
+  Sum: z.number().optional().describe("Sum of all values."),
+  Min: z.number().nullable().optional().describe("Minimum value recorded."),
+  Max: z.number().nullable().optional().describe("Maximum value recorded."),
+  BucketCounts: z
+    .array(z.number())
+    .optional()
+    .describe("Count of values in each bucket."),
+  ExplicitBounds: z.array(z.number()).optional().describe("Bucket boundaries."),
+  AggTemporality: z
+    .string()
+    .optional()
+    .describe("Aggregation temporality (DELTA or CUMULATIVE)."),
+});
+
+export const otelExponentialHistogramSchema = metricsBaseSchema.extend({
+  MetricType: z
+    .literal("ExponentialHistogram")
+    .describe("Exponential histogram metric type."),
+  Count: z.number().optional().describe("Number of values in the histogram."),
+  Sum: z.number().optional().describe("Sum of all values."),
+  Min: z.number().nullable().optional().describe("Minimum value recorded."),
+  Max: z.number().nullable().optional().describe("Maximum value recorded."),
+  Scale: z
+    .number()
+    .optional()
+    .describe("Resolution of the histogram. Boundaries are at powers of base."),
+  ZeroCount: z
+    .number()
+    .optional()
+    .describe("Count of values that are exactly zero."),
+  PositiveBucketCounts: z
+    .array(z.number())
+    .optional()
+    .describe("Counts for positive value buckets."),
+  PositiveOffset: z
+    .number()
+    .optional()
+    .describe("Offset for positive bucket indices."),
+  NegativeBucketCounts: z
+    .array(z.number())
+    .optional()
+    .describe("Counts for negative value buckets."),
+  NegativeOffset: z
+    .number()
+    .optional()
+    .describe("Offset for negative bucket indices."),
+  AggTemporality: z
+    .string()
+    .optional()
+    .describe("Aggregation temporality (DELTA or CUMULATIVE)."),
+});
+
+export const otelSummarySchema = metricsBaseSchema.extend({
+  MetricType: z.literal("Summary").describe("Summary metric type."),
+  Count: z.number().optional().describe("Number of values in the summary."),
+  Sum: z.number().optional().describe("Sum of all values."),
+  "ValueAtQuantiles.Quantile": z
+    .array(z.number())
+    .optional()
+    .describe("Quantile values (0.0 to 1.0)."),
+  "ValueAtQuantiles.Value": z
+    .array(z.number())
+    .optional()
+    .describe("Values at each quantile."),
+});
+
+export const otelMetricsSchema = z.discriminatedUnion("MetricType", [
+  otelGaugeSchema,
+  otelSumSchema,
+  otelHistogramSchema,
+  otelExponentialHistogramSchema,
+  otelSummarySchema,
+]);
+
+export type OtelGaugeRow = z.infer<typeof otelGaugeSchema>;
+export type OtelSumRow = z.infer<typeof otelSumSchema>;
+export type OtelHistogramRow = z.infer<typeof otelHistogramSchema>;
+export type OtelExponentialHistogramRow = z.infer<
+  typeof otelExponentialHistogramSchema
+>;
+export type OtelSummaryRow = z.infer<typeof otelSummarySchema>;
+export type OtelMetricsRow = z.infer<typeof otelMetricsSchema>;

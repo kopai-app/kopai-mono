@@ -388,6 +388,219 @@ export class NodeSqliteTelemetryDatasource
     }
   }
 
+  async getMetrics(filter: dataFilterSchemas.MetricsDataFilter): Promise<{
+    data: denormalizedSignals.OtelMetricsRow[];
+    nextCursor: string | null;
+  }> {
+    try {
+      const limit = filter.limit ?? 100;
+      const sortOrder = filter.sortOrder ?? "DESC";
+      const metricType = filter.metricType;
+
+      if (!metricType) {
+        throw new SqliteDatasourceQueryError("metricType filter is required");
+      }
+
+      const tableMap = {
+        Gauge: "otel_metrics_gauge",
+        Sum: "otel_metrics_sum",
+        Histogram: "otel_metrics_histogram",
+        ExponentialHistogram: "otel_metrics_exponential_histogram",
+        Summary: "otel_metrics_summary",
+      } as const;
+
+      const table = tableMap[metricType];
+
+      let query = queryBuilder
+        .selectFrom(table)
+        .select([
+          "TimeUnix",
+          "StartTimeUnix",
+          "Attributes",
+          "MetricName",
+          "MetricDescription",
+          "MetricUnit",
+          "ResourceAttributes",
+          "ResourceSchemaUrl",
+          "ScopeAttributes",
+          "ScopeDroppedAttrCount",
+          "ScopeName",
+          "ScopeSchemaUrl",
+          "ScopeVersion",
+          "ServiceName",
+          kyselySql<number>`rowid`.as("_rowid"),
+        ]);
+
+      // Exemplars columns exist on all metric tables except Summary
+      if (metricType !== "Summary") {
+        query = query.select([
+          kyselySql<string>`"Exemplars.FilteredAttributes"`.as(
+            "Exemplars.FilteredAttributes"
+          ),
+          kyselySql<string>`"Exemplars.SpanId"`.as("Exemplars.SpanId"),
+          kyselySql<string>`"Exemplars.TimeUnix"`.as("Exemplars.TimeUnix"),
+          kyselySql<string>`"Exemplars.TraceId"`.as("Exemplars.TraceId"),
+          kyselySql<string>`"Exemplars.Value"`.as("Exemplars.Value"),
+        ]);
+      }
+
+      // Add type-specific fields
+      if (metricType === "Gauge") {
+        query = query.select(["Value", "Flags"]);
+      } else if (metricType === "Sum") {
+        query = query.select([
+          "Value",
+          "Flags",
+          "AggTemporality",
+          "IsMonotonic",
+        ]);
+      } else if (metricType === "Histogram") {
+        query = query.select([
+          "Count",
+          "Sum",
+          "BucketCounts",
+          "ExplicitBounds",
+          "Min",
+          "Max",
+          "AggTemporality",
+        ]);
+      } else if (metricType === "ExponentialHistogram") {
+        query = query.select([
+          "Count",
+          "Sum",
+          "Scale",
+          "ZeroCount",
+          "PositiveOffset",
+          "PositiveBucketCounts",
+          "NegativeOffset",
+          "NegativeBucketCounts",
+          "Min",
+          "Max",
+          "ZeroThreshold",
+          "AggTemporality",
+        ]);
+      } else if (metricType === "Summary") {
+        query = query.select(["Count", "Sum"]);
+        query = query.select([
+          kyselySql<string>`"ValueAtQuantiles.Quantile"`.as(
+            "ValueAtQuantiles.Quantile"
+          ),
+          kyselySql<string>`"ValueAtQuantiles.Value"`.as(
+            "ValueAtQuantiles.Value"
+          ),
+        ]);
+      }
+
+      // Exact match filters
+      if (filter.metricName)
+        query = query.where("MetricName", "=", filter.metricName);
+      if (filter.serviceName)
+        query = query.where("ServiceName", "=", filter.serviceName);
+      if (filter.scopeName)
+        query = query.where("ScopeName", "=", filter.scopeName);
+
+      // Time range (convert nanos to ms - same as writeMetrics storage)
+      if (filter.timeUnixMin != null)
+        query = query.where("TimeUnix", ">=", filter.timeUnixMin / 1_000_000);
+      if (filter.timeUnixMax != null)
+        query = query.where("TimeUnix", "<=", filter.timeUnixMax / 1_000_000);
+
+      // Cursor pagination with rowid tiebreaker
+      if (filter.cursor) {
+        const colonIdx = filter.cursor.indexOf(":");
+        const cursorTs = parseInt(filter.cursor.slice(0, colonIdx), 10);
+        const cursorRowid = parseInt(filter.cursor.slice(colonIdx + 1), 10);
+
+        if (sortOrder === "DESC") {
+          query = query.where((eb) =>
+            eb.or([
+              eb("TimeUnix", "<", cursorTs),
+              eb.and([
+                eb("TimeUnix", "=", cursorTs),
+                eb(kyselySql`rowid`, "<", cursorRowid),
+              ]),
+            ])
+          );
+        } else {
+          query = query.where((eb) =>
+            eb.or([
+              eb("TimeUnix", ">", cursorTs),
+              eb.and([
+                eb("TimeUnix", "=", cursorTs),
+                eb(kyselySql`rowid`, ">", cursorRowid),
+              ]),
+            ])
+          );
+        }
+      }
+
+      // Attribute filters (JSON extract)
+      if (filter.attributes) {
+        for (const [key, value] of Object.entries(filter.attributes)) {
+          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          query = query.where(
+            kyselySql`json_extract(Attributes, ${kyselySql.lit(jsonPath)})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.resourceAttributes) {
+        for (const [key, value] of Object.entries(filter.resourceAttributes)) {
+          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          query = query.where(
+            kyselySql`json_extract(ResourceAttributes, ${kyselySql.lit(jsonPath)})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.scopeAttributes) {
+        for (const [key, value] of Object.entries(filter.scopeAttributes)) {
+          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          query = query.where(
+            kyselySql`json_extract(ScopeAttributes, ${kyselySql.lit(jsonPath)})`,
+            "=",
+            value
+          );
+        }
+      }
+
+      // Sort and limit (+1 for next cursor detection)
+      query = query
+        .orderBy("TimeUnix", sortOrder === "ASC" ? "asc" : "desc")
+        .orderBy(kyselySql`rowid`, sortOrder === "ASC" ? "asc" : "desc")
+        .limit(limit + 1);
+
+      // Execute
+      const { sql, parameters } = query.compile();
+      const rows = this.sqliteConnection
+        .prepare(sql)
+        .all(...(parameters as (string | number | null)[])) as Record<
+        string,
+        unknown
+      >[];
+
+      // Determine nextCursor
+      const hasMore = rows.length > limit;
+      const data = hasMore ? rows.slice(0, limit) : rows;
+      const lastRow = data[data.length - 1];
+      const nextCursor =
+        hasMore && lastRow ? `${lastRow.TimeUnix}:${lastRow._rowid}` : null;
+
+      // Map rows to OtelMetricsRow (parse JSON fields)
+      return {
+        data: data.map((row) => mapRowToOtelMetrics(row, metricType)),
+        nextCursor,
+      };
+    } catch (error) {
+      if (error instanceof SqliteDatasourceQueryError) throw error;
+      throw new SqliteDatasourceQueryError("Failed to query metrics", {
+        cause: error,
+      });
+    }
+  }
+
   async getLogs(filter: dataFilterSchemas.LogsDataFilter): Promise<{
     data: denormalizedSignals.OtelLogsRow[];
     nextCursor: string | null;
@@ -935,7 +1148,7 @@ function bufferToHex(buf: Uint8Array): string {
 }
 
 function mapRowToOtelTraces(
-  row: Record<string, unknown>
+  row: Record<string, unknown> // TODO: can we use kysely-generated type for this?
 ): denormalizedSignals.OtelTracesRow {
   return {
     TraceId: row.TraceId as string,
@@ -1006,7 +1219,7 @@ function parseNumberArrayField(value: unknown): number[] | undefined {
 }
 
 function mapRowToOtelLogs(
-  row: Record<string, unknown>
+  row: Record<string, unknown> // TODO: can we use kysely-generated type for this?
 ): denormalizedSignals.OtelLogsRow {
   return {
     Timestamp: row.Timestamp as number,
@@ -1024,5 +1237,100 @@ function mapRowToOtelLogs(
     ScopeVersion: row.ScopeVersion as string | undefined,
     ScopeAttributes: parseJsonField(row.ScopeAttributes),
     ScopeSchemaUrl: row.ScopeSchemaUrl as string | undefined,
+  };
+}
+
+function mapRowToOtelMetrics(
+  row: Record<string, unknown>, // TODO: can we use kysely-generated type for this?
+  metricType: "Gauge" | "Sum" | "Histogram" | "ExponentialHistogram" | "Summary"
+): denormalizedSignals.OtelMetricsRow {
+  const base = {
+    TimeUnix: row.TimeUnix as number,
+    StartTimeUnix: row.StartTimeUnix as number,
+    Attributes: parseJsonField(row.Attributes),
+    MetricName: row.MetricName as string | undefined,
+    MetricDescription: row.MetricDescription as string | undefined,
+    MetricUnit: row.MetricUnit as string | undefined,
+    ResourceAttributes: parseJsonField(row.ResourceAttributes),
+    ResourceSchemaUrl: row.ResourceSchemaUrl as string | undefined,
+    ScopeAttributes: parseJsonField(row.ScopeAttributes),
+    ScopeDroppedAttrCount: row.ScopeDroppedAttrCount as number | undefined,
+    ScopeName: row.ScopeName as string | undefined,
+    ScopeSchemaUrl: row.ScopeSchemaUrl as string | undefined,
+    ScopeVersion: row.ScopeVersion as string | undefined,
+    ServiceName: row.ServiceName as string | undefined,
+    "Exemplars.FilteredAttributes": parseJsonArrayField(
+      row["Exemplars.FilteredAttributes"]
+    ),
+    "Exemplars.SpanId": parseStringArrayField(row["Exemplars.SpanId"]),
+    "Exemplars.TimeUnix": parseNumberArrayField(row["Exemplars.TimeUnix"]),
+    "Exemplars.TraceId": parseStringArrayField(row["Exemplars.TraceId"]),
+    "Exemplars.Value": parseNumberArrayField(row["Exemplars.Value"]),
+  };
+
+  if (metricType === "Gauge") {
+    return {
+      ...base,
+      MetricType: "Gauge" as const,
+      Value: row.Value as number,
+      Flags: row.Flags as number | undefined,
+    };
+  }
+
+  if (metricType === "Sum") {
+    return {
+      ...base,
+      MetricType: "Sum" as const,
+      Value: row.Value as number,
+      Flags: row.Flags as number | undefined,
+      AggTemporality: row.AggTemporality as string | undefined,
+      IsMonotonic: row.IsMonotonic as number | undefined,
+    };
+  }
+
+  if (metricType === "Histogram") {
+    return {
+      ...base,
+      MetricType: "Histogram" as const,
+      Count: row.Count as number | undefined,
+      Sum: row.Sum as number | undefined,
+      Min: row.Min as number | null | undefined,
+      Max: row.Max as number | null | undefined,
+      BucketCounts: parseNumberArrayField(row.BucketCounts),
+      ExplicitBounds: parseNumberArrayField(row.ExplicitBounds),
+      AggTemporality: row.AggTemporality as string | undefined,
+    };
+  }
+
+  if (metricType === "ExponentialHistogram") {
+    return {
+      ...base,
+      MetricType: "ExponentialHistogram" as const,
+      Count: row.Count as number | undefined,
+      Sum: row.Sum as number | undefined,
+      Min: row.Min as number | null | undefined,
+      Max: row.Max as number | null | undefined,
+      Scale: row.Scale as number | undefined,
+      ZeroCount: row.ZeroCount as number | undefined,
+      PositiveOffset: row.PositiveOffset as number | undefined,
+      PositiveBucketCounts: parseNumberArrayField(row.PositiveBucketCounts),
+      NegativeOffset: row.NegativeOffset as number | undefined,
+      NegativeBucketCounts: parseNumberArrayField(row.NegativeBucketCounts),
+      AggTemporality: row.AggTemporality as string | undefined,
+    };
+  }
+
+  // Summary
+  return {
+    ...base,
+    MetricType: "Summary" as const,
+    Count: row.Count as number | undefined,
+    Sum: row.Sum as number | undefined,
+    "ValueAtQuantiles.Quantile": parseNumberArrayField(
+      row["ValueAtQuantiles.Quantile"]
+    ),
+    "ValueAtQuantiles.Value": parseNumberArrayField(
+      row["ValueAtQuantiles.Value"]
+    ),
   };
 }

@@ -1011,6 +1011,612 @@ describe("NodeSqliteTelemetryDatasource", () => {
       );
     });
   });
+
+  describe("getMetrics", () => {
+    let testConnection: DatabaseSync;
+    let ds: NodeSqliteTelemetryDatasource;
+    let readDs: datasource.ReadTelemetryDatasource;
+    let insertGauge: ReturnType<typeof createInsertGauge>;
+    let insertSum: ReturnType<typeof createInsertSum>;
+    let insertHistogram: ReturnType<typeof createInsertHistogram>;
+    let insertExpHistogram: ReturnType<typeof createInsertExpHistogram>;
+    let insertSummary: ReturnType<typeof createInsertSummary>;
+
+    function assertDefined<T>(
+      value: T | undefined | null,
+      msg = "Expected defined"
+    ): asserts value is T {
+      if (value === undefined || value === null) throw new Error(msg);
+    }
+
+    beforeEach(() => {
+      testConnection = initializeDatabase(":memory:");
+      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      readDs = ds;
+      insertGauge = createInsertGauge(ds);
+      insertSum = createInsertSum(ds);
+      insertHistogram = createInsertHistogram(ds);
+      insertExpHistogram = createInsertExpHistogram(ds);
+      insertSummary = createInsertSummary(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("returns gauge metrics with metricType filter", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+      await insertSum({
+        metricName: "request.count",
+        timeUnixNano: "2000000000000000",
+        value: 100,
+      });
+
+      const result = await readDs.getMetrics({ metricType: "Gauge" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.MetricType).toBe("Gauge");
+      expect(row.MetricName).toBe("cpu.usage");
+      if (row.MetricType === "Gauge") {
+        expect(row.Value).toBe(0.75);
+      }
+    });
+
+    it("returns sum metrics with metricType filter", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+      await insertSum({
+        metricName: "request.count",
+        timeUnixNano: "2000000000000000",
+        value: 100,
+        isMonotonic: true,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      });
+
+      const result = await readDs.getMetrics({ metricType: "Sum" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.MetricType).toBe("Sum");
+      expect(row.MetricName).toBe("request.count");
+      if (row.MetricType === "Sum") {
+        expect(row.Value).toBe(100);
+        expect(row.IsMonotonic).toBe(1);
+        expect(row.AggTemporality).toBe("AGGREGATION_TEMPORALITY_CUMULATIVE");
+      }
+    });
+
+    it("returns histogram metrics with metricType filter", async () => {
+      await insertHistogram({
+        metricName: "http.latency",
+        timeUnixNano: "1000000000000000",
+        count: 10,
+        sum: 500,
+        bucketCounts: [1, 2, 3, 4],
+        explicitBounds: [10, 50, 100],
+      });
+
+      const result = await readDs.getMetrics({ metricType: "Histogram" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.MetricType).toBe("Histogram");
+      if (row.MetricType === "Histogram") {
+        expect(row.Count).toBe(10);
+        expect(row.Sum).toBe(500);
+        expect(row.BucketCounts).toEqual([1, 2, 3, 4]);
+        expect(row.ExplicitBounds).toEqual([10, 50, 100]);
+      }
+    });
+
+    it("returns exponential histogram metrics with metricType filter", async () => {
+      await insertExpHistogram({
+        metricName: "request.duration",
+        timeUnixNano: "1000000000000000",
+        count: 100,
+        sum: 5000,
+        scale: 3,
+        zeroCount: 5,
+        positiveBucketCounts: [10, 20, 30],
+        positiveOffset: 1,
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "ExponentialHistogram",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.MetricType).toBe("ExponentialHistogram");
+      if (row.MetricType === "ExponentialHistogram") {
+        expect(row.Scale).toBe(3);
+        expect(row.ZeroCount).toBe(5);
+        expect(row.PositiveBucketCounts).toEqual([10, 20, 30]);
+      }
+    });
+
+    it("returns summary metrics with metricType filter", async () => {
+      await insertSummary({
+        metricName: "request.latency",
+        timeUnixNano: "1000000000000000",
+        count: 50,
+        sum: 2500,
+        quantiles: [0.5, 0.9, 0.99],
+        quantileValues: [25, 80, 120],
+      });
+
+      const result = await readDs.getMetrics({ metricType: "Summary" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.MetricType).toBe("Summary");
+      if (row.MetricType === "Summary") {
+        expect(row.Count).toBe(50);
+        expect(row["ValueAtQuantiles.Quantile"]).toEqual([0.5, 0.9, 0.99]);
+        expect(row["ValueAtQuantiles.Value"]).toEqual([25, 80, 120]);
+      }
+    });
+
+    it("filters by metricName", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+      await insertGauge({
+        metricName: "memory.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.5,
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        metricName: "cpu.usage",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.MetricName).toBe("cpu.usage");
+    });
+
+    it("filters by serviceName", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        serviceName: "service-a",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        serviceName: "service-b",
+        timeUnixNano: "2000000000000000",
+        value: 0.5,
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        serviceName: "service-a",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ServiceName).toBe("service-a");
+    });
+
+    it("filters by scopeName", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        scopeName: "scope-a",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        scopeName: "scope-b",
+        timeUnixNano: "2000000000000000",
+        value: 0.5,
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        scopeName: "scope-a",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ScopeName).toBe("scope-a");
+    });
+
+    it("filters by timeUnixMin/Max (nanos to ms conversion)", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000", // stored as 1000000000 ms
+        value: 0.1,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000", // stored as 2000000000 ms
+        value: 0.2,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "3000000000000000", // stored as 3000000000 ms
+        value: 0.3,
+      });
+
+      // Filter: >= 1500ms and <= 2500ms (in nanos)
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        timeUnixMin: 1500000000000000, // 1500000000 ms
+        timeUnixMax: 2500000000000000, // 2500000000 ms
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.TimeUnix).toBe(2000000000); // ms
+    });
+
+    it("filters by attributes using JSON extract", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        attributes: { host: "host-1", region: "us-east" },
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.5,
+        attributes: { host: "host-2", region: "us-west" },
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        attributes: { host: "host-1" },
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Attributes).toEqual({ host: "host-1", region: "us-east" });
+    });
+
+    it("filters by resourceAttributes using JSON extract", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        resourceAttributes: { env: "prod" },
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.5,
+        resourceAttributes: { env: "dev" },
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        resourceAttributes: { env: "prod" },
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ResourceAttributes).toMatchObject({ env: "prod" });
+    });
+
+    it("filters by scopeAttributes using JSON extract", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        scopeAttributes: { "lib.version": "1.0" },
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.5,
+        scopeAttributes: { "lib.version": "2.0" },
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        scopeAttributes: { "lib.version": "1.0" },
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ScopeAttributes).toEqual({ "lib.version": "1.0" });
+    });
+
+    it("respects limit parameter", async () => {
+      for (let i = 0; i < 5; i++) {
+        await insertGauge({
+          metricName: "cpu.usage",
+          timeUnixNano: `${(i + 1) * 1000000000000000}`,
+          value: i * 0.1,
+        });
+      }
+
+      const result = await readDs.getMetrics({ metricType: "Gauge", limit: 3 });
+
+      expect(result.data).toHaveLength(3);
+      expect(result.nextCursor).not.toBeNull();
+    });
+
+    it("sorts DESC - newest first (default)", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.1,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.2,
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        sortOrder: "DESC",
+      });
+
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.TimeUnix).toBe(2000000000); // newer (ms)
+      const row1 = result.data[1];
+      assertDefined(row1);
+      expect(row1.TimeUnix).toBe(1000000000); // older (ms)
+    });
+
+    it("sorts ASC - oldest first", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.2,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.1,
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        sortOrder: "ASC",
+      });
+
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.TimeUnix).toBe(1000000000); // older (ms)
+      const row1 = result.data[1];
+      assertDefined(row1);
+      expect(row1.TimeUnix).toBe(2000000000); // newer (ms)
+    });
+
+    it("pagination with cursor continues from timestamp", async () => {
+      for (let i = 0; i < 5; i++) {
+        await insertGauge({
+          metricName: "cpu.usage",
+          timeUnixNano: `${(i + 1) * 1000000000000000}`,
+          value: i * 0.1,
+        });
+      }
+
+      // First page (DESC order)
+      const page1 = await readDs.getMetrics({
+        metricType: "Gauge",
+        limit: 2,
+        sortOrder: "DESC",
+      });
+      expect(page1.data).toHaveLength(2);
+      const p1r0 = page1.data[0];
+      assertDefined(p1r0);
+      expect(p1r0.TimeUnix).toBe(5000000000); // newest (ms)
+      expect(page1.nextCursor).not.toBeNull();
+
+      // Second page
+      assertDefined(page1.nextCursor);
+      const page2 = await readDs.getMetrics({
+        metricType: "Gauge",
+        limit: 2,
+        sortOrder: "DESC",
+        cursor: page1.nextCursor,
+      });
+      expect(page2.data).toHaveLength(2);
+      const p2r0 = page2.data[0];
+      assertDefined(p2r0);
+      expect(p2r0.TimeUnix).toBe(3000000000); // ms
+    });
+
+    it("pagination with same-timestamp metrics uses rowid tiebreaker", async () => {
+      const sameTimestamp = "1000000000000000";
+      await insertGauge({
+        metricName: "metric-a",
+        timeUnixNano: sameTimestamp,
+        value: 0.1,
+      });
+      await insertGauge({
+        metricName: "metric-b",
+        timeUnixNano: sameTimestamp,
+        value: 0.2,
+      });
+      await insertGauge({
+        metricName: "metric-c",
+        timeUnixNano: sameTimestamp,
+        value: 0.3,
+      });
+
+      const seen = new Set<string>();
+
+      // Page 1
+      const page1 = await readDs.getMetrics({
+        metricType: "Gauge",
+        limit: 1,
+        sortOrder: "DESC",
+      });
+      expect(page1.data).toHaveLength(1);
+      const p1row = page1.data[0];
+      assertDefined(p1row);
+      assertDefined(p1row.MetricName);
+      seen.add(p1row.MetricName);
+      expect(page1.nextCursor).not.toBeNull();
+
+      // Page 2
+      assertDefined(page1.nextCursor);
+      const page2 = await readDs.getMetrics({
+        metricType: "Gauge",
+        limit: 1,
+        sortOrder: "DESC",
+        cursor: page1.nextCursor,
+      });
+      expect(page2.data).toHaveLength(1);
+      const p2row = page2.data[0];
+      assertDefined(p2row);
+      assertDefined(p2row.MetricName);
+      seen.add(p2row.MetricName);
+      expect(page2.nextCursor).not.toBeNull();
+
+      // Page 3
+      assertDefined(page2.nextCursor);
+      const page3 = await readDs.getMetrics({
+        metricType: "Gauge",
+        limit: 1,
+        sortOrder: "DESC",
+        cursor: page2.nextCursor,
+      });
+      expect(page3.data).toHaveLength(1);
+      const p3row = page3.data[0];
+      assertDefined(p3row);
+      assertDefined(p3row.MetricName);
+      seen.add(p3row.MetricName);
+      expect(page3.nextCursor).toBeNull();
+
+      // All 3 unique metrics should be seen
+      expect(seen.size).toBe(3);
+    });
+
+    it("combines multiple filters with AND", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        serviceName: "service-a",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        serviceName: "service-b",
+        timeUnixNano: "2000000000000000",
+        value: 0.5,
+      });
+      await insertGauge({
+        metricName: "memory.usage",
+        serviceName: "service-a",
+        timeUnixNano: "3000000000000000",
+        value: 0.6,
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        metricName: "cpu.usage",
+        serviceName: "service-a",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.MetricName).toBe("cpu.usage");
+      expect(row.ServiceName).toBe("service-a");
+    });
+
+    it("returns empty result with null cursor when no matches", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+
+      const result = await readDs.getMetrics({
+        metricType: "Gauge",
+        metricName: "nonexistent",
+      });
+
+      expect(result.data).toEqual([]);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("parses JSON fields in returned rows", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        attributes: { host: "host-1" },
+        resourceAttributes: { env: "prod" },
+        scopeAttributes: { "lib.name": "test" },
+      });
+
+      const result = await readDs.getMetrics({ metricType: "Gauge" });
+
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Attributes).toEqual({ host: "host-1" });
+      expect(row.ResourceAttributes).toMatchObject({ env: "prod" });
+      expect(row.ScopeAttributes).toEqual({ "lib.name": "test" });
+    });
+
+    it("parses Exemplars fields as arrays", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        exemplars: [
+          {
+            timeUnixNano: "1000000000000000",
+            value: 0.8,
+            spanId: "span123",
+            traceId: "trace456",
+          },
+        ],
+      });
+
+      const result = await readDs.getMetrics({ metricType: "Gauge" });
+
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row["Exemplars.TimeUnix"]).toEqual([1000000000]); // ms
+      expect(row["Exemplars.Value"]).toEqual([0.8]);
+      expect(row["Exemplars.SpanId"]).toEqual(["span123"]);
+    });
+
+    it("throws SqliteDatasourceQueryError on DB error", async () => {
+      const badConnection = initializeDatabase(":memory:");
+      const badDs = new NodeSqliteTelemetryDatasource(badConnection);
+      badConnection.close();
+
+      await expect(badDs.getMetrics({ metricType: "Gauge" })).rejects.toThrow(
+        SqliteDatasourceQueryError
+      );
+    });
+  });
 });
 
 function createInsertSpan(
@@ -1074,6 +1680,420 @@ function createInsertSpan(
                   attributes: spanAttrs,
                   events: opts.events,
                   links: opts.links,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  };
+}
+
+function createInsertGauge(
+  ds: Pick<datasource.WriteMetricsDatasource, "writeMetrics">
+) {
+  return async (opts: {
+    metricName: string;
+    timeUnixNano: string;
+    startTimeUnixNano?: string;
+    value: number;
+    serviceName?: string;
+    scopeName?: string;
+    attributes?: Record<string, string>;
+    resourceAttributes?: Record<string, string>;
+    scopeAttributes?: Record<string, string>;
+    exemplars?: Array<{
+      timeUnixNano: string;
+      value: number;
+      spanId?: string;
+      traceId?: string;
+    }>;
+  }) => {
+    const resourceAttrs = [
+      ...(opts.serviceName
+        ? [{ key: "service.name", value: { stringValue: opts.serviceName } }]
+        : []),
+      ...Object.entries(opts.resourceAttributes ?? {}).map(([key, value]) => ({
+        key,
+        value: { stringValue: value },
+      })),
+    ];
+
+    const metricAttrs = Object.entries(opts.attributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    const scopeAttrs = Object.entries(opts.scopeAttributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    const exemplars = opts.exemplars?.map((e) => ({
+      timeUnixNano: e.timeUnixNano,
+      asDouble: e.value,
+      spanId: e.spanId,
+      traceId: e.traceId ? new TextEncoder().encode(e.traceId) : undefined,
+    }));
+
+    await ds.writeMetrics({
+      resourceMetrics: [
+        {
+          resource: { attributes: resourceAttrs },
+          scopeMetrics: [
+            {
+              scope: {
+                name: opts.scopeName ?? "test-scope",
+                attributes: scopeAttrs,
+              },
+              metrics: [
+                {
+                  name: opts.metricName,
+                  gauge: {
+                    dataPoints: [
+                      {
+                        timeUnixNano: opts.timeUnixNano,
+                        startTimeUnixNano:
+                          opts.startTimeUnixNano ?? opts.timeUnixNano,
+                        asDouble: opts.value,
+                        attributes: metricAttrs,
+                        exemplars,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  };
+}
+
+function createInsertSum(
+  ds: Pick<datasource.WriteMetricsDatasource, "writeMetrics">
+) {
+  return async (opts: {
+    metricName: string;
+    timeUnixNano: string;
+    startTimeUnixNano?: string;
+    value: number;
+    serviceName?: string;
+    scopeName?: string;
+    isMonotonic?: boolean;
+    aggregationTemporality?: string;
+    attributes?: Record<string, string>;
+    resourceAttributes?: Record<string, string>;
+    scopeAttributes?: Record<string, string>;
+  }) => {
+    const resourceAttrs = [
+      ...(opts.serviceName
+        ? [{ key: "service.name", value: { stringValue: opts.serviceName } }]
+        : []),
+      ...Object.entries(opts.resourceAttributes ?? {}).map(([key, value]) => ({
+        key,
+        value: { stringValue: value },
+      })),
+    ];
+
+    const metricAttrs = Object.entries(opts.attributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    const scopeAttrs = Object.entries(opts.scopeAttributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    // Map aggregation temporality string to enum value
+    let aggTemp: number | undefined;
+    if (opts.aggregationTemporality === "AGGREGATION_TEMPORALITY_DELTA") {
+      aggTemp = 1;
+    } else if (
+      opts.aggregationTemporality === "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    ) {
+      aggTemp = 2;
+    }
+
+    await ds.writeMetrics({
+      resourceMetrics: [
+        {
+          resource: { attributes: resourceAttrs },
+          scopeMetrics: [
+            {
+              scope: {
+                name: opts.scopeName ?? "test-scope",
+                attributes: scopeAttrs,
+              },
+              metrics: [
+                {
+                  name: opts.metricName,
+                  sum: {
+                    dataPoints: [
+                      {
+                        timeUnixNano: opts.timeUnixNano,
+                        startTimeUnixNano:
+                          opts.startTimeUnixNano ?? opts.timeUnixNano,
+                        asDouble: opts.value,
+                        attributes: metricAttrs,
+                      },
+                    ],
+                    isMonotonic: opts.isMonotonic,
+                    aggregationTemporality: aggTemp,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  };
+}
+
+function createInsertHistogram(
+  ds: Pick<datasource.WriteMetricsDatasource, "writeMetrics">
+) {
+  return async (opts: {
+    metricName: string;
+    timeUnixNano: string;
+    startTimeUnixNano?: string;
+    count: number;
+    sum: number;
+    bucketCounts: number[];
+    explicitBounds: number[];
+    serviceName?: string;
+    scopeName?: string;
+    aggregationTemporality?: string;
+    attributes?: Record<string, string>;
+    resourceAttributes?: Record<string, string>;
+    scopeAttributes?: Record<string, string>;
+  }) => {
+    const resourceAttrs = [
+      ...(opts.serviceName
+        ? [{ key: "service.name", value: { stringValue: opts.serviceName } }]
+        : []),
+      ...Object.entries(opts.resourceAttributes ?? {}).map(([key, value]) => ({
+        key,
+        value: { stringValue: value },
+      })),
+    ];
+
+    const metricAttrs = Object.entries(opts.attributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    const scopeAttrs = Object.entries(opts.scopeAttributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    let aggTemp: number | undefined;
+    if (opts.aggregationTemporality === "AGGREGATION_TEMPORALITY_DELTA") {
+      aggTemp = 1;
+    } else if (
+      opts.aggregationTemporality === "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    ) {
+      aggTemp = 2;
+    }
+
+    await ds.writeMetrics({
+      resourceMetrics: [
+        {
+          resource: { attributes: resourceAttrs },
+          scopeMetrics: [
+            {
+              scope: {
+                name: opts.scopeName ?? "test-scope",
+                attributes: scopeAttrs,
+              },
+              metrics: [
+                {
+                  name: opts.metricName,
+                  histogram: {
+                    dataPoints: [
+                      {
+                        timeUnixNano: opts.timeUnixNano,
+                        startTimeUnixNano:
+                          opts.startTimeUnixNano ?? opts.timeUnixNano,
+                        count: opts.count,
+                        sum: opts.sum,
+                        bucketCounts: opts.bucketCounts,
+                        explicitBounds: opts.explicitBounds,
+                        attributes: metricAttrs,
+                      },
+                    ],
+                    aggregationTemporality: aggTemp,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  };
+}
+
+function createInsertExpHistogram(
+  ds: Pick<datasource.WriteMetricsDatasource, "writeMetrics">
+) {
+  return async (opts: {
+    metricName: string;
+    timeUnixNano: string;
+    startTimeUnixNano?: string;
+    count: number;
+    sum: number;
+    scale: number;
+    zeroCount: number;
+    positiveBucketCounts?: number[];
+    positiveOffset?: number;
+    negativeBucketCounts?: number[];
+    negativeOffset?: number;
+    serviceName?: string;
+    scopeName?: string;
+    aggregationTemporality?: string;
+    attributes?: Record<string, string>;
+    resourceAttributes?: Record<string, string>;
+    scopeAttributes?: Record<string, string>;
+  }) => {
+    const resourceAttrs = [
+      ...(opts.serviceName
+        ? [{ key: "service.name", value: { stringValue: opts.serviceName } }]
+        : []),
+      ...Object.entries(opts.resourceAttributes ?? {}).map(([key, value]) => ({
+        key,
+        value: { stringValue: value },
+      })),
+    ];
+
+    const metricAttrs = Object.entries(opts.attributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    const scopeAttrs = Object.entries(opts.scopeAttributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    let aggTemp: number | undefined;
+    if (opts.aggregationTemporality === "AGGREGATION_TEMPORALITY_DELTA") {
+      aggTemp = 1;
+    } else if (
+      opts.aggregationTemporality === "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    ) {
+      aggTemp = 2;
+    }
+
+    await ds.writeMetrics({
+      resourceMetrics: [
+        {
+          resource: { attributes: resourceAttrs },
+          scopeMetrics: [
+            {
+              scope: {
+                name: opts.scopeName ?? "test-scope",
+                attributes: scopeAttrs,
+              },
+              metrics: [
+                {
+                  name: opts.metricName,
+                  exponentialHistogram: {
+                    dataPoints: [
+                      {
+                        timeUnixNano: opts.timeUnixNano,
+                        startTimeUnixNano:
+                          opts.startTimeUnixNano ?? opts.timeUnixNano,
+                        count: opts.count,
+                        sum: opts.sum,
+                        scale: opts.scale,
+                        zeroCount: opts.zeroCount,
+                        positive: {
+                          offset: opts.positiveOffset ?? 0,
+                          bucketCounts: opts.positiveBucketCounts,
+                        },
+                        negative: {
+                          offset: opts.negativeOffset ?? 0,
+                          bucketCounts: opts.negativeBucketCounts,
+                        },
+                        attributes: metricAttrs,
+                      },
+                    ],
+                    aggregationTemporality: aggTemp,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  };
+}
+
+function createInsertSummary(
+  ds: Pick<datasource.WriteMetricsDatasource, "writeMetrics">
+) {
+  return async (opts: {
+    metricName: string;
+    timeUnixNano: string;
+    startTimeUnixNano?: string;
+    count: number;
+    sum: number;
+    quantiles: number[];
+    quantileValues: number[];
+    serviceName?: string;
+    scopeName?: string;
+    attributes?: Record<string, string>;
+    resourceAttributes?: Record<string, string>;
+    scopeAttributes?: Record<string, string>;
+  }) => {
+    const resourceAttrs = [
+      ...(opts.serviceName
+        ? [{ key: "service.name", value: { stringValue: opts.serviceName } }]
+        : []),
+      ...Object.entries(opts.resourceAttributes ?? {}).map(([key, value]) => ({
+        key,
+        value: { stringValue: value },
+      })),
+    ];
+
+    const metricAttrs = Object.entries(opts.attributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    const scopeAttrs = Object.entries(opts.scopeAttributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    const quantileValues = opts.quantiles.map((q, i) => ({
+      quantile: q,
+      value: opts.quantileValues[i],
+    }));
+
+    await ds.writeMetrics({
+      resourceMetrics: [
+        {
+          resource: { attributes: resourceAttrs },
+          scopeMetrics: [
+            {
+              scope: {
+                name: opts.scopeName ?? "test-scope",
+                attributes: scopeAttrs,
+              },
+              metrics: [
+                {
+                  name: opts.metricName,
+                  summary: {
+                    dataPoints: [
+                      {
+                        timeUnixNano: opts.timeUnixNano,
+                        startTimeUnixNano:
+                          opts.startTimeUnixNano ?? opts.timeUnixNano,
+                        count: opts.count,
+                        sum: opts.sum,
+                        quantileValues,
+                        attributes: metricAttrs,
+                      },
+                    ],
+                  },
                 },
               ],
             },
