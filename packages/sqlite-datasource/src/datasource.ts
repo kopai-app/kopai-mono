@@ -598,7 +598,7 @@ function toLogRow(
     TraceFlags: logRecord.flags ?? 0,
     SeverityText: logRecord.severityText ?? "",
     SeverityNumber: logRecord.severityNumber ?? 0,
-    Body: JSON.stringify(anyValueToSimple(logRecord.body)),
+    Body: anyValueToBodyString(logRecord.body),
     LogAttributes: keyValueArrayToJson(logRecord.attributes),
     ResourceAttributes: keyValueArrayToJson(resource?.attributes),
     ResourceSchemaUrl: resourceSchemaUrl ?? "",
@@ -881,6 +881,12 @@ function anyValueToSimple(value: otlp.AnyValue | undefined): unknown {
     return obj;
   }
   return null;
+}
+
+function anyValueToBodyString(value: otlp.AnyValue | undefined): string {
+  const simple = anyValueToSimple(value);
+  if (typeof simple === "string") return simple;
+  return JSON.stringify(simple);
 }
 
 function keyValueArrayToObject(

@@ -769,7 +769,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
         TraceFlags: testFlags,
         SeverityText: testSeverityText,
         SeverityNumber: testSeverityNumber,
-        Body: `"${testBodyString}"`,
+        Body: testBodyString,
         LogAttributes: '{"log.attr":"attr-val"}',
         ResourceAttributes: `{"service.name":"${testServiceName}","host.name":"test-host"}`,
         ResourceSchemaUrl: testResourceSchemaUrl,

@@ -962,10 +962,43 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       const row = result.data[0];
       assertDefined(row);
-      expect(row.Body).toBe('"test message"');
+      expect(row.Body).toBe("test message");
       expect(row.LogAttributes).toEqual({ key1: "value1" });
       expect(row.ResourceAttributes).toMatchObject({ env: "prod" });
       expect(row.ScopeAttributes).toEqual({ "lib.name": "test" });
+    });
+
+    it("returns string Body without extra quotes", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        body: "Hello world",
+      });
+
+      const result = await readDs.getLogs({});
+
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Body).toBe("Hello world");
+    });
+
+    it("returns complex Body as JSON string", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        bodyValue: {
+          kvlistValue: {
+            values: [
+              { key: "user", value: { stringValue: "alice" } },
+              { key: "action", value: { stringValue: "login" } },
+            ],
+          },
+        },
+      });
+
+      const result = await readDs.getLogs({});
+
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Body).toBe('{"user":"alice","action":"login"}');
     });
 
     it("throws SqliteDatasourceQueryError on DB error", async () => {
@@ -1063,6 +1096,7 @@ function createInsertLog(
     severityText?: string;
     severityNumber?: number;
     body?: string;
+    bodyValue?: otlp.AnyValue;
     logAttributes?: Record<string, string>;
     resourceAttributes?: Record<string, string>;
     scopeAttributes?: Record<string, string>;
@@ -1102,7 +1136,9 @@ function createInsertLog(
                   spanId: opts.spanId,
                   severityText: opts.severityText,
                   severityNumber: opts.severityNumber,
-                  body: opts.body ? { stringValue: opts.body } : undefined,
+                  body:
+                    opts.bodyValue ??
+                    (opts.body ? { stringValue: opts.body } : undefined),
                   attributes: logAttrs,
                 },
               ],
