@@ -56,11 +56,37 @@ export interface ReadLogsDatasource {
   }>;
 }
 
+export type MetricType =
+  | "Gauge"
+  | "Sum"
+  | "Histogram"
+  | "ExponentialHistogram"
+  | "Summary";
+
+export interface DiscoveredMetricAttributes {
+  values: Record<string, string[]>;
+  _truncated?: boolean;
+}
+
+export interface DiscoveredMetric {
+  name: string;
+  type: MetricType;
+  unit?: string;
+  description?: string;
+  attributes: DiscoveredMetricAttributes;
+  resourceAttributes: DiscoveredMetricAttributes;
+}
+
+export interface MetricsDiscoveryResult {
+  metrics: DiscoveredMetric[];
+}
+
 export interface ReadMetricsDatasource {
   getMetrics(filter: z.infer<typeof metricsDataFilterSchema>): Promise<{
     data: z.infer<typeof otelMetricsSchema>[];
     nextCursor: string | null;
   }>;
+  discoverMetrics(): Promise<MetricsDiscoveryResult>;
 }
 
 export interface LogsPartialSuccess {

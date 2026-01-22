@@ -20,17 +20,23 @@ describe("signalsRoutes", () => {
   let getMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>
   >;
+  let discoverMetricsSpy: ReturnType<
+    typeof vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>
+  >;
 
   beforeEach(async () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     getLogsSpy = vi.fn<datasource.ReadLogsDatasource["getLogs"]>();
     getMetricsSpy = vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>();
+    discoverMetricsSpy =
+      vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>();
     server = Fastify();
     await server.register(signalsRoutes, {
       readTelemetryDatasource: {
         getTraces: getTracesSpy,
         getLogs: getLogsSpy,
         getMetrics: getMetricsSpy,
+        discoverMetrics: discoverMetricsSpy,
       },
     });
     await server.ready();
@@ -252,6 +258,96 @@ describe("signalsRoutes", () => {
 
       expect(response.statusCode).toBe(500);
       expect(response.json()).toEqual({ error: "Internal Server Error" });
+    });
+  });
+
+  describe("GET /signals/metrics/discover", () => {
+    it("returns metrics with attributes", async () => {
+      const mockResult: datasource.MetricsDiscoveryResult = {
+        metrics: [
+          {
+            name: "cpu_usage",
+            type: "Gauge",
+            unit: "percent",
+            description: "CPU usage percentage",
+            attributes: {
+              values: { host: ["host1", "host2"], region: ["us-east"] },
+            },
+            resourceAttributes: {
+              values: { "service.name": ["my-service"] },
+            },
+          },
+        ],
+      };
+      discoverMetricsSpy.mockResolvedValue(mockResult);
+
+      const response = await server.inject({
+        method: "GET",
+        url: "/signals/metrics/discover",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(mockResult);
+      expect(discoverMetricsSpy).toHaveBeenCalled();
+    });
+
+    it("handles empty metrics", async () => {
+      discoverMetricsSpy.mockResolvedValue({ metrics: [] });
+
+      const response = await server.inject({
+        method: "GET",
+        url: "/signals/metrics/discover",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ metrics: [] });
+    });
+
+    it("returns truncated flag when values exceed limit", async () => {
+      const mockResult: datasource.MetricsDiscoveryResult = {
+        metrics: [
+          {
+            name: "request_count",
+            type: "Sum",
+            attributes: {
+              values: {
+                endpoint: Array.from({ length: 100 }, (_, i) => `/api/${i}`),
+              },
+              _truncated: true,
+            },
+            resourceAttributes: { values: {} },
+          },
+        ],
+      };
+      discoverMetricsSpy.mockResolvedValue(mockResult);
+
+      const response = await server.inject({
+        method: "GET",
+        url: "/signals/metrics/discover",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.metrics[0].attributes._truncated).toBe(true);
+    });
+
+    it("returns 500 for SignalsApiError", async () => {
+      discoverMetricsSpy.mockRejectedValue(
+        new TestSignalsApiError("Database connection failed")
+      );
+
+      const response = await server.inject({
+        method: "GET",
+        url: "/signals/metrics/discover",
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-internal-error",
+        status: 500,
+        title: "Internal server error",
+        detail: "Database connection failed",
+      });
     });
   });
 });

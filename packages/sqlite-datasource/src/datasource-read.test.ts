@@ -5,19 +5,19 @@ import { otlp, type datasource } from "@kopai/core";
 import { initializeDatabase } from "./initialize-database.js";
 import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
 
+function assertDefined<T>(
+  value: T | undefined | null,
+  msg = "Expected defined"
+): asserts value is T {
+  if (value === undefined || value === null) throw new Error(msg);
+}
+
 describe("NodeSqliteTelemetryDatasource", () => {
   describe("getTraces", () => {
     let testConnection: DatabaseSync;
     let ds: NodeSqliteTelemetryDatasource;
     let readDs: datasource.ReadTelemetryDatasource;
     let insertSpan: ReturnType<typeof createInsertSpan>;
-
-    function assertDefined<T>(
-      value: T | undefined | null,
-      msg = "Expected defined"
-    ): asserts value is T {
-      if (value === undefined || value === null) throw new Error(msg);
-    }
 
     beforeEach(() => {
       testConnection = initializeDatabase(":memory:");
@@ -573,13 +573,6 @@ describe("NodeSqliteTelemetryDatasource", () => {
     let readDs: datasource.ReadTelemetryDatasource;
     let insertLog: ReturnType<typeof createInsertLog>;
 
-    function assertDefined<T>(
-      value: T | undefined | null,
-      msg = "Expected defined"
-    ): asserts value is T {
-      if (value === undefined || value === null) throw new Error(msg);
-    }
-
     beforeEach(() => {
       testConnection = initializeDatabase(":memory:");
       ds = new NodeSqliteTelemetryDatasource(testConnection);
@@ -1021,13 +1014,6 @@ describe("NodeSqliteTelemetryDatasource", () => {
     let insertHistogram: ReturnType<typeof createInsertHistogram>;
     let insertExpHistogram: ReturnType<typeof createInsertExpHistogram>;
     let insertSummary: ReturnType<typeof createInsertSummary>;
-
-    function assertDefined<T>(
-      value: T | undefined | null,
-      msg = "Expected defined"
-    ): asserts value is T {
-      if (value === undefined || value === null) throw new Error(msg);
-    }
 
     beforeEach(() => {
       testConnection = initializeDatabase(":memory:");
@@ -1613,6 +1599,255 @@ describe("NodeSqliteTelemetryDatasource", () => {
       badConnection.close();
 
       await expect(badDs.getMetrics({ metricType: "Gauge" })).rejects.toThrow(
+        SqliteDatasourceQueryError
+      );
+    });
+  });
+
+  describe("discoverMetrics", () => {
+    let testConnection: DatabaseSync;
+    let ds: NodeSqliteTelemetryDatasource;
+    let insertGauge: ReturnType<typeof createInsertGauge>;
+    let insertSum: ReturnType<typeof createInsertSum>;
+    let insertHistogram: ReturnType<typeof createInsertHistogram>;
+
+    beforeEach(() => {
+      testConnection = initializeDatabase(":memory:");
+      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      insertGauge = createInsertGauge(ds);
+      insertSum = createInsertSum(ds);
+      insertHistogram = createInsertHistogram(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("returns empty array when no metrics", async () => {
+      const result = await ds.discoverMetrics();
+
+      expect(result.metrics).toEqual([]);
+    });
+
+    it("returns single metric with attributes", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        attributes: { host: "host-1", region: "us-east" },
+        resourceAttributes: { env: "prod" },
+      });
+
+      const result = await ds.discoverMetrics();
+
+      expect(result.metrics).toHaveLength(1);
+      const metric = result.metrics[0];
+      assertDefined(metric);
+      expect(metric).toEqual({
+        name: "cpu.usage",
+        type: "Gauge",
+        attributes: { values: { host: ["host-1"], region: ["us-east"] } },
+        resourceAttributes: { values: { env: ["prod"] } },
+      });
+    });
+
+    it("returns multiple metrics with different types", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+      await insertSum({
+        metricName: "request.count",
+        timeUnixNano: "2000000000000000",
+        value: 100,
+      });
+      await insertHistogram({
+        metricName: "latency",
+        timeUnixNano: "3000000000000000",
+        count: 10,
+        sum: 500,
+        bucketCounts: [1, 2, 3],
+        explicitBounds: [10, 50],
+      });
+
+      const result = await ds.discoverMetrics();
+
+      expect(result.metrics).toHaveLength(3);
+      const types = result.metrics.map((m) => m.type).sort();
+      expect(types).toEqual(["Gauge", "Histogram", "Sum"]);
+    });
+
+    it("aggregates unique attribute values across data points", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        attributes: { host: "host-1" },
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.8,
+        attributes: { host: "host-2" },
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "3000000000000000",
+        value: 0.85,
+        attributes: { host: "host-1" }, // duplicate
+      });
+
+      const result = await ds.discoverMetrics();
+
+      expect(result.metrics).toHaveLength(1);
+      const metric = result.metrics[0];
+      assertDefined(metric);
+      expect(metric).toEqual({
+        name: "cpu.usage",
+        type: "Gauge",
+        attributes: {
+          values: { host: expect.arrayContaining(["host-1", "host-2"]) },
+        },
+        resourceAttributes: { values: {} },
+      });
+    });
+
+    it("separates attributes vs resourceAttributes correctly", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        attributes: { host: "host-1" },
+        resourceAttributes: { env: "prod" },
+      });
+
+      const result = await ds.discoverMetrics();
+
+      const metric = result.metrics[0];
+      assertDefined(metric);
+      expect(metric).toEqual({
+        name: "cpu.usage",
+        type: "Gauge",
+        attributes: { values: { host: ["host-1"] } },
+        resourceAttributes: { values: { env: ["prod"] } },
+      });
+    });
+
+    it("truncates at 100 values and sets _truncated flag", async () => {
+      // Insert 105 data points with unique host values
+      for (let i = 0; i < 105; i++) {
+        await insertGauge({
+          metricName: "cpu.usage",
+          timeUnixNano: `${1000000000000000 + i}`,
+          value: 0.5,
+          attributes: { host: `host-${i}` },
+        });
+      }
+
+      const result = await ds.discoverMetrics();
+
+      const metric = result.metrics[0];
+      assertDefined(metric);
+      expect(metric).toEqual({
+        name: "cpu.usage",
+        type: "Gauge",
+        attributes: { values: { host: expect.any(Array) }, _truncated: true },
+        resourceAttributes: { values: {} },
+      });
+      expect(metric.attributes.values.host).toHaveLength(100);
+    });
+
+    it("handles metrics with no attributes", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+      });
+
+      const result = await ds.discoverMetrics();
+
+      const metric = result.metrics[0];
+      assertDefined(metric);
+      expect(metric).toEqual({
+        name: "cpu.usage",
+        type: "Gauge",
+        attributes: { values: {} },
+        resourceAttributes: { values: {} },
+      });
+    });
+
+    it("handles metrics with no resourceAttributes", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        attributes: { host: "host-1" },
+      });
+
+      const result = await ds.discoverMetrics();
+
+      const metric = result.metrics[0];
+      assertDefined(metric);
+      expect(metric).toEqual({
+        name: "cpu.usage",
+        type: "Gauge",
+        attributes: { values: { host: ["host-1"] } },
+        resourceAttributes: { values: {} },
+      });
+    });
+
+    it("includes unit and description when present", async () => {
+      // Need to insert directly since helper doesn't support unit/description
+      await ds.writeMetrics({
+        resourceMetrics: [
+          {
+            resource: { attributes: [] },
+            scopeMetrics: [
+              {
+                scope: { name: "test" },
+                metrics: [
+                  {
+                    name: "cpu.usage",
+                    unit: "percent",
+                    description: "CPU usage percentage",
+                    gauge: {
+                      dataPoints: [
+                        {
+                          timeUnixNano: "1000000000000000",
+                          asDouble: 0.75,
+                          attributes: [],
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = await ds.discoverMetrics();
+
+      const metric = result.metrics[0];
+      assertDefined(metric);
+      expect(metric).toEqual({
+        name: "cpu.usage",
+        type: "Gauge",
+        unit: "percent",
+        description: "CPU usage percentage",
+        attributes: { values: {} },
+        resourceAttributes: { values: {} },
+      });
+    });
+
+    it("throws SqliteDatasourceQueryError on DB error", async () => {
+      const badConnection = initializeDatabase(":memory:");
+      const badDs = new NodeSqliteTelemetryDatasource(badConnection);
+      badConnection.close();
+
+      await expect(badDs.discoverMetrics()).rejects.toThrow(
         SqliteDatasourceQueryError
       );
     });

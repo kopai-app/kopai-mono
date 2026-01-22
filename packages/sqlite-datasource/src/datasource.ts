@@ -752,6 +752,125 @@ export class NodeSqliteTelemetryDatasource
       });
     }
   }
+
+  async discoverMetrics(): Promise<datasource.MetricsDiscoveryResult> {
+    try {
+      // Step 1: Get distinct metrics across all tables using UNION
+      const distinctMetricsSql = METRIC_TABLES.map(
+        ({ table, type }) =>
+          `SELECT DISTINCT MetricName, MetricUnit, MetricDescription, '${type}' as MetricType FROM ${table}`
+      ).join(" UNION ");
+
+      const distinctMetrics = this.sqliteConnection
+        .prepare(distinctMetricsSql)
+        .all() as {
+        MetricName: string;
+        MetricUnit: string | null;
+        MetricDescription: string | null;
+        MetricType: datasource.MetricType;
+      }[];
+
+      const metrics: datasource.DiscoveredMetric[] = [];
+
+      for (const metric of distinctMetrics) {
+        const table = METRIC_TABLES.find(
+          (t) => t.type === metric.MetricType
+        )!.table;
+
+        // Step 2: Get distinct attribute keys for this metric
+        const attrKeysSql = `
+          SELECT DISTINCT json_each.key as key
+          FROM ${table}, json_each(Attributes)
+          WHERE MetricName = ?
+        `;
+        const attrKeys = this.sqliteConnection
+          .prepare(attrKeysSql)
+          .all(metric.MetricName) as { key: string }[];
+
+        // Step 3: Get distinct values for each attribute key (limit 101 to detect truncation)
+        let attrsTruncated = false;
+        const attributes: Record<string, string[]> = {};
+
+        for (const { key } of attrKeys) {
+          const valuesSql = `
+            SELECT DISTINCT json_each.value as value
+            FROM ${table}, json_each(Attributes)
+            WHERE MetricName = ? AND json_each.key = ?
+            LIMIT ${MAX_ATTR_VALUES + 1}
+          `;
+          const values = this.sqliteConnection
+            .prepare(valuesSql)
+            .all(metric.MetricName, key) as { value: string }[];
+
+          if (values.length > MAX_ATTR_VALUES) {
+            attrsTruncated = true;
+            attributes[key] = values
+              .slice(0, MAX_ATTR_VALUES)
+              .map((v) => String(v.value));
+          } else {
+            attributes[key] = values.map((v) => String(v.value));
+          }
+        }
+
+        // Step 4: Get distinct resource attribute keys for this metric
+        const resAttrKeysSql = `
+          SELECT DISTINCT json_each.key as key
+          FROM ${table}, json_each(ResourceAttributes)
+          WHERE MetricName = ?
+        `;
+        const resAttrKeys = this.sqliteConnection
+          .prepare(resAttrKeysSql)
+          .all(metric.MetricName) as { key: string }[];
+
+        // Step 5: Get distinct values for each resource attribute key
+        let resAttrsTruncated = false;
+        const resourceAttributes: Record<string, string[]> = {};
+
+        for (const { key } of resAttrKeys) {
+          const valuesSql = `
+            SELECT DISTINCT json_each.value as value
+            FROM ${table}, json_each(ResourceAttributes)
+            WHERE MetricName = ? AND json_each.key = ?
+            LIMIT ${MAX_ATTR_VALUES + 1}
+          `;
+          const values = this.sqliteConnection
+            .prepare(valuesSql)
+            .all(metric.MetricName, key) as { value: string }[];
+
+          if (values.length > MAX_ATTR_VALUES) {
+            resAttrsTruncated = true;
+            resourceAttributes[key] = values
+              .slice(0, MAX_ATTR_VALUES)
+              .map((v) => String(v.value));
+          } else {
+            resourceAttributes[key] = values.map((v) => String(v.value));
+          }
+        }
+
+        metrics.push({
+          name: metric.MetricName,
+          type: metric.MetricType,
+          unit: metric.MetricUnit || undefined,
+          description: metric.MetricDescription || undefined,
+          attributes: {
+            values: attributes,
+            ...(attrsTruncated && { _truncated: true }),
+          },
+          resourceAttributes: {
+            values: resourceAttributes,
+            ...(resAttrsTruncated && { _truncated: true }),
+          },
+        });
+      }
+
+      return { metrics };
+    } catch (error) {
+      if (error instanceof SqliteDatasourceQueryError) throw error;
+      throw new SqliteDatasourceQueryError("Failed to discover metrics", {
+        cause: error,
+      });
+    }
+  }
 }
 
 function toSpanRow(
@@ -1239,6 +1358,16 @@ function mapRowToOtelLogs(
     ScopeSchemaUrl: row.ScopeSchemaUrl as string | undefined,
   };
 }
+
+const METRIC_TABLES = [
+  { table: "otel_metrics_gauge", type: "Gauge" },
+  { table: "otel_metrics_sum", type: "Sum" },
+  { table: "otel_metrics_histogram", type: "Histogram" },
+  { table: "otel_metrics_exponential_histogram", type: "ExponentialHistogram" },
+  { table: "otel_metrics_summary", type: "Summary" },
+] as const;
+
+const MAX_ATTR_VALUES = 100;
 
 function mapRowToOtelMetrics(
   row: Record<string, unknown>, // TODO: can we use kysely-generated type for this?

@@ -6,6 +6,46 @@ import {
   type datasource,
 } from "@kopai/core";
 
+const metricTypeSchema = z.enum([
+  "Gauge",
+  "Sum",
+  "Histogram",
+  "ExponentialHistogram",
+  "Summary",
+]);
+
+const discoveredAttributesSchema = z.object({
+  values: z
+    .record(z.string(), z.array(z.string()))
+    .describe("Attribute key/value pairs. Max 100 values per key."),
+  _truncated: z
+    .boolean()
+    .optional()
+    .describe("True if any attribute key exceeded 100 values."),
+});
+
+const discoveredMetricSchema = z.object({
+  name: z.string().describe("Metric name from MetricName field."),
+  type: metricTypeSchema.describe(
+    "Metric type: Gauge, Sum, Histogram, ExponentialHistogram, or Summary."
+  ),
+  unit: z.string().optional().describe("Metric unit from MetricUnit field."),
+  description: z
+    .string()
+    .optional()
+    .describe("Metric description from MetricDescription field."),
+  attributes: discoveredAttributesSchema.describe(
+    "Data point attributes aggregated across all data points."
+  ),
+  resourceAttributes: discoveredAttributesSchema.describe(
+    "Resource attributes aggregated across all data points."
+  ),
+});
+
+const metricsDiscoveryResponseSchema = z.object({
+  metrics: z.array(discoveredMetricSchema),
+});
+
 export const metricsRoutes: FastifyPluginAsyncZod<{
   readMetricsDatasource: datasource.ReadMetricsDatasource;
 }> = async function (fastify, opts) {
@@ -26,6 +66,21 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
     },
     handler: async (req, res) => {
       const result = await opts.readMetricsDatasource.getMetrics(req.body);
+      res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "GET",
+    url: "/signals/metrics/discover",
+    schema: {
+      description: "Discover available metrics and their attributes",
+      response: {
+        200: metricsDiscoveryResponseSchema,
+      },
+    },
+    handler: async (_req, res) => {
+      const result = await opts.readMetricsDatasource.discoverMetrics();
       res.send(result);
     },
   });

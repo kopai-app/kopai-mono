@@ -20,17 +20,23 @@ describe("apiRoutes", () => {
   let getMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>
   >;
+  let discoverMetricsSpy: ReturnType<
+    typeof vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>
+  >;
 
   beforeEach(async () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     getLogsSpy = vi.fn<datasource.ReadLogsDatasource["getLogs"]>();
     getMetricsSpy = vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>();
+    discoverMetricsSpy =
+      vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>();
     server = Fastify();
     await server.register(signalsRoutes, {
       readTelemetryDatasource: {
         getTraces: getTracesSpy,
         getLogs: getLogsSpy,
         getMetrics: getMetricsSpy,
+        discoverMetrics: discoverMetricsSpy,
       },
     });
     await server.ready();
