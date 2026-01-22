@@ -10,7 +10,7 @@ export function errorHandler(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
-  if (isValidationError(error)) {
+  if (isClientError(error)) {
     return reply.status(400).send({
       // https://datatracker.ietf.org/doc/html/rfc9457
       //      HTTP/1.1 422 Unprocessable Content
@@ -59,12 +59,11 @@ function isFastifyError(error: unknown): error is FastifyError {
   );
 }
 
-function isValidationError(
-  error: unknown
-): error is FastifyError & Required<Pick<FastifyError, "validation">> {
+function isClientError(error: unknown): error is FastifyError {
   return (
     isFastifyError(error) &&
-    "validation" in error &&
-    Array.isArray((error as FastifyError).validation)
+    typeof error.statusCode === "number" &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500
   );
 }

@@ -74,6 +74,23 @@ describe("signalsRoutes", () => {
       expect(body.detail).toBeDefined();
     });
 
+    it("returns 400 for invalid JSON", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        headers: { "content-type": "application/json" },
+        payload: "{ invalid json }",
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-validation-error",
+        status: 400,
+        title: "Invalid data",
+      });
+    });
+
     it("returns 500 for SignalsApiError", async () => {
       getTracesSpy.mockRejectedValue(
         new TestSignalsApiError("Database connection failed")
