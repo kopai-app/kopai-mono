@@ -6,6 +6,7 @@ import {
 } from "fastify-type-provider-zod";
 import { errorHandler } from "./routes/error-handler.js";
 import { tracesRoutes } from "./routes/traces.js";
+import { logsRoutes } from "./routes/logs.js";
 
 export const signalsRoutes: FastifyPluginAsyncZod<{
   readTelemetryDatasource: datasource.ReadTelemetryDatasource;
@@ -16,5 +17,9 @@ export const signalsRoutes: FastifyPluginAsyncZod<{
 
   fastify.register(tracesRoutes, {
     readTracesDatasource: opts.readTelemetryDatasource,
+  });
+
+  fastify.register(logsRoutes, {
+    readLogsDatasource: opts.readTelemetryDatasource,
   });
 };

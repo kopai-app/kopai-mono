@@ -566,6 +566,418 @@ describe("NodeSqliteTelemetryDatasource", () => {
       );
     });
   });
+
+  describe("getLogs", () => {
+    let testConnection: DatabaseSync;
+    let ds: NodeSqliteTelemetryDatasource;
+    let readDs: datasource.ReadTelemetryDatasource;
+    let insertLog: ReturnType<typeof createInsertLog>;
+
+    function assertDefined<T>(
+      value: T | undefined | null,
+      msg = "Expected defined"
+    ): asserts value is T {
+      if (value === undefined || value === null) throw new Error(msg);
+    }
+
+    beforeEach(() => {
+      testConnection = initializeDatabase(":memory:");
+      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      readDs = ds;
+      insertLog = createInsertLog(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("returns all logs with no filters, default limit 100, DESC order", async () => {
+      await insertLog({ timeNanos: "1000000000000000" });
+      await insertLog({ timeNanos: "2000000000000000" });
+
+      const result = await readDs.getLogs({});
+
+      expect(result.data).toHaveLength(2);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.Timestamp).toBe(2000000000); // newer first (DESC)
+      const row1 = result.data[1];
+      assertDefined(row1);
+      expect(row1.Timestamp).toBe(1000000000);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("filters by traceId", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        traceId: "target-trace",
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        traceId: "other-trace",
+      });
+
+      const result = await readDs.getLogs({ traceId: "target-trace" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.TraceId).toBe("target-trace");
+    });
+
+    it("filters by spanId", async () => {
+      await insertLog({ timeNanos: "1000000000000000", spanId: "target-span" });
+      await insertLog({ timeNanos: "2000000000000000", spanId: "other-span" });
+
+      const result = await readDs.getLogs({ spanId: "target-span" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SpanId).toBe("target-span");
+    });
+
+    it("filters by serviceName", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        serviceName: "target-service",
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        serviceName: "other-service",
+      });
+
+      const result = await readDs.getLogs({ serviceName: "target-service" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ServiceName).toBe("target-service");
+    });
+
+    it("filters by scopeName", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        scopeName: "http-scope",
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        scopeName: "grpc-scope",
+      });
+
+      const result = await readDs.getLogs({ scopeName: "http-scope" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ScopeName).toBe("http-scope");
+    });
+
+    it("filters by severityText", async () => {
+      await insertLog({ timeNanos: "1000000000000000", severityText: "ERROR" });
+      await insertLog({ timeNanos: "2000000000000000", severityText: "INFO" });
+
+      const result = await readDs.getLogs({ severityText: "ERROR" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SeverityText).toBe("ERROR");
+    });
+
+    it("filters by severityNumberMin/Max", async () => {
+      await insertLog({ timeNanos: "1000000000000000", severityNumber: 5 });
+      await insertLog({ timeNanos: "2000000000000000", severityNumber: 10 });
+      await insertLog({ timeNanos: "3000000000000000", severityNumber: 15 });
+
+      const result = await readDs.getLogs({
+        severityNumberMin: 8,
+        severityNumberMax: 12,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SeverityNumber).toBe(10);
+    });
+
+    it("filters by bodyContains (substring search)", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        body: "User logged in successfully",
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        body: "Database connection failed",
+      });
+
+      const result = await readDs.getLogs({ bodyContains: "logged in" });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Body).toContain("logged in");
+    });
+
+    it("filters by timestampMin/Max (nanos to ms conversion)", async () => {
+      await insertLog({ timeNanos: "1000000000000000" }); // 1000ms
+      await insertLog({ timeNanos: "2000000000000000" }); // 2000ms
+      await insertLog({ timeNanos: "3000000000000000" }); // 3000ms
+
+      const result = await readDs.getLogs({
+        timestampMin: 1500000000000000,
+        timestampMax: 2500000000000000,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Timestamp).toBe(2000000000);
+    });
+
+    it("filters by logAttributes using JSON extract", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        logAttributes: { "request.id": "abc123" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        logAttributes: { "request.id": "xyz789" },
+      });
+
+      const result = await readDs.getLogs({
+        logAttributes: { "request.id": "abc123" },
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.LogAttributes).toEqual({ "request.id": "abc123" });
+    });
+
+    it("filters by resourceAttributes using JSON extract", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        resourceAttributes: { env: "prod" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        resourceAttributes: { env: "dev" },
+      });
+
+      const result = await readDs.getLogs({
+        resourceAttributes: { env: "prod" },
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ResourceAttributes).toMatchObject({ env: "prod" });
+    });
+
+    it("filters by scopeAttributes using JSON extract", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        scopeAttributes: { "library.version": "1.0.0" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        scopeAttributes: { "library.version": "2.0.0" },
+      });
+
+      const result = await readDs.getLogs({
+        scopeAttributes: { "library.version": "1.0.0" },
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ScopeAttributes).toEqual({ "library.version": "1.0.0" });
+    });
+
+    it("respects limit parameter", async () => {
+      for (let i = 0; i < 5; i++) {
+        await insertLog({
+          timeNanos: `${(i + 1) * 1000000000000000}`,
+        });
+      }
+
+      const result = await readDs.getLogs({ limit: 3 });
+
+      expect(result.data).toHaveLength(3);
+      expect(result.nextCursor).not.toBeNull();
+    });
+
+    it("sorts ASC - oldest first", async () => {
+      await insertLog({ timeNanos: "2000000000000000" });
+      await insertLog({ timeNanos: "1000000000000000" });
+
+      const result = await readDs.getLogs({ sortOrder: "ASC" });
+
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.Timestamp).toBe(1000000000); // older
+      const row1 = result.data[1];
+      assertDefined(row1);
+      expect(row1.Timestamp).toBe(2000000000); // newer
+    });
+
+    it("sorts DESC - newest first (default)", async () => {
+      await insertLog({ timeNanos: "1000000000000000" });
+      await insertLog({ timeNanos: "2000000000000000" });
+
+      const result = await readDs.getLogs({ sortOrder: "DESC" });
+
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.Timestamp).toBe(2000000000); // newer
+      const row1 = result.data[1];
+      assertDefined(row1);
+      expect(row1.Timestamp).toBe(1000000000); // older
+    });
+
+    it("pagination with cursor continues from timestamp", async () => {
+      for (let i = 0; i < 5; i++) {
+        await insertLog({ timeNanos: `${(i + 1) * 1000000000000000}` });
+      }
+
+      // First page (DESC order)
+      const page1 = await readDs.getLogs({ limit: 2, sortOrder: "DESC" });
+      expect(page1.data).toHaveLength(2);
+      const p1r0 = page1.data[0];
+      assertDefined(p1r0);
+      expect(p1r0.Timestamp).toBe(5000000000); // newest
+      expect(page1.nextCursor).not.toBeNull();
+
+      // Second page
+      assertDefined(page1.nextCursor);
+      const page2 = await readDs.getLogs({
+        limit: 2,
+        sortOrder: "DESC",
+        cursor: page1.nextCursor,
+      });
+      expect(page2.data).toHaveLength(2);
+      const p2r0 = page2.data[0];
+      assertDefined(p2r0);
+      expect(p2r0.Timestamp).toBe(3000000000);
+    });
+
+    it("pagination with same-timestamp logs uses rowid tiebreaker", async () => {
+      const sameTimestamp = "1000000000000000";
+      await insertLog({ timeNanos: sameTimestamp, body: "log-a" });
+      await insertLog({ timeNanos: sameTimestamp, body: "log-b" });
+      await insertLog({ timeNanos: sameTimestamp, body: "log-c" });
+
+      const seen = new Set<string>();
+
+      // Page 1
+      const page1 = await readDs.getLogs({ limit: 1, sortOrder: "DESC" });
+      expect(page1.data).toHaveLength(1);
+      const p1row = page1.data[0];
+      assertDefined(p1row);
+      assertDefined(p1row.Body);
+      seen.add(p1row.Body);
+      expect(page1.nextCursor).not.toBeNull();
+
+      // Page 2
+      assertDefined(page1.nextCursor);
+      const page2 = await readDs.getLogs({
+        limit: 1,
+        sortOrder: "DESC",
+        cursor: page1.nextCursor,
+      });
+      expect(page2.data).toHaveLength(1);
+      const p2row = page2.data[0];
+      assertDefined(p2row);
+      assertDefined(p2row.Body);
+      seen.add(p2row.Body);
+      expect(page2.nextCursor).not.toBeNull();
+
+      // Page 3
+      assertDefined(page2.nextCursor);
+      const page3 = await readDs.getLogs({
+        limit: 1,
+        sortOrder: "DESC",
+        cursor: page2.nextCursor,
+      });
+      expect(page3.data).toHaveLength(1);
+      const p3row = page3.data[0];
+      assertDefined(p3row);
+      assertDefined(p3row.Body);
+      seen.add(p3row.Body);
+      expect(page3.nextCursor).toBeNull();
+
+      // All 3 unique logs should be seen across pages
+      expect(seen.size).toBe(3);
+    });
+
+    it("combines multiple filters with AND", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        serviceName: "target-service",
+        severityText: "ERROR",
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        serviceName: "target-service",
+        severityText: "INFO",
+      });
+      await insertLog({
+        timeNanos: "3000000000000000",
+        serviceName: "other-service",
+        severityText: "ERROR",
+      });
+
+      const result = await readDs.getLogs({
+        serviceName: "target-service",
+        severityText: "ERROR",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ServiceName).toBe("target-service");
+      expect(row.SeverityText).toBe("ERROR");
+    });
+
+    it("returns empty result with null cursor when no matches", async () => {
+      await insertLog({ timeNanos: "1000000000000000" });
+
+      const result = await readDs.getLogs({ traceId: "nonexistent" });
+
+      expect(result.data).toEqual([]);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("parses JSON fields in returned rows", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        body: "test message",
+        logAttributes: { key1: "value1" },
+        resourceAttributes: { env: "prod" },
+        scopeAttributes: { "lib.name": "test" },
+      });
+
+      const result = await readDs.getLogs({});
+
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Body).toBe('"test message"');
+      expect(row.LogAttributes).toEqual({ key1: "value1" });
+      expect(row.ResourceAttributes).toMatchObject({ env: "prod" });
+      expect(row.ScopeAttributes).toEqual({ "lib.name": "test" });
+    });
+
+    it("throws SqliteDatasourceQueryError on DB error", async () => {
+      const badConnection = initializeDatabase(":memory:");
+      const badDs = new NodeSqliteTelemetryDatasource(badConnection);
+      badConnection.close();
+
+      await expect(badDs.getLogs({})).rejects.toThrow(
+        SqliteDatasourceQueryError
+      );
+    });
+  });
 });
 
 function createInsertSpan(
@@ -629,6 +1041,69 @@ function createInsertSpan(
                   attributes: spanAttrs,
                   events: opts.events,
                   links: opts.links,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  };
+}
+
+function createInsertLog(
+  ds: Pick<datasource.WriteLogsDatasource, "writeLogs">
+) {
+  return async (opts: {
+    timeNanos: string;
+    traceId?: string;
+    spanId?: string;
+    serviceName?: string;
+    scopeName?: string;
+    severityText?: string;
+    severityNumber?: number;
+    body?: string;
+    logAttributes?: Record<string, string>;
+    resourceAttributes?: Record<string, string>;
+    scopeAttributes?: Record<string, string>;
+  }) => {
+    const resourceAttrs = [
+      ...(opts.serviceName
+        ? [{ key: "service.name", value: { stringValue: opts.serviceName } }]
+        : []),
+      ...Object.entries(opts.resourceAttributes ?? {}).map(([key, value]) => ({
+        key,
+        value: { stringValue: value },
+      })),
+    ];
+
+    const logAttrs = Object.entries(opts.logAttributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    const scopeAttrs = Object.entries(opts.scopeAttributes ?? {}).map(
+      ([key, value]) => ({ key, value: { stringValue: value } })
+    );
+
+    await ds.writeLogs({
+      resourceLogs: [
+        {
+          resource: { attributes: resourceAttrs },
+          scopeLogs: [
+            {
+              scope: {
+                name: opts.scopeName ?? "test-scope",
+                attributes: scopeAttrs,
+              },
+              logRecords: [
+                {
+                  timeUnixNano: opts.timeNanos,
+                  traceId: opts.traceId,
+                  spanId: opts.spanId,
+                  severityText: opts.severityText,
+                  severityNumber: opts.severityNumber,
+                  body: opts.body ? { stringValue: opts.body } : undefined,
+                  attributes: logAttrs,
                 },
               ],
             },

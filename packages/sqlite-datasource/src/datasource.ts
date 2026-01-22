@@ -387,6 +387,158 @@ export class NodeSqliteTelemetryDatasource
       });
     }
   }
+
+  async getLogs(filter: dataFilterSchemas.LogsDataFilter): Promise<{
+    data: denormalizedSignals.OtelLogsRow[];
+    nextCursor: string | null;
+  }> {
+    try {
+      const limit = filter.limit ?? 100;
+      const sortOrder = filter.sortOrder ?? "DESC";
+
+      let query = queryBuilder
+        .selectFrom("otel_logs")
+        .select([
+          "Timestamp",
+          "TraceId",
+          "SpanId",
+          "TraceFlags",
+          "SeverityText",
+          "SeverityNumber",
+          "Body",
+          "LogAttributes",
+          "ResourceAttributes",
+          "ResourceSchemaUrl",
+          "ServiceName",
+          "ScopeName",
+          "ScopeVersion",
+          "ScopeAttributes",
+          "ScopeSchemaUrl",
+          kyselySql<number>`rowid`.as("_rowid"),
+        ]);
+
+      // Exact match filters
+      if (filter.traceId) query = query.where("TraceId", "=", filter.traceId);
+      if (filter.spanId) query = query.where("SpanId", "=", filter.spanId);
+      if (filter.serviceName)
+        query = query.where("ServiceName", "=", filter.serviceName);
+      if (filter.scopeName)
+        query = query.where("ScopeName", "=", filter.scopeName);
+      if (filter.severityText)
+        query = query.where("SeverityText", "=", filter.severityText);
+
+      // Severity number range
+      if (filter.severityNumberMin != null)
+        query = query.where("SeverityNumber", ">=", filter.severityNumberMin);
+      if (filter.severityNumberMax != null)
+        query = query.where("SeverityNumber", "<=", filter.severityNumberMax);
+
+      // Time range (convert nanos to ms)
+      if (filter.timestampMin != null)
+        query = query.where("Timestamp", ">=", filter.timestampMin / 1_000_000);
+      if (filter.timestampMax != null)
+        query = query.where("Timestamp", "<=", filter.timestampMax / 1_000_000);
+
+      // Body contains (substring search using INSTR)
+      if (filter.bodyContains) {
+        query = query.where(
+          kyselySql`INSTR(Body, ${filter.bodyContains})`,
+          ">",
+          0
+        );
+      }
+
+      // Cursor pagination with rowid tiebreaker
+      if (filter.cursor) {
+        const colonIdx = filter.cursor.indexOf(":");
+        const cursorTs = parseInt(filter.cursor.slice(0, colonIdx), 10);
+        const cursorRowid = parseInt(filter.cursor.slice(colonIdx + 1), 10);
+
+        if (sortOrder === "DESC") {
+          query = query.where((eb) =>
+            eb.or([
+              eb("Timestamp", "<", cursorTs),
+              eb.and([
+                eb("Timestamp", "=", cursorTs),
+                eb(kyselySql`rowid`, "<", cursorRowid),
+              ]),
+            ])
+          );
+        } else {
+          query = query.where((eb) =>
+            eb.or([
+              eb("Timestamp", ">", cursorTs),
+              eb.and([
+                eb("Timestamp", "=", cursorTs),
+                eb(kyselySql`rowid`, ">", cursorRowid),
+              ]),
+            ])
+          );
+        }
+      }
+
+      // Attribute filters (JSON extract)
+      if (filter.logAttributes) {
+        for (const [key, value] of Object.entries(filter.logAttributes)) {
+          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          query = query.where(
+            kyselySql`json_extract(LogAttributes, ${kyselySql.lit(jsonPath)})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.resourceAttributes) {
+        for (const [key, value] of Object.entries(filter.resourceAttributes)) {
+          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          query = query.where(
+            kyselySql`json_extract(ResourceAttributes, ${kyselySql.lit(jsonPath)})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.scopeAttributes) {
+        for (const [key, value] of Object.entries(filter.scopeAttributes)) {
+          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          query = query.where(
+            kyselySql`json_extract(ScopeAttributes, ${kyselySql.lit(jsonPath)})`,
+            "=",
+            value
+          );
+        }
+      }
+
+      // Sort and limit (+1 for next cursor detection)
+      query = query
+        .orderBy("Timestamp", sortOrder === "ASC" ? "asc" : "desc")
+        .orderBy(kyselySql`rowid`, sortOrder === "ASC" ? "asc" : "desc")
+        .limit(limit + 1);
+
+      // Execute
+      const { sql, parameters } = query.compile();
+      const rows = this.sqliteConnection
+        .prepare(sql)
+        .all(...(parameters as (string | number | null)[])) as Record<
+        string,
+        unknown
+      >[];
+
+      // Determine nextCursor
+      const hasMore = rows.length > limit;
+      const data = hasMore ? rows.slice(0, limit) : rows;
+      const lastRow = data[data.length - 1];
+      const nextCursor =
+        hasMore && lastRow ? `${lastRow.Timestamp}:${lastRow._rowid}` : null;
+
+      // Map rows to OtelLogsRow (parse JSON fields)
+      return { data: data.map(mapRowToOtelLogs), nextCursor };
+    } catch (error) {
+      throw new SqliteDatasourceQueryError("Failed to query logs", {
+        cause: error,
+      });
+    }
+  }
 }
 
 function toSpanRow(
@@ -845,4 +997,26 @@ function parseNumberArrayField(value: unknown): number[] | undefined {
   } catch {
     return undefined;
   }
+}
+
+function mapRowToOtelLogs(
+  row: Record<string, unknown>
+): denormalizedSignals.OtelLogsRow {
+  return {
+    Timestamp: row.Timestamp as number,
+    TraceId: row.TraceId as string | undefined,
+    SpanId: row.SpanId as string | undefined,
+    TraceFlags: row.TraceFlags as number | undefined,
+    SeverityText: row.SeverityText as string | undefined,
+    SeverityNumber: row.SeverityNumber as number | undefined,
+    Body: row.Body as string | undefined,
+    LogAttributes: parseJsonField(row.LogAttributes),
+    ResourceAttributes: parseJsonField(row.ResourceAttributes),
+    ResourceSchemaUrl: row.ResourceSchemaUrl as string | undefined,
+    ServiceName: row.ServiceName as string | undefined,
+    ScopeName: row.ScopeName as string | undefined,
+    ScopeVersion: row.ScopeVersion as string | undefined,
+    ScopeAttributes: parseJsonField(row.ScopeAttributes),
+    ScopeSchemaUrl: row.ScopeSchemaUrl as string | undefined,
+  };
 }

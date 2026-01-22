@@ -14,12 +14,16 @@ describe("signalsRoutes", () => {
   let getTracesSpy: ReturnType<
     typeof vi.fn<datasource.ReadTracesDatasource["getTraces"]>
   >;
+  let getLogsSpy: ReturnType<
+    typeof vi.fn<datasource.ReadLogsDatasource["getLogs"]>
+  >;
 
   beforeEach(async () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
+    getLogsSpy = vi.fn<datasource.ReadLogsDatasource["getLogs"]>();
     server = Fastify();
     await server.register(signalsRoutes, {
-      readTelemetryDatasource: { getTraces: getTracesSpy },
+      readTelemetryDatasource: { getTraces: getTracesSpy, getLogs: getLogsSpy },
     });
     await server.ready();
   });
@@ -101,6 +105,51 @@ describe("signalsRoutes", () => {
 
       expect(response.statusCode).toBe(500);
       expect(response.json()).toEqual({ error: "Internal Server Error" });
+    });
+  });
+
+  describe("POST /signals/logs/search", () => {
+    const mockLog = {
+      Timestamp: 1700000000000,
+      TraceId: "trace-001",
+      SpanId: "span-001",
+      SeverityText: "INFO",
+      SeverityNumber: 9,
+      Body: "Test log message",
+      ServiceName: "test-service",
+    };
+
+    it("returns logs and calls readLogsDatasource.getLogs", async () => {
+      getLogsSpy.mockResolvedValue({ data: [mockLog], nextCursor: null });
+
+      const filter = { serviceName: "test-service" };
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/search",
+        payload: filter,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ data: [mockLog], nextCursor: null });
+      expect(getLogsSpy).toHaveBeenCalledWith(filter);
+    });
+
+    it("returns 400 for invalid body", async () => {
+      // traceId should be string, not number
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/search",
+        payload: { traceId: 123 },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-validation-error",
+        status: 400,
+        title: "Invalid data",
+      });
+      expect(body.detail).toBeDefined();
     });
   });
 });
