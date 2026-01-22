@@ -72,6 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_otel_traces_service_span_time ON otel_traces (Ser
 CREATE INDEX IF NOT EXISTS idx_otel_traces_trace_id ON otel_traces (TraceId);
 CREATE INDEX IF NOT EXISTS idx_otel_traces_parent_span ON otel_traces (ParentSpanId) WHERE ParentSpanId != '';
 CREATE INDEX IF NOT EXISTS idx_otel_traces_duration ON otel_traces (Duration);
+CREATE INDEX IF NOT EXISTS idx_otel_traces_timestamp_span ON otel_traces (Timestamp, SpanId);
 
 -- =============================================================================
 -- 3. TRACE LOOKUP TABLE
