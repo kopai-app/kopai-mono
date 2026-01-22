@@ -10,6 +10,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
     let testConnection: DatabaseSync;
     let ds: NodeSqliteTelemetryDatasource;
     let readDs: datasource.ReadTelemetryDatasource;
+    let insertSpan: ReturnType<typeof createInsertSpan>;
 
     function assertDefined<T>(
       value: T | undefined | null,
@@ -22,77 +23,12 @@ describe("NodeSqliteTelemetryDatasource", () => {
       testConnection = initializeDatabase(":memory:");
       ds = new NodeSqliteTelemetryDatasource(testConnection);
       readDs = ds;
+      insertSpan = createInsertSpan(ds);
     });
 
     afterEach(() => {
       testConnection.close();
     });
-
-    // Helper to insert test spans
-    async function insertSpan(opts: {
-      traceId: string;
-      spanId: string;
-      serviceName?: string;
-      spanName?: string;
-      spanKind?: otlp.SpanKind;
-      statusCode?: otlp.StatusCode;
-      scopeName?: string;
-      startTimeNanos: string;
-      endTimeNanos: string;
-      spanAttributes?: Record<string, string>;
-      resourceAttributes?: Record<string, string>;
-    }) {
-      const resourceAttrs = [
-        ...(opts.serviceName
-          ? [
-              {
-                key: "service.name",
-                value: { stringValue: opts.serviceName },
-              },
-            ]
-          : []),
-        ...Object.entries(opts.resourceAttributes ?? {}).map(
-          ([key, value]) => ({
-            key,
-            value: { stringValue: value },
-          })
-        ),
-      ];
-
-      const spanAttrs = Object.entries(opts.spanAttributes ?? {}).map(
-        ([key, value]) => ({
-          key,
-          value: { stringValue: value },
-        })
-      );
-
-      await ds.writeTraces({
-        resourceSpans: [
-          {
-            resource: { attributes: resourceAttrs },
-            scopeSpans: [
-              {
-                scope: { name: opts.scopeName ?? "test-scope" },
-                spans: [
-                  {
-                    traceId: opts.traceId,
-                    spanId: opts.spanId,
-                    name: opts.spanName ?? "test-span",
-                    kind: opts.spanKind,
-                    startTimeUnixNano: opts.startTimeNanos,
-                    endTimeUnixNano: opts.endTimeNanos,
-                    status: opts.statusCode
-                      ? { code: opts.statusCode }
-                      : undefined,
-                    attributes: spanAttrs,
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      });
-    }
 
     it("returns all spans with no filters, default limit 100, DESC order", async () => {
       await insertSpan({
@@ -515,45 +451,21 @@ describe("NodeSqliteTelemetryDatasource", () => {
     });
 
     it("parses Events and Links fields as arrays", async () => {
-      await ds.writeTraces({
-        resourceSpans: [
+      await insertSpan({
+        traceId: "trace-with-events-links",
+        spanId: "span1",
+        serviceName: "test-service",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+        events: [
+          { name: "processing.start", timeUnixNano: "1000000000000000" },
+          { name: "processing.checkpoint", timeUnixNano: "1000500000000000" },
+        ],
+        links: [
           {
-            resource: {
-              attributes: [
-                { key: "service.name", value: { stringValue: "test-service" } },
-              ],
-            },
-            scopeSpans: [
-              {
-                scope: { name: "test-scope" },
-                spans: [
-                  {
-                    traceId: "trace-with-events-links",
-                    spanId: "span1",
-                    name: "test-span",
-                    startTimeUnixNano: "1000000000000000",
-                    endTimeUnixNano: "1001000000000000",
-                    events: [
-                      {
-                        name: "processing.start",
-                        timeUnixNano: "1000000000000000",
-                      },
-                      {
-                        name: "processing.checkpoint",
-                        timeUnixNano: "1000500000000000",
-                      },
-                    ],
-                    links: [
-                      {
-                        traceId: "linked-trace-id",
-                        spanId: "linked-span-id",
-                        traceState: "linked=state",
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
+            traceId: "linked-trace-id",
+            spanId: "linked-span-id",
+            traceState: "linked=state",
           },
         ],
       });
@@ -590,3 +502,74 @@ describe("NodeSqliteTelemetryDatasource", () => {
     });
   });
 });
+
+function createInsertSpan(
+  ds: Pick<datasource.WriteTracesDatasource, "writeTraces">
+) {
+  return async (opts: {
+    traceId: string;
+    spanId: string;
+    serviceName?: string;
+    spanName?: string;
+    spanKind?: otlp.SpanKind;
+    statusCode?: otlp.StatusCode;
+    scopeName?: string;
+    startTimeNanos: string;
+    endTimeNanos: string;
+    spanAttributes?: Record<string, string>;
+    resourceAttributes?: Record<string, string>;
+    events?: { name: string; timeUnixNano: string }[];
+    links?: { traceId: string; spanId: string; traceState?: string }[];
+  }) => {
+    const resourceAttrs = [
+      ...(opts.serviceName
+        ? [
+            {
+              key: "service.name",
+              value: { stringValue: opts.serviceName },
+            },
+          ]
+        : []),
+      ...Object.entries(opts.resourceAttributes ?? {}).map(([key, value]) => ({
+        key,
+        value: { stringValue: value },
+      })),
+    ];
+
+    const spanAttrs = Object.entries(opts.spanAttributes ?? {}).map(
+      ([key, value]) => ({
+        key,
+        value: { stringValue: value },
+      })
+    );
+
+    await ds.writeTraces({
+      resourceSpans: [
+        {
+          resource: { attributes: resourceAttrs },
+          scopeSpans: [
+            {
+              scope: { name: opts.scopeName ?? "test-scope" },
+              spans: [
+                {
+                  traceId: opts.traceId,
+                  spanId: opts.spanId,
+                  name: opts.spanName ?? "test-span",
+                  kind: opts.spanKind,
+                  startTimeUnixNano: opts.startTimeNanos,
+                  endTimeUnixNano: opts.endTimeNanos,
+                  status: opts.statusCode
+                    ? { code: opts.statusCode }
+                    : undefined,
+                  attributes: spanAttrs,
+                  events: opts.events,
+                  links: opts.links,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  };
+}
