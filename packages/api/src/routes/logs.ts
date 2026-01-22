@@ -18,7 +18,7 @@ export const logsRoutes: FastifyPluginAsyncZod<{
     method: "POST",
     url: "/signals/logs/search",
     schema: {
-      description: "Search spans matching a filter",
+      description: "Search logs matching a filter",
       body: dataFilterSchemas.logsDataFilterSchema,
       response: {
         200: searchResponseSchema,
