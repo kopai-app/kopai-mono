@@ -397,10 +397,6 @@ export class NodeSqliteTelemetryDatasource
       const sortOrder = filter.sortOrder ?? "DESC";
       const metricType = filter.metricType;
 
-      if (!metricType) {
-        throw new SqliteDatasourceQueryError("metricType filter is required");
-      }
-
       const tableMap = {
         Gauge: "otel_metrics_gauge",
         Sum: "otel_metrics_sum",

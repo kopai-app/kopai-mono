@@ -204,11 +204,9 @@ export const logsDataFilterSchema = z.object({
 export type LogsDataFilter = z.infer<typeof logsDataFilterSchema>;
 
 export const metricsDataFilterSchema = z.object({
-  // Metric type filter (optional - can query across all types)
   metricType: z
     .enum(["Gauge", "Sum", "Histogram", "ExponentialHistogram", "Summary"])
-    .optional()
-    .describe("Filter by metric type. If omitted, returns all metric types."),
+    .describe("Metric type to query."),
 
   // Exact match filters
   metricName: z.string().optional().describe("The name of the metric."),
