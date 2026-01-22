@@ -306,13 +306,32 @@ export class NodeSqliteTelemetryDatasource
       if (filter.durationMax != null)
         query = query.where("Duration", "<=", filter.durationMax / 1_000_000);
 
-      // Cursor pagination
+      // Cursor pagination with SpanId tiebreaker
       if (filter.cursor) {
-        const cursorTs = parseInt(filter.cursor, 10);
+        const colonIdx = filter.cursor.indexOf(":");
+        const cursorTs = parseInt(filter.cursor.slice(0, colonIdx), 10);
+        const cursorSpanId = filter.cursor.slice(colonIdx + 1);
+
         if (sortOrder === "DESC") {
-          query = query.where("Timestamp", "<", cursorTs);
+          query = query.where((eb) =>
+            eb.or([
+              eb("Timestamp", "<", cursorTs),
+              eb.and([
+                eb("Timestamp", "=", cursorTs),
+                eb("SpanId", "<", cursorSpanId),
+              ]),
+            ])
+          );
         } else {
-          query = query.where("Timestamp", ">", cursorTs);
+          query = query.where((eb) =>
+            eb.or([
+              eb("Timestamp", ">", cursorTs),
+              eb.and([
+                eb("Timestamp", "=", cursorTs),
+                eb("SpanId", ">", cursorSpanId),
+              ]),
+            ])
+          );
         }
       }
 
@@ -341,6 +360,7 @@ export class NodeSqliteTelemetryDatasource
       // Sort and limit (+1 for next cursor detection)
       query = query
         .orderBy("Timestamp", sortOrder === "ASC" ? "asc" : "desc")
+        .orderBy("SpanId", sortOrder === "ASC" ? "asc" : "desc")
         .limit(limit + 1);
 
       // Execute
@@ -356,7 +376,8 @@ export class NodeSqliteTelemetryDatasource
       const hasMore = rows.length > limit;
       const data = hasMore ? rows.slice(0, limit) : rows;
       const lastRow = data[data.length - 1];
-      const nextCursor = hasMore && lastRow ? String(lastRow.Timestamp) : null;
+      const nextCursor =
+        hasMore && lastRow ? `${lastRow.Timestamp}:${lastRow.SpanId}` : null;
 
       // Map rows to OtelTracesRow (parse JSON fields)
       return { data: data.map(mapRowToOtelTraces), nextCursor };

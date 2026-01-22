@@ -378,6 +378,71 @@ describe("NodeSqliteTelemetryDatasource", () => {
       expect(p2r1.SpanId).toBe("span1");
     });
 
+    it("pagination with same-timestamp spans uses SpanId tiebreaker", async () => {
+      const sameTimestamp = "1000000000000000";
+      // Insert 3 spans with same timestamp but different spanIds
+      await insertSpan({
+        traceId: "trace-a",
+        spanId: "span-a",
+        startTimeNanos: sameTimestamp,
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "trace-b",
+        spanId: "span-b",
+        startTimeNanos: sameTimestamp,
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "trace-c",
+        spanId: "span-c",
+        startTimeNanos: sameTimestamp,
+        endTimeNanos: "1001000000000000",
+      });
+
+      const seen = new Set<string>();
+
+      // Page 1
+      const page1 = await readDs.getTraces({ limit: 1, sortOrder: "DESC" });
+      expect(page1.data).toHaveLength(1);
+      const p1row = page1.data[0];
+      assertDefined(p1row);
+      seen.add(p1row.SpanId);
+      expect(page1.nextCursor).not.toBeNull();
+
+      // Page 2
+      assertDefined(page1.nextCursor);
+      const page2 = await readDs.getTraces({
+        limit: 1,
+        sortOrder: "DESC",
+        cursor: page1.nextCursor,
+      });
+      expect(page2.data).toHaveLength(1);
+      const p2row = page2.data[0];
+      assertDefined(p2row);
+      seen.add(p2row.SpanId);
+      expect(page2.nextCursor).not.toBeNull();
+
+      // Page 3
+      assertDefined(page2.nextCursor);
+      const page3 = await readDs.getTraces({
+        limit: 1,
+        sortOrder: "DESC",
+        cursor: page2.nextCursor,
+      });
+      expect(page3.data).toHaveLength(1);
+      const p3row = page3.data[0];
+      assertDefined(p3row);
+      seen.add(p3row.SpanId);
+      expect(page3.nextCursor).toBeNull();
+
+      // All 3 unique spans should be seen across pages
+      expect(seen.size).toBe(3);
+      expect(seen).toContain("span-a");
+      expect(seen).toContain("span-b");
+      expect(seen).toContain("span-c");
+    });
+
     it("combines multiple filters with AND", async () => {
       await insertSpan({
         traceId: "trace1",
