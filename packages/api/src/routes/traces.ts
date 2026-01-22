@@ -5,6 +5,7 @@ import {
   denormalizedSignals,
   type datasource,
 } from "@kopai/core";
+import { problemDetailsSchema } from "./error-schema-zod.js";
 
 export const tracesRoutes: FastifyPluginAsyncZod<{
   readTracesDatasource: datasource.ReadTracesDatasource;
@@ -19,6 +20,8 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
       }),
       response: {
         200: z.array(denormalizedSignals.otelTracesSchema),
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
       },
     },
     handler: async (req, res) => {
@@ -42,6 +45,8 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
       body: dataFilterSchemas.tracesDataFilterSchema,
       response: {
         200: searchResponseSchema,
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
       },
     },
     handler: async (req, res) => {

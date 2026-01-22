@@ -5,6 +5,51 @@ import {
   denormalizedSignals,
   type datasource,
 } from "@kopai/core";
+import { problemDetailsSchema } from "./error-schema-zod.js";
+
+export const metricsRoutes: FastifyPluginAsyncZod<{
+  readMetricsDatasource: datasource.ReadMetricsDatasource;
+}> = async function (fastify, opts) {
+  const searchResponseSchema = z.object({
+    data: z.array(denormalizedSignals.otelMetricsSchema),
+    nextCursor: z.string().nullable(),
+  });
+
+  fastify.route({
+    method: "POST",
+    url: "/signals/metrics/search",
+    schema: {
+      description: "Search metrics matching a filter",
+      body: dataFilterSchemas.metricsDataFilterSchema,
+      response: {
+        200: searchResponseSchema,
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async (req, res) => {
+      const result = await opts.readMetricsDatasource.getMetrics(req.body);
+      res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "GET",
+    url: "/signals/metrics/discover",
+    schema: {
+      description: "Discover available metrics and their attributes",
+      response: {
+        200: metricsDiscoveryResponseSchema,
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async (_req, res) => {
+      const result = await opts.readMetricsDatasource.discoverMetrics();
+      res.send(result);
+    },
+  });
+};
 
 const metricTypeSchema = z.enum([
   "Gauge",
@@ -45,43 +90,3 @@ const discoveredMetricSchema = z.object({
 const metricsDiscoveryResponseSchema = z.object({
   metrics: z.array(discoveredMetricSchema),
 });
-
-export const metricsRoutes: FastifyPluginAsyncZod<{
-  readMetricsDatasource: datasource.ReadMetricsDatasource;
-}> = async function (fastify, opts) {
-  const searchResponseSchema = z.object({
-    data: z.array(denormalizedSignals.otelMetricsSchema),
-    nextCursor: z.string().nullable(),
-  });
-
-  fastify.route({
-    method: "POST",
-    url: "/signals/metrics/search",
-    schema: {
-      description: "Search metrics matching a filter",
-      body: dataFilterSchemas.metricsDataFilterSchema,
-      response: {
-        200: searchResponseSchema,
-      },
-    },
-    handler: async (req, res) => {
-      const result = await opts.readMetricsDatasource.getMetrics(req.body);
-      res.send(result);
-    },
-  });
-
-  fastify.route({
-    method: "GET",
-    url: "/signals/metrics/discover",
-    schema: {
-      description: "Discover available metrics and their attributes",
-      response: {
-        200: metricsDiscoveryResponseSchema,
-      },
-    },
-    handler: async (_req, res) => {
-      const result = await opts.readMetricsDatasource.discoverMetrics();
-      res.send(result);
-    },
-  });
-};
