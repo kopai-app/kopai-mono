@@ -16,7 +16,6 @@ import {
   initializeDatabase,
   NodeSqliteTelemetryDatasource,
 } from "@kopai/sqlite-datasource";
-import type { DatabaseSync } from "node:sqlite";
 
 const apiServer = fastify({
   logger: true,
