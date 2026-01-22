@@ -17,13 +17,21 @@ describe("signalsRoutes", () => {
   let getLogsSpy: ReturnType<
     typeof vi.fn<datasource.ReadLogsDatasource["getLogs"]>
   >;
+  let getMetricsSpy: ReturnType<
+    typeof vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>
+  >;
 
   beforeEach(async () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     getLogsSpy = vi.fn<datasource.ReadLogsDatasource["getLogs"]>();
+    getMetricsSpy = vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>();
     server = Fastify();
     await server.register(signalsRoutes, {
-      readTelemetryDatasource: { getTraces: getTracesSpy, getLogs: getLogsSpy },
+      readTelemetryDatasource: {
+        getTraces: getTracesSpy,
+        getLogs: getLogsSpy,
+        getMetrics: getMetricsSpy,
+      },
     });
     await server.ready();
   });
@@ -167,6 +175,83 @@ describe("signalsRoutes", () => {
         title: "Invalid data",
       });
       expect(body.detail).toBeDefined();
+    });
+  });
+
+  describe("POST /signals/metrics/search", () => {
+    const mockMetric = {
+      MetricType: "Gauge" as const,
+      TimeUnix: 1700000000000,
+      StartTimeUnix: 1700000000000,
+      MetricName: "cpu_usage",
+      Value: 42.5,
+      ServiceName: "test-service",
+    };
+
+    it("returns metrics and calls readMetricsDatasource.getMetrics", async () => {
+      getMetricsSpy.mockResolvedValue({ data: [mockMetric], nextCursor: null });
+
+      const filter = { serviceName: "test-service" };
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: filter,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ data: [mockMetric], nextCursor: null });
+      expect(getMetricsSpy).toHaveBeenCalledWith(filter);
+    });
+
+    it("returns 400 for invalid body", async () => {
+      // metricType should be string enum, not number
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: { metricType: 123 },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-validation-error",
+        status: 400,
+        title: "Invalid data",
+      });
+      expect(body.detail).toBeDefined();
+    });
+
+    it("returns 500 for SignalsApiError", async () => {
+      getMetricsSpy.mockRejectedValue(
+        new TestSignalsApiError("Database connection failed")
+      );
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-internal-error",
+        status: 500,
+        title: "Internal server error",
+        detail: "Database connection failed",
+      });
+    });
+
+    it("returns 500 generic for unexpected error", async () => {
+      getMetricsSpy.mockRejectedValue(new Error("Unexpected failure"));
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({ error: "Internal Server Error" });
     });
   });
 });
