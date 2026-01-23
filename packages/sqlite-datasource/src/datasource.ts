@@ -151,7 +151,7 @@ export class NodeSqliteTelemetryDatasource
             .compile();
           this.sqliteConnection
             .prepare(sql)
-            .run(...(parameters as (string | number | null)[]));
+            .run(...(parameters as (string | number | bigint | null)[]));
         }
       }
     }
@@ -163,7 +163,7 @@ export class NodeSqliteTelemetryDatasource
     tracesData: datasource.TracesData
   ): Promise<datasource.TracesPartialSuccess> {
     const spanRows: Insertable<OtelTraces>[] = [];
-    const traceTimestamps = new Map<string, { min: number; max: number }>();
+    const traceTimestamps = new Map<string, { min: bigint; max: bigint }>();
 
     for (const resourceSpan of tracesData.resourceSpans ?? []) {
       const { resource } = resourceSpan;
@@ -181,8 +181,10 @@ export class NodeSqliteTelemetryDatasource
             const timestamp = row.Timestamp;
             const existing = traceTimestamps.get(traceId);
             if (existing) {
-              existing.min = Math.min(existing.min, timestamp);
-              existing.max = Math.max(existing.max, timestamp);
+              existing.min =
+                timestamp < existing.min ? timestamp : existing.min;
+              existing.max =
+                timestamp > existing.max ? timestamp : existing.max;
             } else {
               traceTimestamps.set(traceId, { min: timestamp, max: timestamp });
             }
@@ -199,7 +201,7 @@ export class NodeSqliteTelemetryDatasource
         .compile();
       this.sqliteConnection
         .prepare(sql)
-        .run(...(parameters as (string | number | null)[]));
+        .run(...(parameters as (string | number | bigint | null)[]));
     }
 
     // Upsert trace_id_ts lookup table
@@ -224,7 +226,7 @@ export class NodeSqliteTelemetryDatasource
         .compile();
       this.sqliteConnection
         .prepare(sql)
-        .run(...(parameters as (string | number | null)[]));
+        .run(...(parameters as (string | number | bigint | null)[]));
     }
 
     return { rejectedSpans: "" };
@@ -262,7 +264,7 @@ export class NodeSqliteTelemetryDatasource
         .compile();
       this.sqliteConnection
         .prepare(sql)
-        .run(...(parameters as (string | number | null)[]));
+        .run(...(parameters as (string | number | bigint | null)[]));
     }
 
     return { rejectedLogRecords: "" };
@@ -294,22 +296,22 @@ export class NodeSqliteTelemetryDatasource
       if (filter.scopeName)
         query = query.where("ScopeName", "=", filter.scopeName);
 
-      // Time range (convert nanos to ms)
+      // Time range (nanos)
       if (filter.timestampMin != null)
-        query = query.where("Timestamp", ">=", filter.timestampMin / 1_000_000);
+        query = query.where("Timestamp", ">=", BigInt(filter.timestampMin));
       if (filter.timestampMax != null)
-        query = query.where("Timestamp", "<=", filter.timestampMax / 1_000_000);
+        query = query.where("Timestamp", "<=", BigInt(filter.timestampMax));
 
-      // Duration range (convert nanos to ms)
+      // Duration range (nanos)
       if (filter.durationMin != null)
-        query = query.where("Duration", ">=", filter.durationMin / 1_000_000);
+        query = query.where("Duration", ">=", BigInt(filter.durationMin));
       if (filter.durationMax != null)
-        query = query.where("Duration", "<=", filter.durationMax / 1_000_000);
+        query = query.where("Duration", "<=", BigInt(filter.durationMax));
 
       // Cursor pagination with SpanId tiebreaker
       if (filter.cursor) {
         const colonIdx = filter.cursor.indexOf(":");
-        const cursorTs = parseInt(filter.cursor.slice(0, colonIdx), 10);
+        const cursorTs = BigInt(filter.cursor.slice(0, colonIdx));
         const cursorSpanId = filter.cursor.slice(colonIdx + 1);
 
         if (sortOrder === "DESC") {
@@ -365,12 +367,11 @@ export class NodeSqliteTelemetryDatasource
 
       // Execute
       const { sql, parameters } = query.compile();
-      const rows = this.sqliteConnection
-        .prepare(sql)
-        .all(...(parameters as (string | number | null)[])) as Record<
-        string,
-        unknown
-      >[];
+      const stmt = this.sqliteConnection.prepare(sql);
+      stmt.setReadBigInts(true);
+      const rows = stmt.all(
+        ...(parameters as (string | number | bigint | null)[])
+      ) as Record<string, unknown>[];
 
       // Determine nextCursor
       const hasMore = rows.length > limit;
@@ -495,16 +496,16 @@ export class NodeSqliteTelemetryDatasource
       if (filter.scopeName)
         query = query.where("ScopeName", "=", filter.scopeName);
 
-      // Time range (convert nanos to ms - same as writeMetrics storage)
+      // Time range (nanos)
       if (filter.timeUnixMin != null)
-        query = query.where("TimeUnix", ">=", filter.timeUnixMin / 1_000_000);
+        query = query.where("TimeUnix", ">=", BigInt(filter.timeUnixMin));
       if (filter.timeUnixMax != null)
-        query = query.where("TimeUnix", "<=", filter.timeUnixMax / 1_000_000);
+        query = query.where("TimeUnix", "<=", BigInt(filter.timeUnixMax));
 
       // Cursor pagination with rowid tiebreaker
       if (filter.cursor) {
         const colonIdx = filter.cursor.indexOf(":");
-        const cursorTs = parseInt(filter.cursor.slice(0, colonIdx), 10);
+        const cursorTs = BigInt(filter.cursor.slice(0, colonIdx));
         const cursorRowid = parseInt(filter.cursor.slice(colonIdx + 1), 10);
 
         if (sortOrder === "DESC") {
@@ -570,12 +571,11 @@ export class NodeSqliteTelemetryDatasource
 
       // Execute
       const { sql, parameters } = query.compile();
-      const rows = this.sqliteConnection
-        .prepare(sql)
-        .all(...(parameters as (string | number | null)[])) as Record<
-        string,
-        unknown
-      >[];
+      const stmt = this.sqliteConnection.prepare(sql);
+      stmt.setReadBigInts(true);
+      const rows = stmt.all(
+        ...(parameters as (string | number | bigint | null)[])
+      ) as Record<string, unknown>[];
 
       // Determine nextCursor
       const hasMore = rows.length > limit;
@@ -642,11 +642,11 @@ export class NodeSqliteTelemetryDatasource
       if (filter.severityNumberMax != null)
         query = query.where("SeverityNumber", "<=", filter.severityNumberMax);
 
-      // Time range (convert nanos to ms)
+      // Time range (nanos)
       if (filter.timestampMin != null)
-        query = query.where("Timestamp", ">=", filter.timestampMin / 1_000_000);
+        query = query.where("Timestamp", ">=", BigInt(filter.timestampMin));
       if (filter.timestampMax != null)
-        query = query.where("Timestamp", "<=", filter.timestampMax / 1_000_000);
+        query = query.where("Timestamp", "<=", BigInt(filter.timestampMax));
 
       // Body contains (substring search using INSTR)
       if (filter.bodyContains) {
@@ -660,7 +660,7 @@ export class NodeSqliteTelemetryDatasource
       // Cursor pagination with rowid tiebreaker
       if (filter.cursor) {
         const colonIdx = filter.cursor.indexOf(":");
-        const cursorTs = parseInt(filter.cursor.slice(0, colonIdx), 10);
+        const cursorTs = BigInt(filter.cursor.slice(0, colonIdx));
         const cursorRowid = parseInt(filter.cursor.slice(colonIdx + 1), 10);
 
         if (sortOrder === "DESC") {
@@ -726,12 +726,11 @@ export class NodeSqliteTelemetryDatasource
 
       // Execute
       const { sql, parameters } = query.compile();
-      const rows = this.sqliteConnection
-        .prepare(sql)
-        .all(...(parameters as (string | number | null)[])) as Record<
-        string,
-        unknown
-      >[];
+      const stmt = this.sqliteConnection.prepare(sql);
+      stmt.setReadBigInts(true);
+      const rows = stmt.all(
+        ...(parameters as (string | number | bigint | null)[])
+      ) as Record<string, unknown>[];
 
       // Determine nextCursor
       const hasMore = rows.length > limit;
@@ -876,9 +875,9 @@ function toSpanRow(
 ): Insertable<OtelTraces> {
   const events = span.events ?? [];
   const links = span.links ?? [];
-  const startNanos = BigInt(span.startTimeUnixNano ?? "0");
-  const endNanos = BigInt(span.endTimeUnixNano ?? "0");
-  const durationMs = Number((endNanos - startNanos) / 1_000_000n);
+  const startNanos = nanosToSqlite(span.startTimeUnixNano);
+  const endNanos = nanosToSqlite(span.endTimeUnixNano);
+  const durationNanos = endNanos - startNanos;
 
   return {
     TraceId: span.traceId ?? "",
@@ -892,12 +891,12 @@ function toSpanRow(
     ScopeName: scope?.name ?? "",
     ScopeVersion: scope?.version ?? "",
     SpanAttributes: keyValueArrayToJson(span.attributes),
-    Timestamp: Number(startNanos / 1_000_000n),
-    Duration: durationMs,
+    Timestamp: startNanos,
+    Duration: durationNanos,
     StatusCode: statusCodeToString(span.status?.code),
     StatusMessage: span.status?.message ?? "",
     "Events.Timestamp": JSON.stringify(
-      events.map((e) => nanosToUnix(e.timeUnixNano))
+      events.map((e) => String(nanosToSqlite(e.timeUnixNano)))
     ),
     "Events.Name": JSON.stringify(events.map((e) => e.name ?? "")),
     "Events.Attributes": JSON.stringify(
@@ -920,7 +919,7 @@ function toLogRow(
   logRecord: otlp.LogRecord
 ): Insertable<OtelLogs> {
   return {
-    Timestamp: nanosToUnix(logRecord.timeUnixNano),
+    Timestamp: nanosToSqlite(logRecord.timeUnixNano),
     TraceId: logRecord.traceId ?? "",
     SpanId: logRecord.spanId ?? "",
     TraceFlags: logRecord.flags ?? 0,
@@ -970,15 +969,15 @@ function toGaugeRow(
     MetricDescription: metric.description ?? "",
     MetricUnit: metric.unit ?? "",
     Attributes: keyValueArrayToJson(dataPoint.attributes),
-    StartTimeUnix: nanosToUnix(dataPoint.startTimeUnixNano),
-    TimeUnix: nanosToUnix(dataPoint.timeUnixNano),
+    StartTimeUnix: nanosToSqlite(dataPoint.startTimeUnixNano),
+    TimeUnix: nanosToSqlite(dataPoint.timeUnixNano),
     Value: dataPoint.asDouble ?? Number(dataPoint.asInt ?? 0),
     Flags: dataPoint.flags ?? 0,
     "Exemplars.FilteredAttributes": exemplarsArrayToJson(exemplars, (e) =>
       keyValueArrayToObject(e.filteredAttributes)
     ),
     "Exemplars.TimeUnix": exemplarsArrayToJson(exemplars, (e) =>
-      nanosToUnix(e.timeUnixNano)
+      String(nanosToSqlite(e.timeUnixNano))
     ),
     "Exemplars.Value": exemplarsArrayToJson(
       exemplars,
@@ -1015,15 +1014,15 @@ function toSumRow(
     MetricDescription: metric.description ?? "",
     MetricUnit: metric.unit ?? "",
     Attributes: keyValueArrayToJson(dataPoint.attributes),
-    StartTimeUnix: nanosToUnix(dataPoint.startTimeUnixNano),
-    TimeUnix: nanosToUnix(dataPoint.timeUnixNano),
+    StartTimeUnix: nanosToSqlite(dataPoint.startTimeUnixNano),
+    TimeUnix: nanosToSqlite(dataPoint.timeUnixNano),
     Value: dataPoint.asDouble ?? Number(dataPoint.asInt ?? 0),
     Flags: dataPoint.flags ?? 0,
     "Exemplars.FilteredAttributes": exemplarsArrayToJson(exemplars, (e) =>
       keyValueArrayToObject(e.filteredAttributes)
     ),
     "Exemplars.TimeUnix": exemplarsArrayToJson(exemplars, (e) =>
-      nanosToUnix(e.timeUnixNano)
+      String(nanosToSqlite(e.timeUnixNano))
     ),
     "Exemplars.Value": exemplarsArrayToJson(
       exemplars,
@@ -1061,8 +1060,8 @@ function toHistogramRow(
     MetricDescription: metric.description ?? "",
     MetricUnit: metric.unit ?? "",
     Attributes: keyValueArrayToJson(dataPoint.attributes),
-    StartTimeUnix: nanosToUnix(dataPoint.startTimeUnixNano),
-    TimeUnix: nanosToUnix(dataPoint.timeUnixNano),
+    StartTimeUnix: nanosToSqlite(dataPoint.startTimeUnixNano),
+    TimeUnix: nanosToSqlite(dataPoint.timeUnixNano),
     Count: Number(dataPoint.count ?? 0),
     Sum: dataPoint.sum ?? 0,
     BucketCounts: JSON.stringify(dataPoint.bucketCounts ?? []),
@@ -1073,7 +1072,7 @@ function toHistogramRow(
       keyValueArrayToObject(e.filteredAttributes)
     ),
     "Exemplars.TimeUnix": exemplarsArrayToJson(exemplars, (e) =>
-      nanosToUnix(e.timeUnixNano)
+      String(nanosToSqlite(e.timeUnixNano))
     ),
     "Exemplars.Value": exemplarsArrayToJson(
       exemplars,
@@ -1110,8 +1109,8 @@ function toExpHistogramRow(
     MetricDescription: metric.description ?? "",
     MetricUnit: metric.unit ?? "",
     Attributes: keyValueArrayToJson(dataPoint.attributes),
-    StartTimeUnix: nanosToUnix(dataPoint.startTimeUnixNano),
-    TimeUnix: nanosToUnix(dataPoint.timeUnixNano),
+    StartTimeUnix: nanosToSqlite(dataPoint.startTimeUnixNano),
+    TimeUnix: nanosToSqlite(dataPoint.timeUnixNano),
     Count: Number(dataPoint.count ?? 0),
     Sum: dataPoint.sum ?? 0,
     Scale: dataPoint.scale ?? 0,
@@ -1131,7 +1130,7 @@ function toExpHistogramRow(
       keyValueArrayToObject(e.filteredAttributes)
     ),
     "Exemplars.TimeUnix": exemplarsArrayToJson(exemplars, (e) =>
-      nanosToUnix(e.timeUnixNano)
+      String(nanosToSqlite(e.timeUnixNano))
     ),
     "Exemplars.Value": exemplarsArrayToJson(
       exemplars,
@@ -1167,8 +1166,8 @@ function toSummaryRow(
     MetricDescription: metric.description ?? "",
     MetricUnit: metric.unit ?? "",
     Attributes: keyValueArrayToJson(dataPoint.attributes),
-    StartTimeUnix: nanosToUnix(dataPoint.startTimeUnixNano),
-    TimeUnix: nanosToUnix(dataPoint.timeUnixNano),
+    StartTimeUnix: nanosToSqlite(dataPoint.startTimeUnixNano),
+    TimeUnix: nanosToSqlite(dataPoint.timeUnixNano),
     Count: Number(dataPoint.count ?? 0),
     Sum: dataPoint.sum ?? 0,
     "ValueAtQuantiles.Quantile": JSON.stringify(
@@ -1243,9 +1242,8 @@ function extractServiceName(resource: otlp.Resource | undefined): string {
   return "";
 }
 
-function nanosToUnix(nanos: string | undefined): number {
-  if (!nanos) return 0;
-  return Number(BigInt(nanos) / 1_000_000n);
+function nanosToSqlite(nanos: string | undefined): bigint {
+  return BigInt(nanos ?? "0");
 }
 
 function exemplarsArrayToJson<T>(
@@ -1268,7 +1266,7 @@ function mapRowToOtelTraces(
   return {
     TraceId: row.TraceId as string,
     SpanId: row.SpanId as string,
-    Timestamp: row.Timestamp as number,
+    Timestamp: String(row.Timestamp),
     ParentSpanId: row.ParentSpanId as string | undefined,
     TraceState: row.TraceState as string | undefined,
     SpanName: row.SpanName as string | undefined,
@@ -1278,10 +1276,10 @@ function mapRowToOtelTraces(
     ScopeName: row.ScopeName as string | undefined,
     ScopeVersion: row.ScopeVersion as string | undefined,
     SpanAttributes: parseJsonField(row.SpanAttributes),
-    Duration: row.Duration as number | undefined,
+    Duration: row.Duration != null ? String(row.Duration) : undefined,
     StatusCode: row.StatusCode as string | undefined,
     StatusMessage: row.StatusMessage as string | undefined,
-    "Events.Timestamp": parseNumberArrayField(row["Events.Timestamp"]),
+    "Events.Timestamp": parseStringArrayField(row["Events.Timestamp"]),
     "Events.Name": parseStringArrayField(row["Events.Name"]),
     "Events.Attributes": parseJsonArrayField(row["Events.Attributes"]),
     "Links.TraceId": parseStringArrayField(row["Links.TraceId"]),
@@ -1333,16 +1331,24 @@ function parseNumberArrayField(value: unknown): number[] | undefined {
   }
 }
 
+// Convert BigInt to Number for non-timestamp integer fields
+function toNumber(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "number") return value;
+  return undefined;
+}
+
 function mapRowToOtelLogs(
   row: Record<string, unknown> // TODO: can we use kysely-generated type for this?
 ): denormalizedSignals.OtelLogsRow {
   return {
-    Timestamp: row.Timestamp as number,
+    Timestamp: String(row.Timestamp),
     TraceId: row.TraceId as string | undefined,
     SpanId: row.SpanId as string | undefined,
-    TraceFlags: row.TraceFlags as number | undefined,
+    TraceFlags: toNumber(row.TraceFlags),
     SeverityText: row.SeverityText as string | undefined,
-    SeverityNumber: row.SeverityNumber as number | undefined,
+    SeverityNumber: toNumber(row.SeverityNumber),
     Body: row.Body as string | undefined,
     LogAttributes: parseJsonField(row.LogAttributes),
     ResourceAttributes: parseJsonField(row.ResourceAttributes),
@@ -1370,8 +1376,8 @@ function mapRowToOtelMetrics(
   metricType: "Gauge" | "Sum" | "Histogram" | "ExponentialHistogram" | "Summary"
 ): denormalizedSignals.OtelMetricsRow {
   const base = {
-    TimeUnix: row.TimeUnix as number,
-    StartTimeUnix: row.StartTimeUnix as number,
+    TimeUnix: String(row.TimeUnix),
+    StartTimeUnix: String(row.StartTimeUnix),
     Attributes: parseJsonField(row.Attributes),
     MetricName: row.MetricName as string | undefined,
     MetricDescription: row.MetricDescription as string | undefined,
@@ -1379,7 +1385,7 @@ function mapRowToOtelMetrics(
     ResourceAttributes: parseJsonField(row.ResourceAttributes),
     ResourceSchemaUrl: row.ResourceSchemaUrl as string | undefined,
     ScopeAttributes: parseJsonField(row.ScopeAttributes),
-    ScopeDroppedAttrCount: row.ScopeDroppedAttrCount as number | undefined,
+    ScopeDroppedAttrCount: toNumber(row.ScopeDroppedAttrCount),
     ScopeName: row.ScopeName as string | undefined,
     ScopeSchemaUrl: row.ScopeSchemaUrl as string | undefined,
     ScopeVersion: row.ScopeVersion as string | undefined,
@@ -1388,7 +1394,7 @@ function mapRowToOtelMetrics(
       row["Exemplars.FilteredAttributes"]
     ),
     "Exemplars.SpanId": parseStringArrayField(row["Exemplars.SpanId"]),
-    "Exemplars.TimeUnix": parseNumberArrayField(row["Exemplars.TimeUnix"]),
+    "Exemplars.TimeUnix": parseStringArrayField(row["Exemplars.TimeUnix"]),
     "Exemplars.TraceId": parseStringArrayField(row["Exemplars.TraceId"]),
     "Exemplars.Value": parseNumberArrayField(row["Exemplars.Value"]),
   };
@@ -1398,7 +1404,7 @@ function mapRowToOtelMetrics(
       ...base,
       MetricType: "Gauge" as const,
       Value: row.Value as number,
-      Flags: row.Flags as number | undefined,
+      Flags: toNumber(row.Flags),
     };
   }
 
@@ -1407,9 +1413,9 @@ function mapRowToOtelMetrics(
       ...base,
       MetricType: "Sum" as const,
       Value: row.Value as number,
-      Flags: row.Flags as number | undefined,
+      Flags: toNumber(row.Flags),
       AggTemporality: row.AggTemporality as string | undefined,
-      IsMonotonic: row.IsMonotonic as number | undefined,
+      IsMonotonic: toNumber(row.IsMonotonic),
     };
   }
 
@@ -1417,7 +1423,7 @@ function mapRowToOtelMetrics(
     return {
       ...base,
       MetricType: "Histogram" as const,
-      Count: row.Count as number | undefined,
+      Count: toNumber(row.Count),
       Sum: row.Sum as number | undefined,
       Min: row.Min as number | null | undefined,
       Max: row.Max as number | null | undefined,
@@ -1431,15 +1437,15 @@ function mapRowToOtelMetrics(
     return {
       ...base,
       MetricType: "ExponentialHistogram" as const,
-      Count: row.Count as number | undefined,
+      Count: toNumber(row.Count),
       Sum: row.Sum as number | undefined,
       Min: row.Min as number | null | undefined,
       Max: row.Max as number | null | undefined,
-      Scale: row.Scale as number | undefined,
-      ZeroCount: row.ZeroCount as number | undefined,
-      PositiveOffset: row.PositiveOffset as number | undefined,
+      Scale: toNumber(row.Scale),
+      ZeroCount: toNumber(row.ZeroCount),
+      PositiveOffset: toNumber(row.PositiveOffset),
       PositiveBucketCounts: parseNumberArrayField(row.PositiveBucketCounts),
-      NegativeOffset: row.NegativeOffset as number | undefined,
+      NegativeOffset: toNumber(row.NegativeOffset),
       NegativeBucketCounts: parseNumberArrayField(row.NegativeBucketCounts),
       AggTemporality: row.AggTemporality as string | undefined,
     };
@@ -1449,7 +1455,7 @@ function mapRowToOtelMetrics(
   return {
     ...base,
     MetricType: "Summary" as const,
-    Count: row.Count as number | undefined,
+    Count: toNumber(row.Count),
     Sum: row.Sum as number | undefined,
     "ValueAtQuantiles.Quantile": parseNumberArrayField(
       row["ValueAtQuantiles.Quantile"]

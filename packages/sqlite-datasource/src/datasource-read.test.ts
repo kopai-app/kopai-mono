@@ -180,8 +180,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       // Filter: >= 1500ms and <= 2500ms
       const result = await readDs.getTraces({
-        timestampMin: 1500000000000000, // 1500ms in nanos
-        timestampMax: 2500000000000000, // 2500ms in nanos
+        timestampMin: "1500000000000000", // 1500ms in nanos
+        timestampMax: "2500000000000000", // 2500ms in nanos
       });
 
       expect(result.data).toHaveLength(1);
@@ -215,8 +215,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       // Filter: >= 200ms and <= 600ms (in nanos)
       const result = await readDs.getTraces({
-        durationMin: 200_000_000, // 200ms in nanos
-        durationMax: 600_000_000, // 600ms in nanos
+        durationMin: "200000000", // 200ms in nanos
+        durationMax: "600000000", // 600ms in nanos
       });
 
       expect(result.data).toHaveLength(1);
@@ -547,7 +547,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
         "processing.start",
         "processing.checkpoint",
       ]);
-      expect(row["Events.Timestamp"]).toEqual([1000000000, 1000500000]);
+      expect(row["Events.Timestamp"]).toEqual([
+        "1000000000000000",
+        "1000500000000000",
+      ]);
 
       // Links fields should be arrays, not JSON strings
       expect(row["Links.TraceId"]).toEqual(["linked-trace-id"]);
@@ -593,10 +596,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
       expect(result.data).toHaveLength(2);
       const row0 = result.data[0];
       assertDefined(row0);
-      expect(row0.Timestamp).toBe(2000000000); // newer first (DESC)
+      expect(row0.Timestamp).toBe("2000000000000000"); // newer first (DESC)
       const row1 = result.data[1];
       assertDefined(row1);
-      expect(row1.Timestamp).toBe(1000000000);
+      expect(row1.Timestamp).toBe("1000000000000000");
       expect(result.nextCursor).toBeNull();
     });
 
@@ -718,14 +721,14 @@ describe("NodeSqliteTelemetryDatasource", () => {
       await insertLog({ timeNanos: "3000000000000000" }); // 3000ms
 
       const result = await readDs.getLogs({
-        timestampMin: 1500000000000000,
-        timestampMax: 2500000000000000,
+        timestampMin: "1500000000000000",
+        timestampMax: "2500000000000000",
       });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
       assertDefined(row);
-      expect(row.Timestamp).toBe(2000000000);
+      expect(row.Timestamp).toBe("2000000000000000");
     });
 
     it("filters by logAttributes using JSON extract", async () => {
@@ -809,10 +812,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       const row0 = result.data[0];
       assertDefined(row0);
-      expect(row0.Timestamp).toBe(1000000000); // older
+      expect(row0.Timestamp).toBe("1000000000000000"); // older
       const row1 = result.data[1];
       assertDefined(row1);
-      expect(row1.Timestamp).toBe(2000000000); // newer
+      expect(row1.Timestamp).toBe("2000000000000000"); // newer
     });
 
     it("sorts DESC - newest first (default)", async () => {
@@ -823,10 +826,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       const row0 = result.data[0];
       assertDefined(row0);
-      expect(row0.Timestamp).toBe(2000000000); // newer
+      expect(row0.Timestamp).toBe("2000000000000000"); // newer
       const row1 = result.data[1];
       assertDefined(row1);
-      expect(row1.Timestamp).toBe(1000000000); // older
+      expect(row1.Timestamp).toBe("1000000000000000"); // older
     });
 
     it("pagination with cursor continues from timestamp", async () => {
@@ -839,7 +842,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
       expect(page1.data).toHaveLength(2);
       const p1r0 = page1.data[0];
       assertDefined(p1r0);
-      expect(p1r0.Timestamp).toBe(5000000000); // newest
+      expect(p1r0.Timestamp).toBe("5000000000000000"); // newest
       expect(page1.nextCursor).not.toBeNull();
 
       // Second page
@@ -852,7 +855,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
       expect(page2.data).toHaveLength(2);
       const p2r0 = page2.data[0];
       assertDefined(p2r0);
-      expect(p2r0.Timestamp).toBe(3000000000);
+      expect(p2r0.Timestamp).toBe("3000000000000000");
     });
 
     it("pagination with same-timestamp logs uses rowid tiebreaker", async () => {
@@ -1249,14 +1252,14 @@ describe("NodeSqliteTelemetryDatasource", () => {
       // Filter: >= 1500ms and <= 2500ms (in nanos)
       const result = await readDs.getMetrics({
         metricType: "Gauge",
-        timeUnixMin: 1500000000000000, // 1500000000 ms
-        timeUnixMax: 2500000000000000, // 2500000000 ms
+        timeUnixMin: "1500000000000000", // 1500000000 ms
+        timeUnixMax: "2500000000000000", // 2500000000 ms
       });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
       assertDefined(row);
-      expect(row.TimeUnix).toBe(2000000000); // ms
+      expect(row.TimeUnix).toBe("2000000000000000");
     });
 
     it("filters by attributes using JSON extract", async () => {
@@ -1368,10 +1371,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       const row0 = result.data[0];
       assertDefined(row0);
-      expect(row0.TimeUnix).toBe(2000000000); // newer (ms)
+      expect(row0.TimeUnix).toBe("2000000000000000"); // newer
       const row1 = result.data[1];
       assertDefined(row1);
-      expect(row1.TimeUnix).toBe(1000000000); // older (ms)
+      expect(row1.TimeUnix).toBe("1000000000000000"); // older
     });
 
     it("sorts ASC - oldest first", async () => {
@@ -1393,10 +1396,10 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       const row0 = result.data[0];
       assertDefined(row0);
-      expect(row0.TimeUnix).toBe(1000000000); // older (ms)
+      expect(row0.TimeUnix).toBe("1000000000000000"); // older
       const row1 = result.data[1];
       assertDefined(row1);
-      expect(row1.TimeUnix).toBe(2000000000); // newer (ms)
+      expect(row1.TimeUnix).toBe("2000000000000000"); // newer
     });
 
     it("pagination with cursor continues from timestamp", async () => {
@@ -1417,7 +1420,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
       expect(page1.data).toHaveLength(2);
       const p1r0 = page1.data[0];
       assertDefined(p1r0);
-      expect(p1r0.TimeUnix).toBe(5000000000); // newest (ms)
+      expect(p1r0.TimeUnix).toBe("5000000000000000"); // newest
       expect(page1.nextCursor).not.toBeNull();
 
       // Second page
@@ -1431,7 +1434,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
       expect(page2.data).toHaveLength(2);
       const p2r0 = page2.data[0];
       assertDefined(p2r0);
-      expect(p2r0.TimeUnix).toBe(3000000000); // ms
+      expect(p2r0.TimeUnix).toBe("3000000000000000");
     });
 
     it("pagination with same-timestamp metrics uses rowid tiebreaker", async () => {
@@ -1588,7 +1591,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       const row = result.data[0];
       assertDefined(row);
-      expect(row["Exemplars.TimeUnix"]).toEqual([1000000000]); // ms
+      expect(row["Exemplars.TimeUnix"]).toEqual(["1000000000000000"]);
       expect(row["Exemplars.Value"]).toEqual([0.8]);
       expect(row["Exemplars.SpanId"]).toEqual(["span123"]);
     });

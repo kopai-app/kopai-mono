@@ -50,7 +50,7 @@ describe("signalsRoutes", () => {
     const mockTrace = {
       SpanId: "abc123",
       TraceId: "trace-001",
-      Timestamp: 1700000000000000000,
+      Timestamp: "1700000000000000000",
       ServiceName: "test-service",
       SpanName: "test-span",
     };
@@ -145,7 +145,7 @@ describe("signalsRoutes", () => {
 
   describe("POST /signals/logs/search", () => {
     const mockLog = {
-      Timestamp: 1700000000000,
+      Timestamp: "1700000000000000000",
       TraceId: "trace-001",
       SpanId: "span-001",
       SeverityText: "INFO",
@@ -191,8 +191,8 @@ describe("signalsRoutes", () => {
   describe("POST /signals/metrics/search", () => {
     const mockMetric = {
       MetricType: "Gauge" as const,
-      TimeUnix: 1700000000000,
-      StartTimeUnix: 1700000000000,
+      TimeUnix: "1700000000000000000",
+      StartTimeUnix: "1700000000000000000",
       MetricName: "cpu_usage",
       Value: 42.5,
       ServiceName: "test-service",

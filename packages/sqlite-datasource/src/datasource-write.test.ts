@@ -132,9 +132,9 @@ describe("NodeSqliteTelemetryDatasource", () => {
         rejectedDataPoints: "",
       });
 
-      const rows = testConnection
-        .prepare("SELECT * FROM otel_metrics_gauge")
-        .all();
+      const stmt = testConnection.prepare("SELECT * FROM otel_metrics_gauge");
+      stmt.setReadBigInts(true);
+      const rows = stmt.all();
       expect(rows).toHaveLength(1);
 
       const row = rows[0] as Record<string, unknown>;
@@ -145,18 +145,18 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ScopeName: testScopeName,
         ScopeVersion: testScopeVersion,
         ScopeAttributes: `{"${testScopeAttrKey}":"${testScopeAttrVal}"}`,
-        ScopeDroppedAttrCount: testScopeDroppedAttrCount,
+        ScopeDroppedAttrCount: BigInt(testScopeDroppedAttrCount),
         ScopeSchemaUrl: testScopeSchemaUrl,
         MetricName: testMetricName,
         MetricDescription: testMetricDescription,
         MetricUnit: testMetricUnit,
         Attributes: `{"${testDpAttrKey}":"${testDpAttrVal}"}`,
-        StartTimeUnix: Number(BigInt(testStartTimeUnixNano) / 1_000_000n),
-        TimeUnix: Number(BigInt(testTimeUnixNano) / 1_000_000n),
+        StartTimeUnix: BigInt(testStartTimeUnixNano),
+        TimeUnix: BigInt(testTimeUnixNano),
         Value: testValue,
-        Flags: testFlags,
+        Flags: BigInt(testFlags),
         "Exemplars.FilteredAttributes": `[{"${testExFilteredAttrKey}":"${testExFilteredAttrVal}"}]`,
-        "Exemplars.TimeUnix": `[${Number(BigInt(testExTimeUnixNano) / 1_000_000n)}]`,
+        "Exemplars.TimeUnix": `["${testExTimeUnixNano}"]`,
         "Exemplars.Value": `[${testExValue}]`,
         "Exemplars.SpanId": `["${testExSpanId}"]`,
         "Exemplars.TraceId": `["${Array.from(testExTraceId)
@@ -533,7 +533,9 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       expect(result).toEqual({ rejectedSpans: "" });
 
-      const rows = testConnection.prepare("SELECT * FROM otel_traces").all();
+      const tracesStmt = testConnection.prepare("SELECT * FROM otel_traces");
+      tracesStmt.setReadBigInts(true);
+      const rows = tracesStmt.all();
       expect(rows).toHaveLength(1);
 
       const row = rows[0] as Record<string, unknown>;
@@ -549,11 +551,11 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ScopeName: testScopeName,
         ScopeVersion: testScopeVersion,
         SpanAttributes: '{"http.method":"GET","http.status_code":200}',
-        Timestamp: Number(BigInt(testStartTimeUnixNano) / 1_000_000n),
-        Duration: 60000, // 60 seconds in ms
+        Timestamp: BigInt(testStartTimeUnixNano),
+        Duration: BigInt(testEndTimeUnixNano) - BigInt(testStartTimeUnixNano), // 60 seconds in nanos
         StatusCode: "STATUS_CODE_OK",
         StatusMessage: testStatusMessage,
-        "Events.Timestamp": `[${Number(BigInt("1704067230000000000") / 1_000_000n)}]`,
+        "Events.Timestamp": `["1704067230000000000"]`,
         "Events.Name": '["exception"]',
         "Events.Attributes": '[{"exception.message":"test error"}]',
         "Links.TraceId": '["linked0102030405060708"]',
@@ -601,16 +603,18 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       await ds.writeTraces(tracesData);
 
-      const lookupRows = testConnection
-        .prepare("SELECT * FROM otel_traces_trace_id_ts")
-        .all();
+      const lookupStmt = testConnection.prepare(
+        "SELECT * FROM otel_traces_trace_id_ts"
+      );
+      lookupStmt.setReadBigInts(true);
+      const lookupRows = lookupStmt.all();
       expect(lookupRows).toHaveLength(1);
 
       const lookupRow = lookupRows[0] as Record<string, unknown>;
       expect(lookupRow).toMatchObject({
         TraceId: testTraceId,
-        Start: 1000, // min timestamp in ms
-        End: 3000, // max timestamp in ms
+        Start: 1000000000n, // min timestamp in nanos
+        End: 3000000000n, // max timestamp in nanos
       });
     });
 
@@ -670,16 +674,18 @@ describe("NodeSqliteTelemetryDatasource", () => {
         ],
       });
 
-      const lookupRows = testConnection
-        .prepare("SELECT * FROM otel_traces_trace_id_ts")
-        .all();
+      const lookupStmt = testConnection.prepare(
+        "SELECT * FROM otel_traces_trace_id_ts"
+      );
+      lookupStmt.setReadBigInts(true);
+      const lookupRows = lookupStmt.all();
       expect(lookupRows).toHaveLength(1);
 
       const lookupRow = lookupRows[0] as Record<string, unknown>;
       expect(lookupRow).toMatchObject({
         TraceId: testTraceId,
-        Start: 1000, // min across all writes
-        End: 5000, // max across all writes
+        Start: 1000000000n, // min across all writes (nanos)
+        End: 5000000000n, // max across all writes (nanos)
       });
     });
   });
@@ -758,17 +764,19 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       expect(result).toEqual({ rejectedLogRecords: "" });
 
-      const rows = testConnection.prepare("SELECT * FROM otel_logs").all();
+      const logsStmt = testConnection.prepare("SELECT * FROM otel_logs");
+      logsStmt.setReadBigInts(true);
+      const rows = logsStmt.all();
       expect(rows).toHaveLength(1);
 
       const row = rows[0] as Record<string, unknown>;
       expect(row).toMatchObject({
-        Timestamp: Number(BigInt(testTimeUnixNano) / 1_000_000n),
+        Timestamp: BigInt(testTimeUnixNano),
         TraceId: testTraceId,
         SpanId: testSpanId,
-        TraceFlags: testFlags,
+        TraceFlags: BigInt(testFlags),
         SeverityText: testSeverityText,
-        SeverityNumber: testSeverityNumber,
+        SeverityNumber: BigInt(testSeverityNumber),
         Body: testBodyString,
         LogAttributes: '{"log.attr":"attr-val"}',
         ResourceAttributes: `{"service.name":"${testServiceName}","host.name":"test-host"}`,
@@ -804,17 +812,19 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       expect(result).toEqual({ rejectedLogRecords: "" });
 
-      const rows = testConnection.prepare("SELECT * FROM otel_logs").all();
+      const logsStmt = testConnection.prepare("SELECT * FROM otel_logs");
+      logsStmt.setReadBigInts(true);
+      const rows = logsStmt.all();
       expect(rows).toHaveLength(1);
 
       const row = rows[0] as Record<string, unknown>;
       expect(row).toMatchObject({
-        Timestamp: 1000,
+        Timestamp: 1000000000n,
         TraceId: "",
         SpanId: "",
-        TraceFlags: 0,
+        TraceFlags: 0n,
         SeverityText: "",
-        SeverityNumber: 0,
+        SeverityNumber: 0n,
         Body: "null",
         LogAttributes: "{}",
         ResourceAttributes: "{}",
