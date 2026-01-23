@@ -5,4 +5,5 @@ export default defineConfig({
   format: ["esm", "cjs"],
   dts: true,
   clean: true,
+  platform: "neutral", // Universal runtime support (no Node-specific deps)
 });

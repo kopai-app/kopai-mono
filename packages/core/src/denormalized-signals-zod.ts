@@ -24,7 +24,9 @@ export const otelTracesSchema = z.object({
   Duration: z
     .string()
     .optional()
-    .describe("Duration of the span in nanoseconds (end_time - start_time). Expressed as string in JSON."),
+    .describe(
+      "Duration of the span in nanoseconds (end_time - start_time). Expressed as string in JSON."
+    ),
   "Events.Attributes": z
     .array(z.record(z.string(), attributeValue))
     .optional()
@@ -36,7 +38,9 @@ export const otelTracesSchema = z.object({
   "Events.Timestamp": z
     .array(z.string())
     .optional()
-    .describe("Time the event occurred (nanoseconds). Expressed as strings in JSON."),
+    .describe(
+      "Time the event occurred (nanoseconds). Expressed as strings in JSON."
+    ),
   "Links.Attributes": z
     .array(z.record(z.string(), attributeValue))
     .optional()
@@ -263,7 +267,9 @@ const metricsBaseSchema = z.object({
   "Exemplars.TimeUnix": z
     .array(z.string())
     .optional()
-    .describe("Timestamps of exemplars (nanoseconds). Expressed as strings in JSON."),
+    .describe(
+      "Timestamps of exemplars (nanoseconds). Expressed as strings in JSON."
+    ),
   "Exemplars.TraceId": z
     .array(z.string())
     .optional()

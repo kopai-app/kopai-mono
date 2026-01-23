@@ -9,6 +9,7 @@ minimumReleaseAge: 4320
 onlyBuiltDependencies:
   - esbuild
   - lefthook
+  - msw
 
 strictDepBuilds: true
 
