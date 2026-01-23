@@ -12,7 +12,7 @@ export const otelTracesSchema = z.object({
   Timestamp: z
     .string()
     .describe(
-      "Start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+      "Start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
   TraceId: z
     .string()
@@ -24,7 +24,7 @@ export const otelTracesSchema = z.object({
   Duration: z
     .string()
     .optional()
-    .describe("Duration of the span in nanoseconds (end_time - start_time)."),
+    .describe("Duration of the span in nanoseconds (end_time - start_time). Expressed as string in JSON."),
   "Events.Attributes": z
     .array(z.record(z.string(), attributeValue))
     .optional()
@@ -36,7 +36,7 @@ export const otelTracesSchema = z.object({
   "Events.Timestamp": z
     .array(z.string())
     .optional()
-    .describe("Time the event occurred (nanoseconds)."),
+    .describe("Time the event occurred (nanoseconds). Expressed as strings in JSON."),
   "Links.Attributes": z
     .array(z.record(z.string(), attributeValue))
     .optional()
@@ -115,7 +115,7 @@ export const otelLogsSchema = z.object({
   Timestamp: z
     .string()
     .describe(
-      "Time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+      "Time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
 
   // Optional fields (Generated<T> in source)
@@ -198,12 +198,12 @@ const metricsBaseSchema = z.object({
   TimeUnix: z
     .string()
     .describe(
-      "Time when the data point was recorded. UNIX Epoch time in nanoseconds."
+      "Time when the data point was recorded. UNIX Epoch time in nanoseconds. Expressed as string in JSON."
     ),
   StartTimeUnix: z
     .string()
     .describe(
-      "Start time for cumulative/delta metrics. UNIX Epoch time in nanoseconds."
+      "Start time for cumulative/delta metrics. UNIX Epoch time in nanoseconds. Expressed as string in JSON."
     ),
   Attributes: z
     .record(z.string(), attributeValue)
@@ -263,7 +263,7 @@ const metricsBaseSchema = z.object({
   "Exemplars.TimeUnix": z
     .array(z.string())
     .optional()
-    .describe("Timestamps of exemplars (nanoseconds)."),
+    .describe("Timestamps of exemplars (nanoseconds). Expressed as strings in JSON."),
   "Exemplars.TraceId": z
     .array(z.string())
     .optional()

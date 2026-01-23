@@ -180,8 +180,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       // Filter: >= 1500ms and <= 2500ms
       const result = await readDs.getTraces({
-        timestampMin: 1500000000000000, // 1500ms in nanos
-        timestampMax: 2500000000000000, // 2500ms in nanos
+        timestampMin: "1500000000000000", // 1500ms in nanos
+        timestampMax: "2500000000000000", // 2500ms in nanos
       });
 
       expect(result.data).toHaveLength(1);
@@ -215,8 +215,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
       // Filter: >= 200ms and <= 600ms (in nanos)
       const result = await readDs.getTraces({
-        durationMin: 200_000_000, // 200ms in nanos
-        durationMax: 600_000_000, // 600ms in nanos
+        durationMin: "200000000", // 200ms in nanos
+        durationMax: "600000000", // 600ms in nanos
       });
 
       expect(result.data).toHaveLength(1);
@@ -721,8 +721,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
       await insertLog({ timeNanos: "3000000000000000" }); // 3000ms
 
       const result = await readDs.getLogs({
-        timestampMin: 1500000000000000,
-        timestampMax: 2500000000000000,
+        timestampMin: "1500000000000000",
+        timestampMax: "2500000000000000",
       });
 
       expect(result.data).toHaveLength(1);
@@ -1252,8 +1252,8 @@ describe("NodeSqliteTelemetryDatasource", () => {
       // Filter: >= 1500ms and <= 2500ms (in nanos)
       const result = await readDs.getMetrics({
         metricType: "Gauge",
-        timeUnixMin: 1500000000000000, // 1500000000 ms
-        timeUnixMax: 2500000000000000, // 2500000000 ms
+        timeUnixMin: "1500000000000000", // 1500000000 ms
+        timeUnixMax: "2500000000000000", // 2500000000 ms
       });
 
       expect(result.data).toHaveLength(1);

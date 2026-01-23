@@ -44,30 +44,30 @@ export const tracesDataFilterSchema = z.object({
 
   // Time range filters
   timestampMin: z
-    .number()
+    .string()
     .optional()
     .describe(
-      "Minimum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+      "Minimum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
   timestampMax: z
-    .number()
+    .string()
     .optional()
     .describe(
-      "Maximum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+      "Maximum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
 
   // Duration range filters
   durationMin: z
-    .number()
+    .string()
     .optional()
     .describe(
-      "Minimum duration of the span in nanoseconds (end_time - start_time)."
+      "Minimum duration of the span in nanoseconds (end_time - start_time). Expressed as string in JSON."
     ),
   durationMax: z
-    .number()
+    .string()
     .optional()
     .describe(
-      "Maximum duration of the span in nanoseconds (end_time - start_time)."
+      "Maximum duration of the span in nanoseconds (end_time - start_time). Expressed as string in JSON."
     ),
 
   // Attribute filters
@@ -155,16 +155,16 @@ export const logsDataFilterSchema = z.object({
 
   // Time range filters
   timestampMin: z
-    .number()
+    .string()
     .optional()
     .describe(
-      "Minimum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+      "Minimum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
   timestampMax: z
-    .number()
+    .string()
     .optional()
     .describe(
-      "Maximum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+      "Maximum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
 
   // Attribute filters
@@ -221,16 +221,16 @@ export const metricsDataFilterSchema = z.object({
 
   // Time range filters
   timeUnixMin: z
-    .number()
+    .string()
     .optional()
     .describe(
-      "Minimum time when the data point was recorded. UNIX Epoch time in nanoseconds."
+      "Minimum time when the data point was recorded. UNIX Epoch time in nanoseconds. Expressed as string in JSON."
     ),
   timeUnixMax: z
-    .number()
+    .string()
     .optional()
     .describe(
-      "Maximum time when the data point was recorded. UNIX Epoch time in nanoseconds."
+      "Maximum time when the data point was recorded. UNIX Epoch time in nanoseconds. Expressed as string in JSON."
     ),
 
   // Attribute filters
