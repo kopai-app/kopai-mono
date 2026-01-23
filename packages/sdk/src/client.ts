@@ -85,11 +85,14 @@ export class KopaiClient {
     traceId: string,
     opts?: RequestOptions
   ): Promise<OtelTracesRow[]> {
-    const result: OtelTracesRow[] = [];
-    for await (const span of this.searchTraces({ traceId }, opts)) {
-      result.push(span);
-    }
-    return result;
+    const schema = z.array(denormalizedSignals.otelTracesSchema);
+    return request(`${this.baseUrl}/traces/${traceId}`, schema, {
+      method: "GET",
+      ...opts,
+      baseHeaders: this.baseHeaders,
+      fetchFn: this.fetchFn,
+      defaultTimeout: this.defaultTimeout,
+    });
   }
 
   /**
@@ -119,7 +122,7 @@ export class KopaiClient {
     const validatedFilter =
       dataFilterSchemas.tracesDataFilterSchema.parse(filter);
 
-    return request(`${this.baseUrl}/v1/traces`, tracesResponseSchema, {
+    return request(`${this.baseUrl}/traces/search`, tracesResponseSchema, {
       method: "POST",
       body: validatedFilter,
       ...opts,
@@ -156,7 +159,7 @@ export class KopaiClient {
     const validatedFilter =
       dataFilterSchemas.logsDataFilterSchema.parse(filter);
 
-    return request(`${this.baseUrl}/v1/logs`, logsResponseSchema, {
+    return request(`${this.baseUrl}/logs/search`, logsResponseSchema, {
       method: "POST",
       body: validatedFilter,
       ...opts,
@@ -193,7 +196,7 @@ export class KopaiClient {
     const validatedFilter =
       dataFilterSchemas.metricsDataFilterSchema.parse(filter);
 
-    return request(`${this.baseUrl}/v1/metrics`, metricsResponseSchema, {
+    return request(`${this.baseUrl}/metrics/search`, metricsResponseSchema, {
       method: "POST",
       body: validatedFilter,
       ...opts,
@@ -209,16 +212,12 @@ export class KopaiClient {
   async discoverMetrics(
     opts?: RequestOptions
   ): Promise<MetricsDiscoveryResult> {
-    return request(
-      `${this.baseUrl}/v1/metrics/discover`,
-      metricsDiscoverySchema,
-      {
-        method: "GET",
-        ...opts,
-        baseHeaders: this.baseHeaders,
-        fetchFn: this.fetchFn,
-        defaultTimeout: this.defaultTimeout,
-      }
-    );
+    return request(`${this.baseUrl}/metrics/discover`, metricsDiscoverySchema, {
+      method: "GET",
+      ...opts,
+      baseHeaders: this.baseHeaders,
+      fetchFn: this.fetchFn,
+      defaultTimeout: this.defaultTimeout,
+    });
   }
 }

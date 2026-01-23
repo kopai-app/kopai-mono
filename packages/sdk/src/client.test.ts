@@ -181,7 +181,7 @@ describe("KopaiClient", () => {
   describe("error handling", () => {
     it("throws KopaiError for 404", async () => {
       server.use(
-        http.post(`${BASE_URL}/v1/traces`, () => {
+        http.get(`${BASE_URL}/traces/not-exists`, () => {
           return HttpResponse.json(
             {
               type: "https://api.kopai.io/errors/not-found",
@@ -221,7 +221,7 @@ describe("KopaiClient", () => {
   describe("timeout", () => {
     it("uses default timeout", async () => {
       server.use(
-        http.post(`${BASE_URL}/v1/traces`, async () => {
+        http.post(`${BASE_URL}/traces/search`, async () => {
           // This won't actually delay since we're using default timeout
           return HttpResponse.json({
             data: [sampleTrace],
@@ -243,7 +243,7 @@ describe("KopaiClient", () => {
       });
 
       server.use(
-        http.post(`${BASE_URL}/v1/traces`, async () => {
+        http.post(`${BASE_URL}/traces/search`, async () => {
           await new Promise((resolve) => setTimeout(resolve, 100));
           return HttpResponse.json({
             data: [sampleTrace],
@@ -263,7 +263,7 @@ describe("KopaiClient", () => {
       let capturedHeaders: Headers | null = null;
 
       server.use(
-        http.post(`${BASE_URL}/v1/traces`, ({ request }) => {
+        http.post(`${BASE_URL}/traces/search`, ({ request }) => {
           capturedHeaders = request.headers;
           return HttpResponse.json({
             data: [sampleTrace],

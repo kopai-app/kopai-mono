@@ -56,8 +56,50 @@ export const sampleDiscovery = {
 } satisfies MetricsDiscoveryResult;
 
 export const handlers = [
-  // Traces endpoint
-  http.post(`${BASE_URL}/v1/traces`, async (info) => {
+  // Get trace by ID endpoint
+  http.get(`${BASE_URL}/traces/:traceId`, (info) => {
+    const { request, params } = info;
+    const traceId = params.traceId as string;
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Unauthorized",
+          code: "UNAUTHORIZED",
+        } satisfies ApiErrorResponse,
+        { status: 401 }
+      );
+    }
+
+    if (traceId === "not-exists") {
+      return HttpResponse.json(
+        {
+          type: "https://api.kopai.io/errors/not-found",
+          title: "Not Found",
+          code: "NOT_FOUND",
+          detail: "Trace not found",
+        } satisfies ApiErrorResponse,
+        { status: 404 }
+      );
+    }
+
+    // Return multiple spans for multi-page test
+    if (traceId === "trace-multi-page") {
+      return HttpResponse.json([
+        sampleTrace,
+        { ...sampleTrace, SpanId: "span-page2" },
+      ] satisfies OtelTracesRow[]);
+    }
+
+    return HttpResponse.json([
+      { ...sampleTrace, TraceId: traceId },
+    ] satisfies OtelTracesRow[]);
+  }),
+
+  // Traces search endpoint
+  http.post(`${BASE_URL}/traces/search`, async (info) => {
     const { request } = info;
 
     // Check auth first (no body parsing needed)
@@ -98,7 +140,7 @@ export const handlers = [
   }),
 
   // Logs endpoint
-  http.post(`${BASE_URL}/v1/logs`, async (info) => {
+  http.post(`${BASE_URL}/logs/search`, async (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -136,7 +178,7 @@ export const handlers = [
   }),
 
   // Metrics endpoint
-  http.post(`${BASE_URL}/v1/metrics`, async (info) => {
+  http.post(`${BASE_URL}/metrics/search`, async (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -174,7 +216,7 @@ export const handlers = [
   }),
 
   // Metrics discovery endpoint
-  http.get(`${BASE_URL}/v1/metrics/discover`, (info) => {
+  http.get(`${BASE_URL}/metrics/discover`, (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -193,7 +235,7 @@ export const handlers = [
   }),
 
   // 404 endpoint for testing
-  http.post(`${BASE_URL}/v1/not-found`, () => {
+  http.post(`${BASE_URL}/not-found`, () => {
     return HttpResponse.json(
       {
         type: "https://api.kopai.io/errors/not-found",
