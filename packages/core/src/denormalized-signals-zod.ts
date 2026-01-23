@@ -10,7 +10,7 @@ export const otelTracesSchema = z.object({
       "Unique identifier for a span within a trace. The ID is an 8-byte array."
     ),
   Timestamp: z
-    .number()
+    .string()
     .describe(
       "Start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
     ),
@@ -22,7 +22,7 @@ export const otelTracesSchema = z.object({
 
   // Optional fields (Generated<T> in source)
   Duration: z
-    .number()
+    .string()
     .optional()
     .describe("Duration of the span in nanoseconds (end_time - start_time)."),
   "Events.Attributes": z
@@ -34,9 +34,9 @@ export const otelTracesSchema = z.object({
     .optional()
     .describe("Name of the event. Semantically required to be non-empty."),
   "Events.Timestamp": z
-    .array(z.number())
+    .array(z.string())
     .optional()
-    .describe("Time the event occurred."),
+    .describe("Time the event occurred (nanoseconds)."),
   "Links.Attributes": z
     .array(z.record(z.string(), attributeValue))
     .optional()
@@ -113,7 +113,7 @@ export type OtelTracesRow = z.infer<typeof otelTracesSchema>;
 export const otelLogsSchema = z.object({
   // Required fields
   Timestamp: z
-    .number()
+    .string()
     .describe(
       "Time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
     ),
@@ -196,12 +196,12 @@ export type OtelLogsRow = z.infer<typeof otelLogsSchema>;
 // Metrics - common fields shared by all metric types
 const metricsBaseSchema = z.object({
   TimeUnix: z
-    .number()
+    .string()
     .describe(
       "Time when the data point was recorded. UNIX Epoch time in nanoseconds."
     ),
   StartTimeUnix: z
-    .number()
+    .string()
     .describe(
       "Start time for cumulative/delta metrics. UNIX Epoch time in nanoseconds."
     ),
@@ -261,9 +261,9 @@ const metricsBaseSchema = z.object({
     .optional()
     .describe("Span IDs associated with exemplars."),
   "Exemplars.TimeUnix": z
-    .array(z.number())
+    .array(z.string())
     .optional()
-    .describe("Timestamps of exemplars."),
+    .describe("Timestamps of exemplars (nanoseconds)."),
   "Exemplars.TraceId": z
     .array(z.string())
     .optional()

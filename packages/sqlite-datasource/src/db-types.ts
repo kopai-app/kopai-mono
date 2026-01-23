@@ -23,7 +23,7 @@ export interface OtelLogs {
   SeverityNumber: Generated<number>;
   SeverityText: Generated<string>;
   SpanId: Generated<string>;
-  Timestamp: number;
+  Timestamp: bigint;
   TraceFlags: Generated<number>;
   TraceId: Generated<string>;
 }
@@ -55,9 +55,9 @@ export interface OtelMetricsExponentialHistogram {
   ScopeSchemaUrl: Generated<string>;
   ScopeVersion: Generated<string>;
   ServiceName: Generated<string>;
-  StartTimeUnix: number;
+  StartTimeUnix: bigint;
   Sum: Generated<number>;
-  TimeUnix: number;
+  TimeUnix: bigint;
   ZeroCount: Generated<number>;
   ZeroThreshold: Generated<number>;
 }
@@ -81,8 +81,8 @@ export interface OtelMetricsGauge {
   ScopeSchemaUrl: Generated<string>;
   ScopeVersion: Generated<string>;
   ServiceName: Generated<string>;
-  StartTimeUnix: number;
-  TimeUnix: number;
+  StartTimeUnix: bigint;
+  TimeUnix: bigint;
   Value: number;
 }
 
@@ -110,9 +110,9 @@ export interface OtelMetricsHistogram {
   ScopeSchemaUrl: Generated<string>;
   ScopeVersion: Generated<string>;
   ServiceName: Generated<string>;
-  StartTimeUnix: number;
+  StartTimeUnix: bigint;
   Sum: Generated<number>;
-  TimeUnix: number;
+  TimeUnix: bigint;
 }
 
 export interface OtelMetricsSum {
@@ -136,8 +136,8 @@ export interface OtelMetricsSum {
   ScopeSchemaUrl: Generated<string>;
   ScopeVersion: Generated<string>;
   ServiceName: Generated<string>;
-  StartTimeUnix: number;
-  TimeUnix: number;
+  StartTimeUnix: bigint;
+  TimeUnix: bigint;
   Value: number;
 }
 
@@ -155,15 +155,15 @@ export interface OtelMetricsSummary {
   ScopeSchemaUrl: Generated<string>;
   ScopeVersion: Generated<string>;
   ServiceName: Generated<string>;
-  StartTimeUnix: number;
+  StartTimeUnix: bigint;
   Sum: Generated<number>;
-  TimeUnix: number;
+  TimeUnix: bigint;
   "ValueAtQuantiles.Quantile": Generated<string>;
   "ValueAtQuantiles.Value": Generated<string>;
 }
 
 export interface OtelTraces {
-  Duration: Generated<number>;
+  Duration: Generated<bigint>;
   "Events.Attributes": Generated<string>;
   "Events.Name": Generated<string>;
   "Events.Timestamp": Generated<string>;
@@ -182,14 +182,14 @@ export interface OtelTraces {
   SpanName: Generated<string>;
   StatusCode: Generated<string>;
   StatusMessage: Generated<string>;
-  Timestamp: number;
+  Timestamp: bigint;
   TraceId: string;
   TraceState: Generated<string>;
 }
 
 export interface OtelTracesTraceIdTs {
-  End: number;
-  Start: number;
+  End: bigint;
+  Start: bigint;
   TraceId: string;
 }
 

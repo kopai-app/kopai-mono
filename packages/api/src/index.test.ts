@@ -50,7 +50,7 @@ describe("apiRoutes", () => {
     const mockTrace = {
       SpanId: "abc123",
       TraceId: "trace-001",
-      Timestamp: 1700000000000000000,
+      Timestamp: "1700000000000000000",
       ServiceName: "test-service",
       SpanName: "test-span",
     };
