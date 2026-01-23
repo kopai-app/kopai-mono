@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "type": "module",
   "bin": {
-    "kopai": "./dist/index.js"
+    "kopai": "./dist/index.mjs"
   },
   "files": [
     "dist"
@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@kopai/core": "workspace:*",
-    "@kopai/sdk": "workspace:*"
+    "@kopai/sdk": "workspace:*",
+    "commander": "^13.0.0"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
