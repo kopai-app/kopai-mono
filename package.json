@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && changeset publish",
+    "test:publish": "./scripts/test-publish.sh"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
