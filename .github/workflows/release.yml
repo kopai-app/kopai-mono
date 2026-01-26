@@ -15,6 +15,7 @@ env:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 jobs:
   release:
@@ -35,19 +36,12 @@ jobs:
       - name: Build
         run: pnpm turbo build
 
-      - name: Create Release PR or Tag
-        id: changesets
+      - name: Create Release PR or Publish
         uses: changesets/action@v1
         with:
           version: pnpm changeset version
+          publish: pnpm changeset publish
           commit: "chore: version packages"
           title: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create and push tag
-        if: steps.changesets.outputs.hasChangesets == 'false'
-        run: |
-          VERSION=$(node -p "require('./packages/core/package.json').version")
-          git tag "v$VERSION"
-          git push origin "v$VERSION"
