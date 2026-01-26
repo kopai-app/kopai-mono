@@ -1,13 +1,20 @@
 # @kopai/cli
 
-Command-line tool for querying OpenTelemetry observability data (traces, logs, metrics).
+CLI for querying OpenTelemetry data from Kopai - traces, logs, and metrics.
 
-## Installation
+Works with [@kopai/app](https://github.com/Vunovati/kopai-mono/tree/main/packages/app) or any compatible backend.
+
+## Usage
+
+```bash
+npx @kopai/cli traces search --service my-api
+```
+
+### Global Install (optional)
 
 ```bash
 npm install -g @kopai/cli
-# or
-pnpm add -g @kopai/cli
+kopai traces search --service my-api
 ```
 
 ## Quick Start

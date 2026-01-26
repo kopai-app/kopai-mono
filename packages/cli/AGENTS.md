@@ -33,36 +33,36 @@ Or use flags: `--url <url> --token <token>`
 
 ```bash
 # Get all spans for a trace
-@kopai/cli traces get <traceId> --json
+kopai traces get <traceId> --json
 
 # Search traces
-@kopai/cli traces search --service myapp --limit 100 --json
-@kopai/cli traces search --span-name "GET /api" --status-code ERROR --json
-@kopai/cli traces search --timestamp-min 1700000000000000000 --timestamp-max 1700001000000000000 --json
-@kopai/cli traces search --span-attr key=value --resource-attr service.version=1.0 --json
+kopai traces search --service myapp --limit 100 --json
+kopai traces search --span-name "GET /api" --status-code ERROR --json
+kopai traces search --timestamp-min 1700000000000000000 --timestamp-max 1700001000000000000 --json
+kopai traces search --span-attr key=value --resource-attr service.version=1.0 --json
 ```
 
 ### Logs
 
 ```bash
 # Search logs
-@kopai/cli logs search --service myapp --limit 100 --json
-@kopai/cli logs search --severity-text ERROR --json
-@kopai/cli logs search --body "exception" --json
-@kopai/cli logs search --trace-id abc123 --json
-@kopai/cli logs search --log-attr key=value --json
+kopai logs search --service myapp --limit 100 --json
+kopai logs search --severity-text ERROR --json
+kopai logs search --body "exception" --json
+kopai logs search --trace-id abc123 --json
+kopai logs search --log-attr key=value --json
 ```
 
 ### Metrics
 
 ```bash
 # Discover available metrics
-@kopai/cli metrics discover --json
+kopai metrics discover --json
 
 # Search metrics (--type required)
-@kopai/cli metrics search --type Gauge --name http_requests_total --json
-@kopai/cli metrics search --type Sum --service myapp --json
-@kopai/cli metrics search --type Histogram --attr endpoint=/api --json
+kopai metrics search --type Gauge --name http_requests_total --json
+kopai metrics search --type Sum --service myapp --json
+kopai metrics search --type Histogram --attr endpoint=/api --json
 ```
 
 ## Output Formats
@@ -152,22 +152,22 @@ Flags marked `(repeatable)` can be specified multiple times; all conditions must
 
 ```bash
 # Find recent errors
-@kopai/cli traces search --status-code ERROR --limit 10 --json
+kopai traces search --status-code ERROR --limit 10 --json
 
 # Get logs for a specific trace
-@kopai/cli logs search --trace-id abc123 --json
+kopai logs search --trace-id abc123 --json
 
 # List all available metrics
-@kopai/cli metrics discover --json
+kopai metrics discover --json
 
 # Get CPU metrics
-@kopai/cli metrics search --type Gauge --name process_cpu_seconds_total --json
+kopai metrics search --type Gauge --name process_cpu_seconds_total --json
 
 # Filter by multiple attributes (repeat flag for each)
-@kopai/cli traces search --span-attr rpc.system=grpc --span-attr rpc.service=UserService --json
+kopai traces search --span-attr rpc.system=grpc --span-attr rpc.service=UserService --json
 
 # Select specific fields
-@kopai/cli traces search --fields TraceId,SpanName,Duration --table
-@kopai/cli logs search --fields Timestamp,Body,SeverityText --json
-@kopai/cli metrics discover --fields name,type --table
+kopai traces search --fields TraceId,SpanName,Duration --table
+kopai logs search --fields Timestamp,Body,SeverityText --json
+kopai metrics discover --fields name,type --table
 ```

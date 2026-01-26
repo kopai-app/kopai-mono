@@ -37,3 +37,6 @@ coverage
 # Misc
 *.local
 *.claude
+
+# Publish test
+.tarballs/

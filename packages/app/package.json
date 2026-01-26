@@ -1,10 +1,48 @@
 {
   "name": "@kopai/app",
   "version": "0.0.0",
+  "description": "Local OpenTelemetry backend for testing instrumentation - no Docker, no config, just npx",
+  "keywords": [
+    "opentelemetry",
+    "otlp",
+    "tracing",
+    "metrics",
+    "logs",
+    "observability",
+    "collector",
+    "local",
+    "testing",
+    "development",
+    "instrumentation"
+  ],
+  "license": "Apache-2.0",
+  "author": "Vunovati",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vunovati/kopai-mono.git",
+    "directory": "packages/app"
+  },
+  "homepage": "https://github.com/Vunovati/kopai-mono/tree/main/packages/app#readme",
+  "bugs": {
+    "url": "https://github.com/Vunovati/kopai-mono/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "kopai-server": "./dist/cli.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
   "files": [
     "dist"
   ],
@@ -13,8 +51,8 @@
     "dev": "tsdown --watch",
     "lint": "eslint src",
     "type-check": "tsc --noEmit",
-    "start": "node ./dist/index.js",
-    "start:dev": "nodemon --watch ./dist --watch '../*/dist' --env-file=.env ./dist/index.mjs"
+    "start": "node ./dist/cli.mjs start",
+    "start:dev": "nodemon --watch ./dist --watch '../*/dist' --env-file=.env ./dist/cli.mjs start"
   },
   "dependencies": {
     "@fastify/swagger": "^9.6.1",

@@ -1,6 +1,32 @@
 {
   "name": "@kopai/cli",
   "version": "0.0.0",
+  "description": "CLI for querying OpenTelemetry data from Kopai - traces, logs, and metrics",
+  "keywords": [
+    "opentelemetry",
+    "otlp",
+    "tracing",
+    "metrics",
+    "logs",
+    "observability",
+    "cli",
+    "query",
+    "debugging"
+  ],
+  "license": "Apache-2.0",
+  "author": "Vunovati",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vunovati/kopai-mono.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/Vunovati/kopai-mono/tree/main/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/Vunovati/kopai-mono/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "bin": {
     "kopai": "./dist/index.mjs"
