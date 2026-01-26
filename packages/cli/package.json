@@ -12,7 +12,8 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "lint": "eslint src",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@kopai/core": "workspace:*",
