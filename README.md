@@ -50,6 +50,10 @@ pnpm build
 pnpm dev
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 Apache-2.0
