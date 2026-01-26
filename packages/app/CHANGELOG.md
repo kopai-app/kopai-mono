@@ -1,5 +1,19 @@
 # @kopai/app
 
+## 0.2.0
+
+### Minor Changes
+
+- 1da61f2: Publish all on same version
+
+### Patch Changes
+
+- Updated dependencies [1da61f2]
+  - @kopai/api@0.2.0
+  - @kopai/collector@0.2.0
+  - @kopai/core@0.2.0
+  - @kopai/sqlite-datasource@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
