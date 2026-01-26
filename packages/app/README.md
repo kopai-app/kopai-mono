@@ -135,4 +135,25 @@ curl -X POST http://localhost:8000/signals/metrics/search \
   -d '{"metricName": "http.server.duration"}'
 ```
 
-See [/documentation](http://localhost:8000/documentation) for all available query options.
+### Using @kopai/cli (recommended)
+
+[@kopai/cli](https://github.com/Vunovati/kopai-mono/tree/main/packages/cli) provides a simpler interface for querying data. It's also better suited for LLM agents.
+
+```bash
+# Search traces
+npx @kopai/cli traces search --service my-app
+
+# Get a specific trace
+npx @kopai/cli traces get <traceId>
+
+# Search logs
+npx @kopai/cli logs search --service my-app
+
+# Discover metrics
+npx @kopai/cli metrics discover
+
+# Search metrics
+npx @kopai/cli metrics search --type Gauge --name http.server.duration
+```
+
+See [@kopai/cli README](https://github.com/Vunovati/kopai-mono/tree/main/packages/cli) for all available options.
