@@ -1,4 +1,4 @@
-# @kopai/app
+# @kopai/sdk
 
 ## 0.1.0
 
@@ -9,13 +9,4 @@
 ### Patch Changes
 
 - Updated dependencies [b5074c3]
-  - @kopai/api@0.1.0
-  - @kopai/collector@0.1.0
   - @kopai/core@0.1.0
-  - @kopai/sqlite-datasource@0.1.0
-
-## 0.0.1
-
-### Patch Changes
-
-- c3d4ac5: initial publish
