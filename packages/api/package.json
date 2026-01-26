@@ -19,7 +19,8 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "lint": "eslint src",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/swagger": "^9.6.1",
