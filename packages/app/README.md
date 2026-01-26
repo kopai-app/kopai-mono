@@ -13,7 +13,7 @@ Starts two servers:
 - **API server** on port 8000 (query traces, logs, metrics)
 - **OTEL collector** on port 4318 (receives OTLP/HTTP data)
 
-## CLI Usage
+## Kopai App server usage
 
 ```bash
 npx @kopai/app <command>
@@ -135,7 +135,7 @@ curl -X POST http://localhost:8000/signals/metrics/search \
   -d '{"metricName": "http.server.duration"}'
 ```
 
-### Using @kopai/cli (recommended)
+### Query telemetry data using @kopai/cli (recommended)
 
 [@kopai/cli](https://github.com/Vunovati/kopai-mono/tree/main/packages/cli) provides a simpler interface for querying data. It's also better suited for LLM agents.
 
