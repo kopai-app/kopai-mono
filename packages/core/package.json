@@ -22,6 +22,9 @@
     "type-check": "tsc --noEmit",
     "generate-otlp-zod-schema": "ts-to-zod src/otlp-generated.ts src/otlp-zod.ts && pretty-quick"
   },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
     "pretty-quick": "^4.2.2",
