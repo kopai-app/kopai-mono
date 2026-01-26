@@ -53,6 +53,9 @@ importers:
       "@kopai/core":
         specifier: workspace:*
         version: link:../core
+      fastify:
+        specifier: ^5.0.0
+        version: 5.7.2
       fastify-type-provider-zod:
         specifier: ^6.1.0
         version: 6.1.0(@fastify/swagger@9.6.1)(fastify@5.7.2)(openapi-types@12.1.3)(zod@4.3.6)
@@ -69,9 +72,6 @@ importers:
       "@kopai/tsconfig":
         specifier: workspace:*
         version: link:../tsconfig
-      fastify:
-        specifier: ^5.7.2
-        version: 5.7.2
       tsdown:
         specifier: ^0.20.1
         version: 0.20.1(typescript@5.9.3)
@@ -146,6 +146,9 @@ importers:
       "@kopai/core":
         specifier: workspace:*
         version: link:../core
+      fastify:
+        specifier: ^5.0.0
+        version: 5.7.2
       fastify-type-provider-zod:
         specifier: ^6.1.0
         version: 6.1.0(@fastify/swagger@9.6.1)(fastify@5.7.2)(openapi-types@12.1.3)(zod@4.3.6)
@@ -189,9 +192,6 @@ importers:
       "@opentelemetry/semantic-conventions":
         specifier: ^1.39.0
         version: 1.39.0
-      fastify:
-        specifier: ^5.7.2
-        version: 5.7.2
       tsdown:
         specifier: ^0.20.1
         version: 0.20.1(typescript@5.9.3)

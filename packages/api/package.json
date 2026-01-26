@@ -34,7 +34,6 @@
     "@fastify/swagger": "^9.6.1",
     "@fastify/swagger-ui": "^5.2.4",
     "@kopai/tsconfig": "workspace:*",
-    "fastify": "^5.7.2",
     "tsdown": "^0.20.1"
   }
 }
