@@ -14,15 +14,15 @@
     "debugging"
   ],
   "license": "Apache-2.0",
-  "author": "Vunovati",
+  "author": "Vladimir Adamic",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Vunovati/kopai-mono.git",
+    "url": "git+https://github.com/kopai-app/kopai-mono.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/Vunovati/kopai-mono/tree/main/packages/cli#readme",
+  "homepage": "https://github.com/kopai-app/kopai-mono/tree/main/packages/cli#readme",
   "bugs": {
-    "url": "https://github.com/Vunovati/kopai-mono/issues"
+    "url": "https://github.com/kopai-app/kopai-mono/issues"
   },
   "engines": {
     "node": ">=20"

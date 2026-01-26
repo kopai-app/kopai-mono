@@ -2,7 +2,7 @@
 
 CLI for querying OpenTelemetry data from Kopai - traces, logs, and metrics.
 
-Works with [@kopai/app](https://github.com/Vunovati/kopai-mono/tree/main/packages/app) or any compatible backend.
+Works with [@kopai/app](https://github.com/kopai-app/kopai-mono/tree/main/packages/app) or any compatible backend.
 
 ## Usage
 
