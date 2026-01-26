@@ -22,15 +22,19 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run"
   },
+  "peerDependencies": {
+    "fastify": "^5.0.0",
+    "zod": "^4.0.0"
+  },
   "dependencies": {
-    "@fastify/swagger": "^9.6.1",
-    "@fastify/swagger-ui": "^5.2.4",
     "@kopai/core": "workspace:*",
-    "fastify": "^5.7.2",
     "fastify-type-provider-zod": "^6.1.0"
   },
   "devDependencies": {
+    "@fastify/swagger": "^9.6.1",
+    "@fastify/swagger-ui": "^5.2.4",
     "@kopai/tsconfig": "workspace:*",
+    "fastify": "^5.7.2",
     "tsdown": "^0.20.1"
   }
 }
