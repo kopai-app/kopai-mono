@@ -28,9 +28,17 @@ npx @kopai/app <command>
 
 ### Options
 
-| Option       | Description       |
-| ------------ | ----------------- |
-| `-h, --help` | Show help message |
+| Option          | Description       |
+| --------------- | ----------------- |
+| `-h, --help`    | Show help message |
+| `-v, --version` | Show version      |
+
+### Global Install (optional)
+
+```bash
+npm install -g @kopai/app
+kopai-server start
+```
 
 ## Environment Variables
 
@@ -55,15 +63,76 @@ PORT=3000 npx @kopai/app start
 
 ## Endpoints
 
-### OTEL Collector (default: localhost:4318)
+- **OTEL Collector** - `localhost:4318` - [OTLP/HTTP endpoints](https://opentelemetry.io/docs/specs/otlp/#otlphttp-request)
+- **API Server** - `localhost:8000` - see [/documentation](http://localhost:8000/documentation) for available endpoints
 
-- `POST /v1/traces` - Receive trace data
-- `POST /v1/logs` - Receive log data
-- `POST /v1/metrics` - Receive metric data
+## Sending Telemetry
 
-### API Server (default: localhost:8000)
+Your application needs an [OpenTelemetry SDK](https://opentelemetry.io/docs/languages/) for your language.
 
-- `GET /documentation` - Swagger UI
-- `GET /signals/traces` - Query traces
-- `GET /signals/logs` - Query logs
-- `GET /signals/metrics` - Query metrics
+Configure it to export OTLP/HTTP data to `http://localhost:4318`:
+
+```bash
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+See [OTLP Exporter Configuration](https://opentelemetry.io/docs/specs/otel/protocol/exporter/#example-1) for more details.
+
+## Example Workflow
+
+### 1. Start Kopai
+
+```bash
+npx @kopai/app start
+```
+
+### 2. Run your instrumented app
+
+```bash
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_SERVICE_NAME=my-app
+
+node my-app.js
+```
+
+### 3. Query your telemetry data
+
+**Search traces:**
+
+```bash
+curl -X POST http://localhost:8000/signals/traces/search \
+  -H "Content-Type: application/json" \
+  -d '{"serviceName": "my-app"}'
+```
+
+**Get a specific trace:**
+
+```bash
+curl http://localhost:8000/signals/traces/<traceId>
+```
+
+**Search logs:**
+
+```bash
+curl -X POST http://localhost:8000/signals/logs/search \
+  -H "Content-Type: application/json" \
+  -d '{"serviceName": "my-app"}'
+```
+
+**Discover available metrics:**
+
+```bash
+curl http://localhost:8000/signals/metrics/discover
+```
+
+**Search metrics:**
+
+```bash
+curl -X POST http://localhost:8000/signals/metrics/search \
+  -H "Content-Type: application/json" \
+  -d '{"metricName": "http.server.duration"}'
+```
+
+See [/documentation](http://localhost:8000/documentation) for all available query options.
