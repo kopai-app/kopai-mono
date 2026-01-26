@@ -137,7 +137,7 @@ curl -X POST http://localhost:8000/signals/metrics/search \
 
 ### Query telemetry data using @kopai/cli (recommended)
 
-[@kopai/cli](https://github.com/Vunovati/kopai-mono/tree/main/packages/cli) provides a simpler interface for querying data. It's also better suited for LLM agents.
+[@kopai/cli](https://github.com/kopai-app/kopai-mono/tree/main/packages/cli) provides a simpler interface for querying data. It's also better suited for LLM agents.
 
 ```bash
 # Search traces
@@ -156,4 +156,4 @@ npx @kopai/cli metrics discover
 npx @kopai/cli metrics search --type Gauge --name http.server.duration
 ```
 
-See [@kopai/cli README](https://github.com/Vunovati/kopai-mono/tree/main/packages/cli) for all available options.
+See [@kopai/cli README](https://github.com/kopai-app/kopai-mono/tree/main/packages/cli) for all available options.
