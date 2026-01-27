@@ -1,5 +1,19 @@
 # @kopai/app
 
+## 0.3.0
+
+### Minor Changes
+
+- c9fe7a3: Add support for http/proto, update fix exemplar types
+
+### Patch Changes
+
+- Updated dependencies [c9fe7a3]
+  - @kopai/sqlite-datasource@0.4.0
+  - @kopai/collector@0.3.0
+  - @kopai/core@0.4.0
+  - @kopai/api@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes
