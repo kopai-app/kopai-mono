@@ -1,6 +1,6 @@
 version: v2
 inputs:
-  - directory: proto
+  - module: buf.build/opentelemetry/opentelemetry:v1.9.0
 plugins:
   - local: protoc-gen-es
     opt:

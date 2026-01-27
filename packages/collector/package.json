@@ -27,6 +27,7 @@
     "dist"
   ],
   "scripts": {
+    "prebuild": "pnpm generate",
     "build": "tsdown",
     "dev": "tsdown --watch",
     "generate": "buf generate",
