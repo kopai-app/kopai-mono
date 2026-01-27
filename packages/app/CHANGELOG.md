@@ -1,5 +1,15 @@
 # @kopai/app
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [03ebb7d]
+  - @kopai/sqlite-datasource@0.3.0
+  - @kopai/core@0.3.0
+  - @kopai/api@0.2.1
+  - @kopai/collector@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

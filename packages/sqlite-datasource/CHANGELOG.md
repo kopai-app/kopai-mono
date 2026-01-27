@@ -1,5 +1,16 @@
 # @kopai/sqlite-datasource
 
+## 0.3.0
+
+### Minor Changes
+
+- 03ebb7d: Extended support for attribute values to include arrays of strings, numbers, and booleans alongside primitive values, broadening the allowed data types for OpenTelemetry resource and span attributes.
+
+### Patch Changes
+
+- Updated dependencies [03ebb7d]
+  - @kopai/core@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
