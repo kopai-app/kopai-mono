@@ -44,7 +44,6 @@ npx @kopai/cli metrics discover --json
 - `lang-ruby` - Ruby Instrumentation
 - `lang-php` - PHP Instrumentation
 - `lang-rust` - Rust Instrumentation
-- `lang-swift` - Swift Instrumentation
 - `lang-erlang` - Erlang/Elixir Instrumentation
 - `lang-cpp` - C++ Instrumentation
 
