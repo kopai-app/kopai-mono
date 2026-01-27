@@ -13,7 +13,9 @@ Troubleshoot when no telemetry data appears in Kopai.
 1. **Check Kopai is running**
 
    ```bash
-   curl http://localhost:4318/v1/traces
+   curl -X POST http://localhost:4318/v1/traces \
+     -H "Content-Type: application/json" \
+     -d '{"resourceSpans":[]}'
    ```
 
 2. **Verify endpoint** - Must be `http://localhost:4318` (not 8000)

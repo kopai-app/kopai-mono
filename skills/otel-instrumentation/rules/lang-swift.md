@@ -33,4 +33,4 @@ OpenTelemetry.registerTracerProvider(tracerProvider: provider)
 
 ### Reference
 
-https://opentelemetry.io/docs/languages/swift/
+[OpenTelemetry Swift](https://opentelemetry.io/docs/languages/swift/)

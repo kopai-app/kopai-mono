@@ -35,4 +35,4 @@ fn init_tracer() -> TracerProvider {
 
 ### Reference
 
-https://opentelemetry.io/docs/languages/rust/
+[OpenTelemetry Rust](https://opentelemetry.io/docs/languages/rust/)

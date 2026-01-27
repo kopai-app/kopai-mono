@@ -35,4 +35,4 @@ npx @kopai/cli traces search --resource-attr "k8s.pod.name=web-1" --json
 
 ### Reference
 
-https://github.com/kopai-app/kopai-mono/tree/main/packages/cli
+[Kopai CLI](https://github.com/kopai-app/kopai-mono/tree/main/packages/cli)

@@ -37,4 +37,4 @@ trace.set_tracer_provider(provider)
 
 ### Reference
 
-https://opentelemetry.io/docs/languages/python/
+[OpenTelemetry Python](https://opentelemetry.io/docs/languages/python/)

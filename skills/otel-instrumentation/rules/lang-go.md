@@ -20,6 +20,8 @@ go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp
 
 ```go
 import (
+    "context"
+
     "go.opentelemetry.io/otel"
     "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
     "go.opentelemetry.io/otel/sdk/trace"
@@ -38,4 +40,4 @@ func initTracer() (*trace.TracerProvider, error) {
 
 ### Reference
 
-https://opentelemetry.io/docs/languages/go/
+[OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/)

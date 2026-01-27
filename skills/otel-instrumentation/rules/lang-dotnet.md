@@ -27,4 +27,4 @@ builder.Services.AddOpenTelemetry()
 
 ### Reference
 
-https://opentelemetry.io/docs/languages/net/
+[OpenTelemetry .NET](https://opentelemetry.io/docs/languages/net/)
