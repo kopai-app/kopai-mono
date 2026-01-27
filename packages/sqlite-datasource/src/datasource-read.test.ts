@@ -1,7 +1,7 @@
 /// <reference types="vitest/globals" />
 import { DatabaseSync } from "node:sqlite";
 import { NodeSqliteTelemetryDatasource } from "./datasource.js";
-import { otlp, type datasource } from "@kopai/core";
+import { otlp, denormalizedSignals, type datasource } from "@kopai/core";
 import { initializeDatabase } from "./initialize-database.js";
 import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
 
@@ -513,6 +513,66 @@ describe("NodeSqliteTelemetryDatasource", () => {
         env: "prod",
         "service.name": undefined,
       });
+    });
+
+    it("returns array attribute values in ResourceAttributes", async () => {
+      // OTel attributes can be arrays (e.g. process.command_args)
+      await ds.writeTraces({
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                {
+                  key: "process.command_args",
+                  value: {
+                    arrayValue: {
+                      values: [
+                        { stringValue: "node" },
+                        { stringValue: "server.js" },
+                        { stringValue: "--port=3000" },
+                      ],
+                    },
+                  },
+                },
+                {
+                  key: "service.name",
+                  value: { stringValue: "test-service" },
+                },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: { name: "test-scope" },
+                spans: [
+                  {
+                    traceId: "trace-with-array-attr",
+                    spanId: "span1",
+                    name: "test-span",
+                    startTimeUnixNano: "1000000000000000",
+                    endTimeUnixNano: "1001000000000000",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = await readDs.getTraces({
+        traceId: "trace-with-array-attr",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ResourceAttributes).toEqual({
+        "process.command_args": ["node", "server.js", "--port=3000"],
+        "service.name": "test-service",
+      });
+
+      // Validate schema accepts array attribute values (this is what fastify validates)
+      const parseResult = denormalizedSignals.otelTracesSchema.safeParse(row);
+      expect(parseResult.success).toBe(true);
     });
 
     it("parses Events and Links fields as arrays", async () => {

@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-const attributeValue = z.union([z.string(), z.number(), z.boolean()]);
+const attributeValue = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+  z.array(z.number()),
+  z.array(z.boolean()),
+]);
 
 export const otelTracesSchema = z.object({
   // Required fields
