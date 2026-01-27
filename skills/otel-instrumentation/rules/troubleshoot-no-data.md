@@ -24,13 +24,7 @@ Troubleshoot when no telemetry data appears in Kopai.
    echo $OTEL_EXPORTER_OTLP_ENDPOINT
    ```
 
-3. **Verify protocol** - Must be `http/json`
-
-   ```bash
-   echo $OTEL_EXPORTER_OTLP_PROTOCOL
-   ```
-
-4. **Check app logs** - Look for OTEL export errors in application output
+3. **Check app logs** - Look for OTEL export errors in application output
 
 ### Reference
 

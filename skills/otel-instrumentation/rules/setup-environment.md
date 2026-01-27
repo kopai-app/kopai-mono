@@ -11,7 +11,6 @@ Set environment variables for OTEL SDK to export telemetry to Kopai.
 ### Example
 
 ```bash
-export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SERVICE_NAME=my-service
 ```
@@ -20,7 +19,6 @@ export OTEL_SERVICE_NAME=my-service
 
 | Variable                    | Value                 | Description                     |
 | --------------------------- | --------------------- | ------------------------------- |
-| OTEL_EXPORTER_OTLP_PROTOCOL | http/json             | Protocol for OTLP export        |
 | OTEL_EXPORTER_OTLP_ENDPOINT | http://localhost:4318 | Kopai collector endpoint        |
 | OTEL_SERVICE_NAME           | your-service          | Identifies service in telemetry |
 
