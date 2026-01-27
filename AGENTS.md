@@ -9,7 +9,6 @@ Local OpenTelemetry backend for testing instrumentation.
 npx @kopai/app start
 
 # 2. Configure your app
-export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 
 # 3. Query data

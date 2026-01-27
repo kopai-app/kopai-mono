@@ -113,7 +113,7 @@ export const exemplarSchema: z.ZodSchema<Exemplar> = z.lazy(() =>
      * trace_id may be missing if the measurement is not recorded inside a trace
      * or if the trace is not sampled.
      */
-    traceId: z.union([z.instanceof(Uint8Array), z.undefined()]).optional(),
+    traceId: z.string().optional(),
   })
 );
 

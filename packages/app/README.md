@@ -73,7 +73,6 @@ Your application needs an [OpenTelemetry SDK](https://opentelemetry.io/docs/lang
 Configure it to export OTLP/HTTP data to `http://localhost:4318`:
 
 ```bash
-export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
@@ -90,7 +89,6 @@ npx @kopai/app start
 ### 2. Run your instrumented app
 
 ```bash
-export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SERVICE_NAME=my-app
 

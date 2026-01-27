@@ -18,7 +18,6 @@ Guide for instrumenting applications with OpenTelemetry SDK and validating telem
 npx @kopai/app start
 
 # Configure app
-export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SERVICE_NAME=my-service
 
