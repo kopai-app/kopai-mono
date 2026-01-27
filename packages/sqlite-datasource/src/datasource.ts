@@ -984,8 +984,9 @@ function toGaugeRow(
       (e) => e.asDouble ?? Number(e.asInt ?? 0)
     ),
     "Exemplars.SpanId": exemplarsArrayToJson(exemplars, (e) => e.spanId ?? ""),
-    "Exemplars.TraceId": exemplarsArrayToJson(exemplars, (e) =>
-      e.traceId ? bufferToHex(e.traceId) : ""
+    "Exemplars.TraceId": exemplarsArrayToJson(
+      exemplars,
+      (e) => e.traceId ?? ""
     ),
   };
 }
@@ -1029,8 +1030,9 @@ function toSumRow(
       (e) => e.asDouble ?? Number(e.asInt ?? 0)
     ),
     "Exemplars.SpanId": exemplarsArrayToJson(exemplars, (e) => e.spanId ?? ""),
-    "Exemplars.TraceId": exemplarsArrayToJson(exemplars, (e) =>
-      e.traceId ? bufferToHex(e.traceId) : ""
+    "Exemplars.TraceId": exemplarsArrayToJson(
+      exemplars,
+      (e) => e.traceId ?? ""
     ),
     AggTemporality: aggTemporalityToString(aggregationTemporality),
     IsMonotonic: isMonotonic ? 1 : 0,
@@ -1079,8 +1081,9 @@ function toHistogramRow(
       (e) => e.asDouble ?? Number(e.asInt ?? 0)
     ),
     "Exemplars.SpanId": exemplarsArrayToJson(exemplars, (e) => e.spanId ?? ""),
-    "Exemplars.TraceId": exemplarsArrayToJson(exemplars, (e) =>
-      e.traceId ? bufferToHex(e.traceId) : ""
+    "Exemplars.TraceId": exemplarsArrayToJson(
+      exemplars,
+      (e) => e.traceId ?? ""
     ),
     AggTemporality: aggTemporalityToString(aggregationTemporality),
   };
@@ -1137,8 +1140,9 @@ function toExpHistogramRow(
       (e) => e.asDouble ?? Number(e.asInt ?? 0)
     ),
     "Exemplars.SpanId": exemplarsArrayToJson(exemplars, (e) => e.spanId ?? ""),
-    "Exemplars.TraceId": exemplarsArrayToJson(exemplars, (e) =>
-      e.traceId ? bufferToHex(e.traceId) : ""
+    "Exemplars.TraceId": exemplarsArrayToJson(
+      exemplars,
+      (e) => e.traceId ?? ""
     ),
     AggTemporality: aggTemporalityToString(aggregationTemporality),
   };
@@ -1252,12 +1256,6 @@ function exemplarsArrayToJson<T>(
 ): string {
   if (exemplars.length === 0) return "[]";
   return JSON.stringify(exemplars.map(extractor));
-}
-
-function bufferToHex(buf: Uint8Array): string {
-  return Array.from(buf)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 function mapRowToOtelTraces(

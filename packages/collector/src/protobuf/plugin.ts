@@ -43,13 +43,13 @@ const protobufPluginImpl: FastifyPluginAsync = async (fastify) => {
         const url = request.url;
         const buffer = new Uint8Array(payload);
 
-        if (url.includes("/v1/traces")) {
+        if (url === "/v1/traces") {
           const decoded = decodeTracesRequest(buffer);
           done(null, decoded);
-        } else if (url.includes("/v1/metrics")) {
+        } else if (url === "/v1/metrics") {
           const decoded = decodeMetricsRequest(buffer);
           done(null, decoded);
-        } else if (url.includes("/v1/logs")) {
+        } else if (url === "/v1/logs") {
           const decoded = decodeLogsRequest(buffer);
           done(null, decoded);
         } else {
@@ -84,7 +84,11 @@ const protobufPluginImpl: FastifyPluginAsync = async (fastify) => {
 
       try {
         data = JSON.parse(payload as string);
-      } catch {
+      } catch (err) {
+        request.log.warn(
+          err,
+          "Failed to parse JSON payload in protobuf response"
+        );
         return payload;
       }
 
@@ -96,17 +100,17 @@ const protobufPluginImpl: FastifyPluginAsync = async (fastify) => {
       try {
         let encoded: Uint8Array;
 
-        if (url.includes("/v1/traces")) {
+        if (url === "/v1/traces") {
           encoded = encodeTracesResponse({
             rejectedSpans: data.partialSuccess?.rejectedSpans,
             errorMessage: data.partialSuccess?.errorMessage,
           });
-        } else if (url.includes("/v1/metrics")) {
+        } else if (url === "/v1/metrics") {
           encoded = encodeMetricsResponse({
             rejectedDataPoints: data.partialSuccess?.rejectedDataPoints,
             errorMessage: data.partialSuccess?.errorMessage,
           });
-        } else if (url.includes("/v1/logs")) {
+        } else if (url === "/v1/logs") {
           encoded = encodeLogsResponse({
             rejectedLogRecords: data.partialSuccess?.rejectedLogRecords,
             errorMessage: data.partialSuccess?.errorMessage,
@@ -117,7 +121,8 @@ const protobufPluginImpl: FastifyPluginAsync = async (fastify) => {
 
         // Return buffer to be sent directly
         return Buffer.from(encoded);
-      } catch {
+      } catch (err) {
+        request.log.warn(err, "Failed to encode protobuf response");
         return payload;
       }
     }

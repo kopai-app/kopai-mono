@@ -235,12 +235,8 @@ function convertExemplar(exemplar: Exemplar): otlpMetrics.Exemplar {
         : undefined,
     spanId:
       exemplar.spanId.length > 0 ? bytesToHex(exemplar.spanId) : undefined,
-    // Note: core package has traceId as Uint8Array but it should be string for JSON encoding
-    // This is a workaround until core is fixed
     traceId:
-      exemplar.traceId.length > 0
-        ? (bytesToHex(exemplar.traceId) as unknown as Uint8Array)
-        : undefined,
+      exemplar.traceId.length > 0 ? bytesToHex(exemplar.traceId) : undefined,
   };
 }
 

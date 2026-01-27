@@ -51,10 +51,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
       const testExTimeUnixNano = "1500000000";
       const testExValue = 74.0;
       const testExSpanId = "abcd1234";
-      const testExTraceId = new Uint8Array([
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
-        0x0d, 0x0e, 0x0f, 0x10,
-      ]);
+      const testExTraceId = "0102030405060708090a0b0c0d0e0f10";
 
       const metricsData: datasource.MetricsData = {
         resourceMetrics: [
@@ -159,9 +156,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
         "Exemplars.TimeUnix": `["${testExTimeUnixNano}"]`,
         "Exemplars.Value": `[${testExValue}]`,
         "Exemplars.SpanId": `["${testExSpanId}"]`,
-        "Exemplars.TraceId": `["${Array.from(testExTraceId)
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("")}"]`,
+        "Exemplars.TraceId": `["${testExTraceId}"]`,
       });
     });
 

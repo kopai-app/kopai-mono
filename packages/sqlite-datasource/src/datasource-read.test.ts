@@ -2030,7 +2030,7 @@ function createInsertGauge(
       timeUnixNano: e.timeUnixNano,
       asDouble: e.value,
       spanId: e.spanId,
-      traceId: e.traceId ? new TextEncoder().encode(e.traceId) : undefined,
+      traceId: e.traceId,
     }));
 
     await ds.writeMetrics({
