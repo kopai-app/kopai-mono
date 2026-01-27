@@ -9,6 +9,7 @@ import { metricsRoute } from "./routes/metrics.js";
 import { tracesRoute } from "./routes/traces.js";
 import { logsRoute } from "./routes/logs.js";
 import { collectorErrorHandler } from "./routes/error-handler.js";
+import { protobufPlugin } from "./protobuf/index.js";
 
 export const collectorRoutes: FastifyPluginAsyncZod<{
   telemetryDatasource: datasource.WriteTelemetryDatasource;
@@ -16,6 +17,9 @@ export const collectorRoutes: FastifyPluginAsyncZod<{
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
   fastify.setErrorHandler(collectorErrorHandler);
+
+  // Register protobuf support (OTLP/HTTP with application/x-protobuf)
+  fastify.register(protobufPlugin);
 
   fastify.register(metricsRoute, {
     writeMetricsDatasource: opts.telemetryDatasource,
