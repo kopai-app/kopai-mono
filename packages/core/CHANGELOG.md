@@ -1,5 +1,11 @@
 # @kopai/core
 
+## 0.4.0
+
+### Minor Changes
+
+- c9fe7a3: Add support for http/proto, update fix exemplar types
+
 ## 0.3.0
 
 ### Minor Changes

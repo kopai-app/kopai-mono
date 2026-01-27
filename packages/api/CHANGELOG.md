@@ -1,5 +1,12 @@
 # @kopai/api
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [c9fe7a3]
+  - @kopai/core@0.4.0
+
 ## 0.2.1
 
 ### Patch Changes
