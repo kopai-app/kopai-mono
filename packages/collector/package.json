@@ -32,7 +32,9 @@
     "dev": "tsdown --watch",
     "generate": "buf generate",
     "lint": "eslint src",
+    "pretype-check": "pnpm generate",
     "type-check": "tsc --noEmit",
+    "pretest": "pnpm generate",
     "test": "vitest run"
   },
   "peerDependencies": {
