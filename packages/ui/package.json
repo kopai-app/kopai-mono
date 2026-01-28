@@ -27,13 +27,18 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown",
-    "dev": "tsdown --watch",
+    "build": "tsdown && vite build",
+    "build:client": "vite build",
+    "dev": "vite",
     "lint": "eslint src",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@kopai/core": "workspace:*"
+    "@fastify/vite": "^8.1.0",
+    "@json-render/core": "^0.3.0",
+    "@json-render/react": "^0.2.0",
+    "@kopai/core": "workspace:*",
+    "fastify": "^5.7.2"
   },
   "peerDependencies": {
     "react": "^19.2.0",
@@ -43,8 +48,10 @@
     "@kopai/tsconfig": "workspace:*",
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tsdown": "^0.20.1"
+    "tsdown": "^0.20.1",
+    "vite": "^6.3.5"
   }
 }

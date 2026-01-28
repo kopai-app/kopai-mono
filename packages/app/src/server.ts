@@ -17,6 +17,7 @@ import {
   initializeDatabase,
   NodeSqliteTelemetryDatasource,
 } from "@kopai/sqlite-datasource";
+import { uiPlugin } from "@kopai/ui";
 
 const apiServer = fastify({
   logger: true,
@@ -26,6 +27,7 @@ const apiServer = fastify({
 apiServer.setValidatorCompiler(validatorCompiler);
 apiServer.setSerializerCompiler(serializerCompiler);
 
+const uiRoutes = ["/", "/dashboard", "/dashboard/*", "/api/generate"];
 apiServer.register(fastifySwagger, {
   openapi: {
     info: {
@@ -35,7 +37,10 @@ apiServer.register(fastifySwagger, {
     },
     servers: [],
   },
-  transform: jsonSchemaTransform,
+  transform: ({ schema, url, ...rest }) => {
+    if (uiRoutes.includes(url)) return { schema: { hide: true }, url };
+    return jsonSchemaTransform({ schema, url, ...rest });
+  },
   transformObject: jsonSchemaTransformObject,
 });
 
@@ -73,6 +78,7 @@ apiServer.after(() => {
   apiServer.register(apiRoutes, {
     readTelemetryDatasource: telemetryDatasource,
   });
+  apiServer.register(uiPlugin);
 });
 
 const collectorServer = fastify({
