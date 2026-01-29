@@ -41,7 +41,10 @@ export type ComponentRenderer<P = Record<string, unknown>> = ComponentType<
 /**
  * Registry mapping component type names to React components
  */
-export type ComponentRegistry = Record<string, ComponentRenderer<any>>;
+export type ComponentRegistry = Record<
+  string,
+  ComponentRenderer<Record<string, unknown>>
+>;
 
 /**
  * Props for the Renderer component

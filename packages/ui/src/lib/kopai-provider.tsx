@@ -1,5 +1,14 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { KopaiClient } from "@kopai/sdk";
+import type { KopaiClient as SDKClient } from "@kopai/sdk";
+
+export type KopaiClient = Pick<
+  SDKClient,
+  | "searchTracesPage"
+  | "searchLogsPage"
+  | "searchMetricsPage"
+  | "getTrace"
+  | "discoverMetrics"
+>;
 
 interface KopaiSDKContextValue {
   client: KopaiClient;

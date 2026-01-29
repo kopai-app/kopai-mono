@@ -6,4 +6,8 @@ export {
   type ComponentRenderProps,
   type ComponentRegistry,
 } from "./lib/renderer.js";
-export { KopaiSDKProvider, useKopaiSDK } from "./lib/kopai-provider.js";
+export {
+  KopaiSDKProvider,
+  useKopaiSDK,
+  type KopaiClient,
+} from "./lib/kopai-provider.js";

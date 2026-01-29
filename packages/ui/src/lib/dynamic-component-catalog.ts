@@ -137,9 +137,9 @@ export function createCatalog<
     elementSchema = componentSchemas[0] as unknown as z.ZodType<UIElement>;
   } else {
     elementSchema = z.discriminatedUnion("type", [
-      componentSchemas[0] as z.ZodObject<any>,
-      componentSchemas[1] as z.ZodObject<any>,
-      ...(componentSchemas.slice(2) as z.ZodObject<any>[]),
+      componentSchemas[0] as z.ZodObject<z.ZodRawShape>,
+      componentSchemas[1] as z.ZodObject<z.ZodRawShape>,
+      ...(componentSchemas.slice(2) as z.ZodObject<z.ZodRawShape>[]),
     ]) as unknown as z.ZodType<UIElement>;
   }
 

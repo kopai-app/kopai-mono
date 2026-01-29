@@ -6,6 +6,11 @@ import {
 } from "../lib/renderer.js";
 import type { UITree } from "../lib/dynamic-component-catalog.js";
 import { KopaiClient } from "@kopai/sdk";
+import { denormalizedSignals } from "@kopai/core";
+
+type OtelTracesRow = denormalizedSignals.OtelTracesRow;
+type OtelLogsRow = denormalizedSignals.OtelLogsRow;
+type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
 
 const tableStyle = {
   width: "100%",
@@ -55,7 +60,8 @@ function TracesTable(props: ComponentRenderProps) {
   if (loading) return <div>Loading traces...</div>;
   if (error) return <div style={{ color: "red" }}>Error: {error.message}</div>;
 
-  const traces = (data as any)?.data ?? [];
+  const traces = ((data as { data?: unknown[] })?.data ??
+    []) as OtelTracesRow[];
   return (
     <div style={{ marginBottom: 32 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -80,19 +86,27 @@ function TracesTable(props: ComponentRenderProps) {
             </tr>
           </thead>
           <tbody>
-            {traces.map((t: any, i: number) => (
+            {traces.map((t, i) => (
               <tr key={`${t.TraceId}-${t.SpanId}-${i}`}>
                 <td style={tdStyle}>{formatTimestamp(t.Timestamp)}</td>
-                <td style={tdStyle} title={t.TraceId}>{t.TraceId?.slice(0, 8)}...</td>
-                <td style={tdStyle} title={t.SpanId}>{t.SpanId?.slice(0, 8)}...</td>
+                <td style={tdStyle} title={t.TraceId}>
+                  {t.TraceId?.slice(0, 8)}...
+                </td>
+                <td style={tdStyle} title={t.SpanId}>
+                  {t.SpanId?.slice(0, 8)}...
+                </td>
                 <td style={tdStyle}>{t.ParentSpanId?.slice(0, 8) || "-"}</td>
-                <td style={tdStyle} title={t.SpanName}>{t.SpanName || "-"}</td>
+                <td style={tdStyle} title={t.SpanName}>
+                  {t.SpanName || "-"}
+                </td>
                 <td style={tdStyle}>{t.SpanKind || "-"}</td>
                 <td style={tdStyle}>{formatDuration(t.Duration)}</td>
                 <td style={tdStyle}>{t.ServiceName || "-"}</td>
                 <td style={tdStyle}>{t.StatusCode || "-"}</td>
                 <td style={tdStyle}>{t.StatusMessage || "-"}</td>
-                <td style={tdStyle} title={JSON.stringify(t.SpanAttributes)}>{formatAttrs(t.SpanAttributes)}</td>
+                <td style={tdStyle} title={JSON.stringify(t.SpanAttributes)}>
+                  {formatAttrs(t.SpanAttributes)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -109,7 +123,7 @@ function LogsTable(props: ComponentRenderProps) {
   if (loading) return <div>Loading logs...</div>;
   if (error) return <div style={{ color: "red" }}>Error: {error.message}</div>;
 
-  const logs = (data as any)?.data ?? [];
+  const logs = ((data as { data?: unknown[] })?.data ?? []) as OtelLogsRow[];
   return (
     <div style={{ marginBottom: 32 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -131,16 +145,26 @@ function LogsTable(props: ComponentRenderProps) {
             </tr>
           </thead>
           <tbody>
-            {logs.map((l: any, i: number) => (
+            {logs.map((l, i) => (
               <tr key={`${l.Timestamp}-${i}`}>
                 <td style={tdStyle}>{formatTimestamp(l.Timestamp)}</td>
-                <td style={tdStyle}>{l.SeverityText || l.SeverityNumber || "-"}</td>
-                <td style={{ ...tdStyle, maxWidth: 300 }} title={l.Body}>{l.Body || "-"}</td>
+                <td style={tdStyle}>
+                  {l.SeverityText || l.SeverityNumber || "-"}
+                </td>
+                <td style={{ ...tdStyle, maxWidth: 300 }} title={l.Body}>
+                  {l.Body || "-"}
+                </td>
                 <td style={tdStyle}>{l.ServiceName || "-"}</td>
-                <td style={tdStyle} title={l.TraceId}>{l.TraceId?.slice(0, 8) || "-"}</td>
-                <td style={tdStyle} title={l.SpanId}>{l.SpanId?.slice(0, 8) || "-"}</td>
+                <td style={tdStyle} title={l.TraceId}>
+                  {l.TraceId?.slice(0, 8) || "-"}
+                </td>
+                <td style={tdStyle} title={l.SpanId}>
+                  {l.SpanId?.slice(0, 8) || "-"}
+                </td>
                 <td style={tdStyle}>{l.ScopeName || "-"}</td>
-                <td style={tdStyle} title={JSON.stringify(l.LogAttributes)}>{formatAttrs(l.LogAttributes)}</td>
+                <td style={tdStyle} title={JSON.stringify(l.LogAttributes)}>
+                  {formatAttrs(l.LogAttributes)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -157,7 +181,8 @@ function MetricsTable(props: ComponentRenderProps) {
   if (loading) return <div>Loading metrics...</div>;
   if (error) return <div style={{ color: "red" }}>Error: {error.message}</div>;
 
-  const metrics = (data as any)?.data ?? [];
+  const metrics = ((data as { data?: unknown[] })?.data ??
+    []) as OtelMetricsRow[];
   return (
     <div style={{ marginBottom: 32 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -179,24 +204,34 @@ function MetricsTable(props: ComponentRenderProps) {
             </tr>
           </thead>
           <tbody>
-            {metrics.map((m: any, i: number) => {
+            {metrics.map((m, i) => {
               // Value depends on metric type
               let value = "-";
               if (m.MetricType === "Gauge" || m.MetricType === "Sum") {
                 value = m.Value?.toFixed(2) ?? "-";
-              } else if (m.MetricType === "Histogram" || m.MetricType === "Summary" || m.MetricType === "ExponentialHistogram") {
+              } else if (
+                m.MetricType === "Histogram" ||
+                m.MetricType === "Summary" ||
+                m.MetricType === "ExponentialHistogram"
+              ) {
                 value = `count=${m.Count ?? 0}, sum=${m.Sum?.toFixed(2) ?? 0}`;
               }
               return (
                 <tr key={`${m.MetricName}-${m.TimeUnix}-${i}`}>
                   <td style={tdStyle}>{formatTimestamp(m.TimeUnix)}</td>
-                  <td style={tdStyle} title={m.MetricName}>{m.MetricName || "-"}</td>
+                  <td style={tdStyle} title={m.MetricName}>
+                    {m.MetricName || "-"}
+                  </td>
                   <td style={tdStyle}>{m.MetricType || "-"}</td>
                   <td style={tdStyle}>{value}</td>
                   <td style={tdStyle}>{m.MetricUnit || "-"}</td>
                   <td style={tdStyle}>{m.ServiceName || "-"}</td>
-                  <td style={tdStyle} title={m.MetricDescription}>{m.MetricDescription?.slice(0, 30) || "-"}</td>
-                  <td style={tdStyle} title={JSON.stringify(m.Attributes)}>{formatAttrs(m.Attributes)}</td>
+                  <td style={tdStyle} title={m.MetricDescription}>
+                    {m.MetricDescription?.slice(0, 30) || "-"}
+                  </td>
+                  <td style={tdStyle} title={JSON.stringify(m.Attributes)}>
+                    {formatAttrs(m.Attributes)}
+                  </td>
                 </tr>
               );
             })}
@@ -211,7 +246,12 @@ function Container({ children }: ComponentRenderProps) {
   return <div style={{ padding: 24 }}>{children}</div>;
 }
 
-const registry: ComponentRegistry = { TracesTable, LogsTable, MetricsTable, Container };
+const registry: ComponentRegistry = {
+  TracesTable,
+  LogsTable,
+  MetricsTable,
+  Container,
+};
 
 // UI tree with all three signal types
 const testTree: UITree = {
@@ -264,7 +304,9 @@ export default function DashboardPage() {
     <KopaiSDKProvider client={client}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: 48 }}>
         <h1>Kopai Dashboard</h1>
-        <p style={{ color: "var(--muted)" }}>Real-time telemetry data from KopaiSDK</p>
+        <p style={{ color: "var(--muted)" }}>
+          Real-time telemetry data from KopaiSDK
+        </p>
         <Renderer tree={testTree} registry={registry} />
       </div>
     </KopaiSDKProvider>

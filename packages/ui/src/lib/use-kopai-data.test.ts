@@ -5,11 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { useKopaiData } from "./use-kopai-data.js";
-import { KopaiSDKProvider } from "./kopai-provider.js";
+import { KopaiSDKProvider, type KopaiClient } from "./kopai-provider.js";
 import type { DataSource } from "./dynamic-component-catalog.js";
-import type { KopaiClient } from "@kopai/sdk";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 const createMockClient = () => ({
   searchTracesPage: vi.fn(),
@@ -17,19 +14,13 @@ const createMockClient = () => ({
   searchMetricsPage: vi.fn(),
   getTrace: vi.fn(),
   discoverMetrics: vi.fn(),
-  searchTraces: vi.fn(),
-  searchLogs: vi.fn(),
-  searchMetrics: vi.fn(),
 });
 
 type MockClient = ReturnType<typeof createMockClient>;
 
-function wrapper(client: MockClient) {
+function wrapper(client: KopaiClient) {
   return function Wrapper({ children }: { children: ReactNode }) {
-    return createElement(
-      KopaiSDKProvider,
-      { client: client as unknown as KopaiClient, children }
-    );
+    return createElement(KopaiSDKProvider, { client, children });
   };
 }
 
@@ -242,10 +233,12 @@ describe("useKopaiData", () => {
   describe("cleanup", () => {
     it("aborts request on unmount", async () => {
       let abortSignal: AbortSignal | undefined;
-      mockClient.searchTracesPage.mockImplementation(async (_: any, opts: any) => {
-        abortSignal = opts?.signal;
-        return new Promise(() => {});
-      });
+      mockClient.searchTracesPage.mockImplementation(
+        async (_: unknown, opts?: { signal?: AbortSignal }) => {
+          abortSignal = opts?.signal;
+          return new Promise(() => {});
+        }
+      );
 
       const dataSource: DataSource = {
         method: "searchTracesPage",
@@ -267,22 +260,26 @@ describe("useKopaiData", () => {
 
     it("aborts previous request on dataSource change", async () => {
       const signals: AbortSignal[] = [];
-      mockClient.searchTracesPage.mockImplementation(async (_: any, opts: any) => {
-        if (opts?.signal) signals.push(opts.signal);
-        return { data: [], nextCursor: null };
-      });
-      mockClient.searchLogsPage.mockImplementation(async (_: any, opts: any) => {
-        if (opts?.signal) signals.push(opts.signal);
-        return { data: [], nextCursor: null };
-      });
+      mockClient.searchTracesPage.mockImplementation(
+        async (_: unknown, opts?: { signal?: AbortSignal }) => {
+          if (opts?.signal) signals.push(opts.signal);
+          return { data: [], nextCursor: null };
+        }
+      );
+      mockClient.searchLogsPage.mockImplementation(
+        async (_: unknown, opts?: { signal?: AbortSignal }) => {
+          if (opts?.signal) signals.push(opts.signal);
+          return { data: [], nextCursor: null };
+        }
+      );
 
-      const { rerender } = renderHook<
-        unknown,
-        { ds: DataSource }
-      >(({ ds }) => useKopaiData(ds), {
-        wrapper: wrapper(mockClient),
-        initialProps: { ds: { method: "searchTracesPage", params: {} } },
-      });
+      const { rerender } = renderHook<unknown, { ds: DataSource }>(
+        ({ ds }) => useKopaiData(ds),
+        {
+          wrapper: wrapper(mockClient),
+          initialProps: { ds: { method: "searchTracesPage", params: {} } },
+        }
+      );
 
       await waitFor(() => {
         expect(signals.length).toBe(1);

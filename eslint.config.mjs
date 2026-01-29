@@ -7,5 +7,10 @@ export default defineConfig(
     ignores: ["**/dist/**", "**/node_modules/**"],
   },
   eslint.configs.recommended,
-  tseslint.configs.recommended
+  tseslint.configs.recommended,
+  {
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+    },
+  }
 );
