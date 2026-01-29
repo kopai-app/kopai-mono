@@ -4,8 +4,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { render, screen, waitFor } from "@testing-library/react";
-import { Renderer, type ComponentRenderProps, type ComponentRegistry } from "./renderer.js";
+import { render, screen, waitFor, act } from "@testing-library/react";
+import {
+  Renderer,
+  type ComponentRenderProps,
+  type ComponentRegistry,
+} from "./renderer.js";
 import { KopaiSDKProvider } from "./kopai-provider.js";
 import type { UITree } from "./dynamic-component-catalog.js";
 import type { KopaiClient } from "@kopai/sdk";
@@ -32,7 +36,11 @@ function createWrapper(client: MockClient) {
 
 // Simple test components
 function Box({ element, children }: ComponentRenderProps) {
-  return createElement("div", { "data-type": element.type, "data-key": element.key }, children);
+  return createElement(
+    "div",
+    { "data-type": element.type, "data-key": element.key },
+    children
+  );
 }
 
 function Text({ element }: ComponentRenderProps) {
@@ -92,7 +100,9 @@ describe("Renderer", () => {
     const result = renderToStaticMarkup(
       createElement(Renderer, { tree, registry })
     );
-    expect(result).toBe('<div data-type="Box" data-key="box-1"><span>Nested</span></div>');
+    expect(result).toBe(
+      '<div data-type="Box" data-key="box-1"><span>Nested</span></div>'
+    );
   });
 
   it("renders deeply nested tree", () => {
@@ -100,8 +110,19 @@ describe("Renderer", () => {
       root: "box-1",
       elements: {
         "box-1": { key: "box-1", type: "Box", props: {}, children: ["box-2"] },
-        "box-2": { key: "box-2", type: "Box", props: {}, children: ["text-1"], parentKey: "box-1" },
-        "text-1": { key: "text-1", type: "Text", props: { content: "Deep" }, parentKey: "box-2" },
+        "box-2": {
+          key: "box-2",
+          type: "Box",
+          props: {},
+          children: ["text-1"],
+          parentKey: "box-1",
+        },
+        "text-1": {
+          key: "text-1",
+          type: "Text",
+          props: { content: "Deep" },
+          parentKey: "box-2",
+        },
       },
     };
     const result = renderToStaticMarkup(
@@ -123,7 +144,9 @@ describe("Renderer", () => {
       createElement(Renderer, { tree, registry })
     );
     expect(result).toBe("");
-    expect(warn).toHaveBeenCalledWith("No renderer for component type: Unknown");
+    expect(warn).toHaveBeenCalledWith(
+      "No renderer for component type: Unknown"
+    );
     warn.mockRestore();
   });
 
@@ -153,7 +176,11 @@ describe("Renderer", () => {
           props: {},
           children: ["missing-1", "text-1"],
         },
-        "text-1": { key: "text-1", type: "Text", props: { content: "Present" } },
+        "text-1": {
+          key: "text-1",
+          type: "Text",
+          props: { content: "Present" },
+        },
       },
     };
     const result = renderToStaticMarkup(
@@ -172,7 +199,11 @@ describe("Renderer", () => {
     const tree: UITree = {
       root: "capture-1",
       elements: {
-        "capture-1": { key: "capture-1", type: "Capture", props: { foo: "bar" } },
+        "capture-1": {
+          key: "capture-1",
+          type: "Capture",
+          props: { foo: "bar" },
+        },
       },
     };
     renderToStaticMarkup(
@@ -205,18 +236,30 @@ describe("Renderer with dataSource", () => {
 
   function DataComponent(props: ComponentRenderProps) {
     if (!props.hasData) {
-      return createElement("div", { "data-testid": "no-data" }, "No data source");
+      return createElement(
+        "div",
+        { "data-testid": "no-data" },
+        "No data source"
+      );
     }
     const { data, loading, error } = props;
-    if (loading) return createElement("div", { "data-testid": "loading" }, "Loading...");
-    if (error) return createElement("div", { "data-testid": "error" }, error.message);
-    return createElement("div", { "data-testid": "data" }, JSON.stringify(data));
+    if (loading)
+      return createElement("div", { "data-testid": "loading" }, "Loading...");
+    if (error)
+      return createElement("div", { "data-testid": "error" }, error.message);
+    return createElement(
+      "div",
+      { "data-testid": "data" },
+      JSON.stringify(data)
+    );
   }
 
   const dataRegistry: ComponentRegistry = { DataComponent };
 
   it("passes data props to component with dataSource", async () => {
-    mockClient.searchTracesPage.mockResolvedValueOnce({ data: [{ traceId: "abc" }] });
+    mockClient.searchTracesPage.mockResolvedValueOnce({
+      data: [{ traceId: "abc" }],
+    });
 
     const tree: UITree = {
       root: "data-1",
@@ -231,7 +274,9 @@ describe("Renderer with dataSource", () => {
     };
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: dataRegistry }), { wrapper: Wrapper });
+    render(createElement(Renderer, { tree, registry: dataRegistry }), {
+      wrapper: Wrapper,
+    });
 
     // Initially loading
     expect(screen.getByTestId("loading")).toBeDefined();
@@ -240,12 +285,16 @@ describe("Renderer with dataSource", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("data")).not.toBeNull();
     });
-    expect(screen.getByTestId("data").textContent).toBe('{"data":[{"traceId":"abc"}]}');
+    expect(screen.getByTestId("data").textContent).toBe(
+      '{"data":[{"traceId":"abc"}]}'
+    );
   });
 
   it("passes loading state correctly", async () => {
     let resolvePromise: (value: unknown) => void;
-    const promise = new Promise((resolve) => { resolvePromise = resolve; });
+    const promise = new Promise((resolve) => {
+      resolvePromise = resolve;
+    });
     mockClient.searchTracesPage.mockReturnValueOnce(promise);
 
     const tree: UITree = {
@@ -261,7 +310,9 @@ describe("Renderer with dataSource", () => {
     };
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: dataRegistry }), { wrapper: Wrapper });
+    render(createElement(Renderer, { tree, registry: dataRegistry }), {
+      wrapper: Wrapper,
+    });
 
     expect(screen.getByTestId("loading")).toBeDefined();
 
@@ -272,7 +323,9 @@ describe("Renderer with dataSource", () => {
   });
 
   it("passes error state correctly", async () => {
-    mockClient.searchTracesPage.mockRejectedValueOnce(new Error("Network error"));
+    mockClient.searchTracesPage.mockRejectedValueOnce(
+      new Error("Network error")
+    );
 
     const tree: UITree = {
       root: "data-1",
@@ -287,7 +340,9 @@ describe("Renderer with dataSource", () => {
     };
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: dataRegistry }), { wrapper: Wrapper });
+    render(createElement(Renderer, { tree, registry: dataRegistry }), {
+      wrapper: Wrapper,
+    });
 
     await waitFor(() => {
       expect(screen.queryByTestId("error")).not.toBeNull();
@@ -300,11 +355,16 @@ describe("Renderer with dataSource", () => {
       .mockResolvedValueOnce({ data: [{ traceId: "first" }] })
       .mockResolvedValueOnce({ data: [{ traceId: "second" }] });
 
-    let capturedRefetch: ((params?: Record<string, unknown>) => void) | null = null;
+    let capturedRefetch: ((params?: Record<string, unknown>) => void) | null =
+      null;
     function RefetchComponent(props: ComponentRenderProps) {
       if (!props.hasData) return null;
       capturedRefetch = props.refetch;
-      return createElement("div", { "data-testid": "data" }, JSON.stringify(props.data));
+      return createElement(
+        "div",
+        { "data-testid": "data" },
+        JSON.stringify(props.data)
+      );
     }
 
     const tree: UITree = {
@@ -320,13 +380,17 @@ describe("Renderer with dataSource", () => {
     };
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: { RefetchComponent } }), { wrapper: Wrapper });
+    render(createElement(Renderer, { tree, registry: { RefetchComponent } }), {
+      wrapper: Wrapper,
+    });
 
     await waitFor(() => {
       expect(capturedRefetch).not.toBeNull();
     });
 
-    capturedRefetch!({ limit: 5 });
+    act(() => {
+      capturedRefetch!({ limit: 5 });
+    });
 
     await waitFor(() => {
       expect(mockClient.searchTracesPage).toHaveBeenCalledTimes(2);
@@ -347,7 +411,9 @@ describe("Renderer with dataSource", () => {
     };
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: dataRegistry }), { wrapper: Wrapper });
+    render(createElement(Renderer, { tree, registry: dataRegistry }), {
+      wrapper: Wrapper,
+    });
 
     expect(screen.getByTestId("no-data")).toBeDefined();
     expect(screen.getByTestId("no-data").textContent).toBe("No data source");
