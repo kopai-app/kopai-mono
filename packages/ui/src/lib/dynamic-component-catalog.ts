@@ -40,29 +40,16 @@ export interface ComponentDefinition<
   description?: string;
 }
 
-export interface ActionDefinition<TParams = Record<string, unknown>> {
-  /** Zod schema for params validation */
-  params?: z.ZodType<TParams>;
-  /** Description for AI */
-  description?: string;
-}
-
 export interface CatalogConfig<
   TComponents extends Record<string, ComponentDefinition> = Record<
     string,
     ComponentDefinition
-  >,
-  TActions extends Record<string, ActionDefinition> = Record<
-    string,
-    ActionDefinition
   >,
 > {
   /** Catalog name */
   name?: string;
   /** Component definitions */
   components: TComponents;
-  /** Action definitions with param schemas */
-  actions?: TActions; // TODO: maybe this should go to the component itself
 }
 
 /**
@@ -95,17 +82,10 @@ export interface UIElement<
 
 export function createCatalog<
   TComponents extends Record<string, ComponentDefinition>,
-  TActions extends Record<string, ActionDefinition> = Record<
-    string,
-    ActionDefinition
-  >,
->(
-  config: CatalogConfig<TComponents, TActions>
-): Catalog<TComponents, TActions> {
-  const { name = "unnamed", components, actions = {} as TActions } = config;
+>(config: CatalogConfig<TComponents>): Catalog<TComponents> {
+  const { name = "unnamed", components } = config;
 
   const componentNames = Object.keys(components) as (keyof TComponents)[];
-  const actionNames = Object.keys(actions) as (keyof TActions)[];
 
   // Create element schema for each component type
   const componentSchemas = componentNames.map((componentName) => {
@@ -152,18 +132,12 @@ export function createCatalog<
   return {
     name,
     componentNames,
-    actionNames,
     components,
-    actions,
     elementSchema,
     treeSchema,
 
     hasComponent(type: string) {
       return type in components;
-    },
-
-    hasAction(name: string) {
-      return name in actions;
     },
 
     validateElement(element: unknown) {
@@ -189,29 +163,19 @@ export interface Catalog<
     string,
     ComponentDefinition
   >,
-  TActions extends Record<string, ActionDefinition> = Record<
-    string,
-    ActionDefinition
-  >,
 > {
   /** Catalog name */
   readonly name: string;
   /** Component names */
   readonly componentNames: (keyof TComponents)[];
-  /** Action names */
-  readonly actionNames: (keyof TActions)[];
   /** Component definitions */
   readonly components: TComponents;
-  /** Action definitions */
-  readonly actions: TActions;
   /** Full element schema for AI generation */
   readonly elementSchema: z.ZodType<UIElement>;
   /** Full UI tree schema */
   readonly treeSchema: z.ZodType<UITree>;
   /** Check if component exists */
   hasComponent(type: string): boolean;
-  /** Check if action exists */
-  hasAction(name: string): boolean;
   /** Validate an element */
   validateElement(element: unknown): {
     success: boolean;
