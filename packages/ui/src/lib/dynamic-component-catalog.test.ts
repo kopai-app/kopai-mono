@@ -3,36 +3,27 @@ import { z } from "zod";
 import { createCatalog } from "./dynamic-component-catalog.js";
 
 describe("createCatalog", () => {
-  it("creates catalog with name, components, actions", () => {
+  it("creates catalog with name and components", () => {
     const catalog = createCatalog({
       name: "test-catalog",
       components: {
         Button: { props: z.object({ label: z.string() }) },
       },
-      actions: {
-        click: { params: z.object({ target: z.string() }) },
-      },
     });
 
     expect(catalog.name).toBe("test-catalog");
     expect(catalog.components).toHaveProperty("Button");
-    expect(catalog.actions).toHaveProperty("click");
   });
 
-  it("returns correct componentNames and actionNames", () => {
+  it("returns correct componentNames", () => {
     const catalog = createCatalog({
       components: {
         Button: { props: z.object({ label: z.string() }) },
         Input: { props: z.object({ placeholder: z.string() }) },
       },
-      actions: {
-        click: {},
-        submit: {},
-      },
     });
 
     expect(catalog.componentNames).toEqual(["Button", "Input"]);
-    expect(catalog.actionNames).toEqual(["click", "submit"]);
   });
 
   it("uses default name when not provided", () => {
@@ -43,14 +34,12 @@ describe("createCatalog", () => {
     expect(catalog.name).toBe("unnamed");
   });
 
-  it("handles empty components/actions", () => {
+  it("handles empty components", () => {
     const catalog = createCatalog({
       components: {},
-      actions: {},
     });
 
     expect(catalog.componentNames).toEqual([]);
-    expect(catalog.actionNames).toEqual([]);
   });
 });
 
@@ -59,10 +48,6 @@ describe("catalog methods", () => {
     components: {
       Button: { props: z.object({ label: z.string() }) },
       Text: { props: z.object({ content: z.string() }) },
-    },
-    actions: {
-      click: {},
-      navigate: { params: z.object({ url: z.string() }) },
     },
   });
 
@@ -74,17 +59,6 @@ describe("catalog methods", () => {
 
     it("returns false for non-existing component", () => {
       expect(catalog.hasComponent("NonExistent")).toBe(false);
-    });
-  });
-
-  describe("hasAction", () => {
-    it("returns true for existing action", () => {
-      expect(catalog.hasAction("click")).toBe(true);
-      expect(catalog.hasAction("navigate")).toBe(true);
-    });
-
-    it("returns false for non-existing action", () => {
-      expect(catalog.hasAction("nonExistent")).toBe(false);
     });
   });
 
@@ -348,5 +322,27 @@ describe("edge cases", () => {
           .success
       ).toBe(false);
     });
+  });
+});
+
+describe("toPromptInstructions", () => {
+  it("generates full prompt instructions", () => {
+    const catalog = createCatalog({
+      components: {
+        Card: {
+          props: z.object({ title: z.string() }),
+          description: "A card container",
+          hasChildren: true,
+        },
+        Button: {
+          props: z.object({ label: z.string() }),
+          description: "Clickable button",
+        },
+      },
+    });
+
+    const prompt = catalog.toPromptInstructions();
+
+    expect(prompt).toMatchSnapshot();
   });
 });

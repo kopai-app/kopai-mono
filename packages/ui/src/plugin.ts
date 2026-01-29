@@ -16,7 +16,7 @@ export const uiPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.get("/dashboard/*", (_req, reply) => reply.html());
 
   // Stub API for dashboard widget generation
-  fastify.post("/api/generate", async () => {
+  fastify.get("/api/generate", async () => {
     return { elements: {}, rootIds: [] };
   });
 

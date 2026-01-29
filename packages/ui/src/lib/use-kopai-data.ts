@@ -17,7 +17,9 @@ export function useKopaiData<T = unknown>(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const paramsOverrideRef = useRef<Record<string, unknown> | undefined>(undefined);
+  const paramsOverrideRef = useRef<Record<string, unknown> | undefined>(
+    undefined
+  );
 
   const fetchData = useCallback(
     async (signal: AbortSignal, params: Record<string, unknown>) => {

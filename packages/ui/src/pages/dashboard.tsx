@@ -1,12 +1,15 @@
 import { KopaiSDKProvider } from "../lib/kopai-provider.js";
 import {
-  Renderer,
-  type ComponentRegistry,
+  createRendererFromCatalog,
   type ComponentRenderProps,
 } from "../lib/renderer.js";
-import type { UITree } from "../lib/dynamic-component-catalog.js";
+import {
+  createCatalog,
+  type UITree,
+} from "../lib/dynamic-component-catalog.js";
 import { KopaiClient } from "@kopai/sdk";
 import { denormalizedSignals } from "@kopai/core";
+import { z } from "zod";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 type OtelLogsRow = denormalizedSignals.OtelLogsRow;
@@ -54,7 +57,10 @@ function formatAttrs(attrs: Record<string, unknown> | undefined) {
 }
 
 // Traces Table
-function TracesTable(props: ComponentRenderProps) {
+const tracesTablePropsSchema = z.object({ foo: z.string() });
+type TracesTableProps = z.infer<typeof tracesTablePropsSchema>;
+
+function TracesTable(props: ComponentRenderProps<TracesTableProps>) {
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading traces...</div>;
@@ -100,7 +106,9 @@ function TracesTable(props: ComponentRenderProps) {
                   {t.SpanName || "-"}
                 </td>
                 <td style={tdStyle}>{t.SpanKind || "-"}</td>
-                <td style={tdStyle}>{formatDuration(t.Duration)}</td>
+                <td style={tdStyle}>
+                  {t.Duration ? formatDuration(t.Duration) : "-"}
+                </td>
                 <td style={tdStyle}>{t.ServiceName || "-"}</td>
                 <td style={tdStyle}>{t.StatusCode || "-"}</td>
                 <td style={tdStyle}>{t.StatusMessage || "-"}</td>
@@ -246,12 +254,22 @@ function Container({ children }: ComponentRenderProps) {
   return <div style={{ padding: 24 }}>{children}</div>;
 }
 
-const registry: ComponentRegistry = {
+const catalog = createCatalog({
+  name: "dashboard",
+  components: {
+    TracesTable: { props: tracesTablePropsSchema },
+    LogsTable: { props: z.object({}) },
+    MetricsTable: { props: z.object({}) },
+    Container: { props: z.object({}), hasChildren: true },
+  },
+});
+
+const DashboardRenderer = createRendererFromCatalog(catalog, {
   TracesTable,
   LogsTable,
   MetricsTable,
   Container,
-};
+});
 
 // UI tree with all three signal types
 const testTree: UITree = {
@@ -266,7 +284,7 @@ const testTree: UITree = {
     "traces-table": {
       key: "traces-table",
       type: "TracesTable",
-      props: {},
+      props: { foo: "bar" },
       parentKey: "container-1",
       dataSource: {
         method: "searchTracesPage",
@@ -296,6 +314,12 @@ const testTree: UITree = {
   },
 };
 
+// Validate tree against catalog schema
+const validationResult = catalog.validateTree(testTree);
+if (!validationResult.success) {
+  console.error("Invalid UI tree:", validationResult.error);
+}
+
 // Create SDK client pointing to local server
 const client = new KopaiClient({ baseUrl: "http://localhost:8000/signals" });
 
@@ -307,7 +331,7 @@ export default function DashboardPage() {
         <p style={{ color: "var(--muted)" }}>
           Real-time telemetry data from KopaiSDK
         </p>
-        <Renderer tree={testTree} registry={registry} />
+        <DashboardRenderer tree={testTree} />
       </div>
     </KopaiSDKProvider>
   );

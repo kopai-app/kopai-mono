@@ -1,5 +1,11 @@
 import { type ComponentType, type ReactNode } from "react";
-import type { UIElement, UITree } from "./dynamic-component-catalog.js";
+import type { z } from "zod";
+import type {
+  Catalog,
+  ComponentDefinition,
+  UIElement,
+  UITree,
+} from "./dynamic-component-catalog.js";
 import { useKopaiData } from "./use-kopai-data.js";
 
 /**
@@ -45,6 +51,16 @@ export type ComponentRegistry = Record<
   string,
   ComponentRenderer<Record<string, unknown>>
 >;
+
+/**
+ * Derives a type-safe ComponentRegistry from a Catalog.
+ * Ensures each component's props match the zod schema.
+ */
+export type RegistryFromCatalog<
+  TComponents extends Record<string, ComponentDefinition>,
+> = {
+  [K in keyof TComponents]: ComponentRenderer<z.infer<TComponents[K]["props"]>>;
+};
 
 /**
  * Props for the Renderer component
@@ -151,4 +167,26 @@ export function Renderer({ tree, registry, fallback }: RendererProps) {
       fallback={fallback}
     />
   );
+}
+
+/**
+ * Creates a pre-bound Renderer from a Catalog and type-safe registry.
+ * Enforces that registry components match catalog schema definitions.
+ */
+export function createRendererFromCatalog<
+  TComponents extends Record<string, ComponentDefinition>,
+>(
+  _catalog: Catalog<TComponents>,
+  registry: RegistryFromCatalog<TComponents>,
+  fallback?: ComponentRenderer
+): ComponentType<{ tree: UITree | null }> {
+  return function CatalogRenderer({ tree }) {
+    return (
+      <Renderer
+        tree={tree}
+        registry={registry as ComponentRegistry}
+        fallback={fallback}
+      />
+    );
+  };
 }
