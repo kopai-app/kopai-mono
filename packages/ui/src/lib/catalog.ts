@@ -1,10 +1,7 @@
-import { createCatalog } from "@json-render/core";
+import { createCatalog } from "./dynamic-component-catalog.js";
 import { z } from "zod";
 
-/**
- * Note: OpenAI structured output requires all fields to be required.
- * Use .nullable() instead of .optional() for optional fields.
- */
+// TODO: reimplement createCatalog
 export const dashboardCatalog = createCatalog({
   name: "dashboard",
   components: {
@@ -153,13 +150,6 @@ export const dashboardCatalog = createCatalog({
       description: "Empty state placeholder",
     },
   },
-  actions: {
-    export_report: { description: "Export the current dashboard to PDF" },
-    refresh_data: { description: "Refresh all metrics and charts" },
-    view_details: { description: "View detailed information" },
-    apply_filter: { description: "Apply the current filter settings" },
-  },
-  validation: "strict",
 });
 
 // Export the component list for the AI prompt
