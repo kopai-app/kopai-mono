@@ -133,6 +133,7 @@ defp send_log(message, endpoint, service_name) do
         logRecords: [%{
           timeUnixNano: to_string(timestamp),
           severityText: "INFO",
+          severityNumber: 9,
           body: %{stringValue: message}
         }]
       }]
@@ -188,14 +189,21 @@ defp send_otlp_request(url, body) do
   url_charlist = String.to_charlist(url)
   json_body = Jason.encode!(body)
 
-  :httpc.request(
+  case :httpc.request(
     :post,
     {url_charlist, [{~c"content-type", ~c"application/json"}], ~c"application/json", json_body},
     [{:timeout, 5000}],
     []
-  )
+  ) do
+    {:ok, _response} -> :ok
+    {:error, reason} ->
+      IO.puts("OTLP request to #{url} failed: #{inspect(reason)}")
+      {:error, reason}
+  end
 rescue
-  _ -> :ok
+  error ->
+    IO.puts("OTLP request to #{url} raised: #{inspect(error)}")
+    {:error, error}
 end
 ```
 

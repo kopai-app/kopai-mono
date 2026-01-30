@@ -136,11 +136,11 @@ void InitLogger() {
     logs_api::Provider::SetLoggerProvider(provider);
 }
 
-// Create logs
+// Create logs using EmitLogRecord (correct C++ Logs API)
 auto logger = logs_api::Provider::GetLoggerProvider()->GetLogger("my-app");
-logger->Info("Application started");
-logger->Warn("Warning message");
-logger->Error("Error occurred");
+logger->EmitLogRecord(opentelemetry::logs::Severity::kInfo, "Application started");
+logger->EmitLogRecord(opentelemetry::logs::Severity::kWarn, "Warning message");
+logger->EmitLogRecord(opentelemetry::logs::Severity::kError, "Error occurred");
 ```
 
 ### Metrics
@@ -153,6 +153,7 @@ logger->Error("Error occurred");
 #include "opentelemetry/sdk/metrics/meter_context_factory.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_options.h"
+#include "opentelemetry/sdk/metrics/view/view_registry_factory.h"
 #include "opentelemetry/metrics/provider.h"
 
 namespace metrics_api = opentelemetry::metrics;
@@ -172,7 +173,10 @@ void InitMeter() {
     auto reader = metrics_sdk::PeriodicExportingMetricReaderFactory::Create(
         std::move(exporter), reader_opts);
 
-    auto context = metrics_sdk::MeterContextFactory::Create();
+    // Create meter context with resource for proper service.name attribution
+    auto resource = createResource();
+    auto views = metrics_sdk::ViewRegistryFactory::Create();
+    auto context = metrics_sdk::MeterContextFactory::Create(std::move(views), resource);
     context->AddMetricReader(std::move(reader));
 
     std::shared_ptr<metrics_api::MeterProvider> provider =
