@@ -52,7 +52,7 @@ import (
     sdkmetric "go.opentelemetry.io/otel/sdk/metric"
     "go.opentelemetry.io/otel/sdk/resource"
     sdktrace "go.opentelemetry.io/otel/sdk/trace"
-    semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+    semconv "go.opentelemetry.io/otel/semconv/v1.26.0" // Use latest: https://pkg.go.dev/go.opentelemetry.io/otel/semconv
 )
 
 // Module-level tracer, meter, logger (initialized once)

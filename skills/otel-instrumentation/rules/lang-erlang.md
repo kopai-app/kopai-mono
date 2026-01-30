@@ -17,17 +17,19 @@ Set up OpenTelemetry for Erlang/Elixir applications with traces, logs, and metri
 
 ### Elixir (mix.exs)
 
+**Note:** Replace `X.X` with the latest versions from [hex.pm](https://hex.pm).
+
 ```elixir
 defp deps do
   [
     # OpenTelemetry SDK
-    {:opentelemetry_api, "~> 1.4"},
-    {:opentelemetry, "~> 1.5"},
-    {:opentelemetry_exporter, "~> 1.8"},
-    {:opentelemetry_cowboy, "~> 1.0"},  # Auto-instrumentation for Cowboy/Plug
+    {:opentelemetry_api, "~> X.X"},
+    {:opentelemetry, "~> X.X"},
+    {:opentelemetry_exporter, "~> X.X"},
+    {:opentelemetry_cowboy, "~> X.X"},  # Auto-instrumentation for Cowboy/Plug
 
     # For direct HTTP/JSON (logs and metrics)
-    {:jason, "~> 1.4"}
+    {:jason, "~> X.X"}
   ]
 end
 ```

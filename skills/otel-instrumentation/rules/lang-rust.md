@@ -10,22 +10,24 @@ Set up OpenTelemetry SDK for Rust applications with traces, logs, and metrics.
 
 ### Cargo.toml
 
+**Note:** Replace `*` with the latest versions from [crates.io](https://crates.io/crates/opentelemetry).
+
 ```toml
 [dependencies]
 # Web framework (optional)
-axum = "0.7"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
+axum = "*"
+tokio = { version = "*", features = ["full"] }
+serde = { version = "*", features = ["derive"] }
 
 # OpenTelemetry SDK
-opentelemetry = "0.31"
-opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.31", features = ["http-proto", "http-json", "logs"] }
+opentelemetry = "*"
+opentelemetry_sdk = { version = "*", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "*", features = ["http-proto", "http-json", "logs"] }
 
 # Logging integration
-opentelemetry-appender-tracing = "0.31"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+opentelemetry-appender-tracing = "*"
+tracing = "*"
+tracing-subscriber = { version = "*", features = ["env-filter"] }
 ```
 
 ### Configuration
