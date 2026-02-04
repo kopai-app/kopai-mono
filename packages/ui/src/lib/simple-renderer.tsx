@@ -40,24 +40,25 @@ type WithoutData = {
   hasData: false;
 };
 
-type RendererComponentProps<CD extends ComponentDefinition> = CD extends {
-  hasChildren: true;
-  props: infer P;
-}
-  ?
-      | ({
-          element: BaseElement<InferProps<P>>;
-          children: ReactNode;
-        } & WithoutData)
-      | ({
-          element: BaseElement<InferProps<P>>;
-          children: ReactNode;
-        } & WithData)
-  : CD extends { props: infer P }
+export type RendererComponentProps<CD extends ComponentDefinition> =
+  CD extends {
+    hasChildren: true;
+    props: infer P;
+  }
     ?
-        | ({ element: BaseElement<InferProps<P>> } & WithoutData)
-        | ({ element: BaseElement<InferProps<P>> } & WithData)
-    : never;
+        | ({
+            element: BaseElement<InferProps<P>>;
+            children: ReactNode;
+          } & WithoutData)
+        | ({
+            element: BaseElement<InferProps<P>>;
+            children: ReactNode;
+          } & WithData)
+    : CD extends { props: infer P }
+      ?
+          | ({ element: BaseElement<InferProps<P>> } & WithoutData)
+          | ({ element: BaseElement<InferProps<P>> } & WithData)
+      : never;
 
 type RegistryFromCatalog<C extends Catalog> = {
   [K in keyof C["components"]]: ComponentType<

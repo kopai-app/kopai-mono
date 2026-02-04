@@ -161,7 +161,7 @@ describe("schemas", () => {
             props: { label: "Click" },
             dataSource: {
               method: "searchTracesPage",
-              params: { invalidParam: true },
+              params: { limit: null },
             },
           },
         },
@@ -233,7 +233,7 @@ describe("schemas", () => {
       const _validTree: UiTree = {
         root: "card-1",
         elements: {
-          Card: {
+          "card-1": {
             key: "card-1",
             type: "Card",
             children: ["btn-1"],
@@ -244,7 +244,7 @@ describe("schemas", () => {
               params: { limit: 10 },
             },
           },
-          Button: {
+          "btn-1": {
             key: "btn-1",
             type: "Button",
             children: [],
@@ -254,15 +254,16 @@ describe("schemas", () => {
         },
       };
 
-      const _invalidKey: UiTree = {
+      const _invalidType: UiTree = {
         root: "x",
         elements: {
-          // @ts-expect-error - non-existent element key
-          NonExistent: {
-            key: "x",
-            type: "x",
+          "random-1": {
+            key: "random-1",
+            // @ts-expect-error - non-existent type
+            type: "NonExistant",
             children: [],
             parentKey: "",
+            // @ts-expect-error - props don't match any valid type
             props: {},
           },
         },
