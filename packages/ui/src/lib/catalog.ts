@@ -1,8 +1,7 @@
-import { createCatalog } from "./dynamic-component-catalog.js";
+import { createSimpleCatalog } from "./simple-component-catalog.js";
 import { z } from "zod";
 
-// TODO: reimplement createCatalog
-export const dashboardCatalog = createCatalog({
+export const dashboardCatalog = createSimpleCatalog({
   name: "dashboard",
   components: {
     // Layout Components
@@ -44,6 +43,7 @@ export const dashboardCatalog = createCatalog({
         trend: z.enum(["up", "down", "neutral"]).nullable(),
         trendValue: z.string().nullable(),
       }),
+      hasChildren: false,
       description: "Display a single metric with optional trend indicator",
     },
 
@@ -54,6 +54,7 @@ export const dashboardCatalog = createCatalog({
         title: z.string().nullable(),
         height: z.number().nullable(),
       }),
+      hasChildren: false,
       description: "Display a chart from array data",
     },
 
@@ -68,6 +69,7 @@ export const dashboardCatalog = createCatalog({
           })
         ),
       }),
+      hasChildren: false,
       description: "Display tabular data",
     },
 
@@ -89,6 +91,7 @@ export const dashboardCatalog = createCatalog({
         action: z.string(),
         disabled: z.boolean().nullable(),
       }),
+      hasChildren: false,
       description: "Clickable button with action",
     },
 
@@ -98,6 +101,7 @@ export const dashboardCatalog = createCatalog({
         bindPath: z.string(),
         placeholder: z.string().nullable(),
       }),
+      hasChildren: false,
       description: "Date picker input",
     },
 
@@ -107,6 +111,7 @@ export const dashboardCatalog = createCatalog({
         text: z.string(),
         level: z.enum(["h1", "h2", "h3", "h4"]).nullable(),
       }),
+      hasChildren: false,
       description: "Section heading",
     },
 
@@ -118,6 +123,7 @@ export const dashboardCatalog = createCatalog({
           .enum(["default", "muted", "success", "warning", "danger"])
           .nullable(),
       }),
+      hasChildren: false,
       description: "Text paragraph",
     },
 
@@ -129,6 +135,7 @@ export const dashboardCatalog = createCatalog({
           .enum(["default", "success", "warning", "danger", "info"])
           .nullable(),
       }),
+      hasChildren: false,
       description: "Small status badge",
     },
 
@@ -137,6 +144,7 @@ export const dashboardCatalog = createCatalog({
       props: z.object({
         label: z.string().nullable(),
       }),
+      hasChildren: false,
       description: "Visual divider",
     },
 
@@ -147,10 +155,11 @@ export const dashboardCatalog = createCatalog({
         action: z.string().nullable(),
         actionLabel: z.string().nullable(),
       }),
+      hasChildren: false,
       description: "Empty state placeholder",
     },
   },
 });
 
 // Export the component list for the AI prompt
-export const componentList = dashboardCatalog.componentNames as string[];
+export const componentList = Object.keys(dashboardCatalog.components);

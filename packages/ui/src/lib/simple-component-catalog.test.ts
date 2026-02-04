@@ -4,6 +4,7 @@ import {
   dataSourceSchema,
   createSimpleCatalog,
 } from "./simple-component-catalog.js";
+import type { CatalogueComponentProps } from "./simple-component-catalog.js";
 
 describe("schemas", () => {
   it("datasource", () => {
@@ -315,6 +316,43 @@ describe("schemas", () => {
             },
           },
         },
+      };
+    });
+
+    it("types CatalogueComponentProps based on hasChildren", () => {
+      expect.assertions(0);
+
+      type WithChildren = {
+        hasChildren: true;
+        description: string;
+        props: { title: string };
+      };
+      type NoChildren = {
+        hasChildren: false;
+        description: string;
+        props: { label: string };
+      };
+
+      // hasChildren: true -> includes children prop
+      type PropsWithChildren = CatalogueComponentProps<WithChildren>;
+      const _validWithChildren: PropsWithChildren = {
+        element: { props: { title: "hi" } },
+        children: null,
+      };
+      // @ts-expect-error - missing children
+      const _missingChildren: PropsWithChildren = {
+        element: { props: { title: "hi" } },
+      };
+
+      // hasChildren: false -> no children prop
+      type PropsNoChildren = CatalogueComponentProps<NoChildren>;
+      const _validNoChildren: PropsNoChildren = {
+        element: { props: { label: "hi" } },
+      };
+      const _extraChildren: PropsNoChildren = {
+        element: { props: { label: "hi" } },
+        // @ts-expect-error - children not allowed
+        children: null,
       };
     });
   });

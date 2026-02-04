@@ -1,6 +1,10 @@
-import { type ComponentRenderProps } from "@json-render/react";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function Card({ element, children }: ComponentRenderProps) {
+export function Card({
+  element,
+  children,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Card>) {
   const { title, description, padding } = element.props as {
     title?: string | null;
     description?: string | null;

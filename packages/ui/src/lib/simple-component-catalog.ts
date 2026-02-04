@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dataFilterSchemas } from "@kopai/core";
+import type { ReactNode } from "react";
 
 // DataSource schema - discriminated union with type-safe params per method
 export const dataSourceSchema = z.discriminatedUnion("method", [
@@ -81,6 +82,7 @@ export function createSimpleCatalog<
 
   const elements = z.object(elementsShape);
 
+  // TODO: implement a mechanism for validating there are no circular references
   const uiTreeSchema = z.object({
     root: z.string().describe("root uiElement key in the elements array"),
     elements,
@@ -92,3 +94,14 @@ export function createSimpleCatalog<
     uiTreeSchema,
   };
 }
+
+export type ComponentDefinition = z.infer<typeof componentDefinitionSchema>;
+
+export type InferProps<P> = P extends z.ZodTypeAny ? z.infer<P> : P;
+
+export type CatalogueComponentProps<CD extends ComponentDefinition> =
+  CD extends { hasChildren: true; props: infer P }
+    ? { element: { props: InferProps<P> }; children: ReactNode }
+    : CD extends { props: infer P }
+      ? { element: { props: InferProps<P> } }
+      : never;
