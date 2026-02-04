@@ -60,11 +60,23 @@ export type RendererComponentProps<CD extends ComponentDefinition> =
           | ({ element: BaseElement<InferProps<P>> } & WithData)
       : never;
 
-type RegistryFromCatalog<C extends Catalog> = {
+type RegistryFromCatalog<
+  C extends { components: Record<string, ComponentDefinition> },
+> = {
   [K in keyof C["components"]]: ComponentType<
     RendererComponentProps<C["components"][K]>
   >;
 };
+
+/**
+ * Creates a type-safe registry from a catalog and component implementations.
+ * Ensures all catalog components are provided with correct prop types.
+ */
+export function createRegistry<
+  C extends { components: Record<string, ComponentDefinition> },
+>(_catalog: C, components: RegistryFromCatalog<C>) {
+  return components;
+}
 
 /**
  * Base props (no dataSource)
