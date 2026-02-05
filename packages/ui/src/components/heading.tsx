@@ -1,11 +1,11 @@
 import React from "react";
-import { type ComponentRenderProps } from "@json-render/react";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function Heading({ element }: ComponentRenderProps) {
-  const { text, level } = element.props as {
-    text: string;
-    level?: string | null;
-  };
+export function Heading({
+  element,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Heading>) {
+  const { text, level } = element.props;
   const Tag = (level || "h2") as keyof React.JSX.IntrinsicElements;
   const sizes: Record<string, string> = {
     h1: "28px",

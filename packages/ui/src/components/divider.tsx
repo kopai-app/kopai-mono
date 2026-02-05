@@ -1,15 +1,40 @@
-import { type ComponentRenderProps } from "@json-render/react";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-// TODO: extract styling
-export function Divider({ element }: ComponentRenderProps) {
-  const { orientation } = element.props as { orientation?: string | null };
-  if (orientation === "vertical") {
+export function Divider({
+  element,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Divider>) {
+  const { label } = element.props;
+
+  if (label) {
     return (
       <div
-        style={{ width: 1, background: "var(--border)", alignSelf: "stretch" }}
-      />
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          margin: "16px 0",
+        }}
+      >
+        <hr
+          style={{
+            flex: 1,
+            border: "none",
+            borderTop: "1px solid var(--border)",
+          }}
+        />
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>{label}</span>
+        <hr
+          style={{
+            flex: 1,
+            border: "none",
+            borderTop: "1px solid var(--border)",
+          }}
+        />
+      </div>
     );
   }
+
   return (
     <hr
       style={{

@@ -1,33 +1,13 @@
-import { type ComponentRenderProps } from "@json-render/react";
-import { useData } from "@json-render/react";
-import { getByPath } from "@json-render/core";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function Metric({ element }: ComponentRenderProps) {
-  const { label, valuePath, format, trend, trendValue } = element.props as {
-    label: string;
-    valuePath: string;
-    format?: string | null;
-    trend?: string | null;
-    trendValue?: string | null;
-  };
+export function Metric({
+  element,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Metric>) {
+  const { label, valuePath, trend, trendValue } = element.props;
 
-  const { data } = useData();
-  const rawValue = getByPath(data, valuePath);
-
-  let displayValue = String(rawValue ?? "-");
-  if (format === "currency" && typeof rawValue === "number") {
-    displayValue = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(rawValue);
-  } else if (format === "percent" && typeof rawValue === "number") {
-    displayValue = new Intl.NumberFormat("en-US", {
-      style: "percent",
-      minimumFractionDigits: 1,
-    }).format(rawValue);
-  } else if (format === "number" && typeof rawValue === "number") {
-    displayValue = new Intl.NumberFormat("en-US").format(rawValue);
-  }
+  // For example page, we just display the valuePath as placeholder
+  const displayValue = valuePath;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

@@ -1,13 +1,12 @@
-import { type ComponentRenderProps } from "@json-render/react";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function Stack({ element, children }: ComponentRenderProps) {
-  const { direction, gap, align } = element.props as {
-    direction?: string | null;
-    gap?: string | null;
-    align?: string | null;
-  };
+export function Stack({
+  element,
+  children,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Stack>) {
+  const { direction, gap, align } = element.props;
   const gaps: Record<string, string> = {
-    none: "0",
     sm: "8px",
     md: "16px",
     lg: "24px",

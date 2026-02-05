@@ -1,12 +1,12 @@
-import { type ComponentRenderProps } from "@json-render/react";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function Grid({ element, children }: ComponentRenderProps) {
-  const { columns, gap } = element.props as {
-    columns?: number | null;
-    gap?: string | null;
-  };
+export function Grid({
+  element,
+  children,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Grid>) {
+  const { columns, gap } = element.props;
   const gaps: Record<string, string> = {
-    none: "0",
     sm: "8px",
     md: "16px",
     lg: "24px",

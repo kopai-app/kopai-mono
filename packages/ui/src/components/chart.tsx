@@ -1,23 +1,21 @@
-import { type ComponentRenderProps } from "@json-render/react";
-import { useData } from "@json-render/react";
-import { getByPath } from "@json-render/core";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-// TODO: extract styling
-export function Chart({ element }: ComponentRenderProps) {
-  const { title, dataPath } = element.props as {
-    title?: string | null;
-    dataPath: string;
-  };
-  const { data } = useData();
-  const chartData = getByPath(data, dataPath) as
-    | Array<{ label: string; value: number }>
-    | undefined;
+export function Chart({
+  element,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Chart>) {
+  const { type, dataPath, title, height } = element.props;
 
-  if (!chartData || !Array.isArray(chartData)) {
-    return <div style={{ padding: 20, color: "var(--muted)" }}>No data</div>;
-  }
+  // Static mock data for example page
+  const mockData = [
+    { label: "Mon", value: 40 },
+    { label: "Tue", value: 65 },
+    { label: "Wed", value: 45 },
+    { label: "Thu", value: 80 },
+    { label: "Fri", value: 55 },
+  ];
 
-  const maxValue = Math.max(...chartData.map((d) => d.value));
+  const maxValue = Math.max(...mockData.map((d) => d.value));
 
   return (
     <div>
@@ -27,9 +25,14 @@ export function Chart({ element }: ComponentRenderProps) {
         </h4>
       )}
       <div
-        style={{ display: "flex", gap: 8, alignItems: "flex-end", height: 120 }}
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "flex-end",
+          height: height || 120,
+        }}
       >
-        {chartData.map((d, i) => (
+        {mockData.map((d, i) => (
           <div
             key={i}
             style={{
@@ -55,6 +58,9 @@ export function Chart({ element }: ComponentRenderProps) {
           </div>
         ))}
       </div>
+      <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--muted)" }}>
+        Type: {type} | Data: {dataPath}
+      </p>
     </div>
   );
 }

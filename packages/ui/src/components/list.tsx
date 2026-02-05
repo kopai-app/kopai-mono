@@ -1,15 +1,18 @@
-import { type ComponentRenderProps } from "@json-render/react";
-import { useData } from "@json-render/react";
-import { getByPath } from "@json-render/core";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function List({ element, children }: ComponentRenderProps) {
-  const { dataPath } = element.props as { dataPath: string };
-  const { data } = useData();
-  const listData = getByPath(data, dataPath) as Array<unknown> | undefined;
+export function List({
+  element,
+  children,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.List>) {
+  const { dataPath, emptyMessage } = element.props;
 
-  if (!listData || !Array.isArray(listData)) {
-    return <div style={{ color: "var(--muted)" }}>No items</div>;
-  }
-
-  return <div>{children}</div>;
+  return (
+    <div>
+      {children}
+      <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--muted)" }}>
+        Data: {dataPath} {emptyMessage && `| Empty: "${emptyMessage}"`}
+      </p>
+    </div>
+  );
 }

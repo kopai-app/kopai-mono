@@ -1,30 +1,16 @@
-import { type ComponentRenderProps } from "@json-render/react";
-import { useData } from "@json-render/react";
-import { getByPath } from "@json-render/core";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-function useResolvedValue<T>(
-  value: T | { path: string } | null | undefined
-): T | undefined {
-  const { data } = useData();
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === "object" && "path" in value) {
-    return getByPath(data, value.path) as T | undefined;
-  }
-  return value as T;
-}
-
-export function Badge({ element }: ComponentRenderProps) {
-  const { text, variant } = element.props as {
-    text: string | { path: string };
-    variant?: string | null;
-  };
-  const resolvedText = useResolvedValue(text);
+export function Badge({
+  element,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Badge>) {
+  const { text, variant } = element.props;
 
   const colors: Record<string, string> = {
     default: "var(--foreground)",
     success: "#22c55e",
     warning: "#eab308",
-    error: "#ef4444",
+    danger: "#ef4444",
     info: "var(--muted)",
   };
 
@@ -40,7 +26,7 @@ export function Badge({ element }: ComponentRenderProps) {
         color: colors[variant || "default"],
       }}
     >
-      {resolvedText}
+      {text}
     </span>
   );
 }

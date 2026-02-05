@@ -1,22 +1,19 @@
-import { type ComponentRenderProps } from "@json-render/react";
-import { useData } from "@json-render/react";
-import { getByPath } from "@json-render/core";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function DatePicker({ element }: ComponentRenderProps) {
-  const { label, valuePath } = element.props as {
-    label: string;
-    valuePath: string;
-  };
-  const { data, set } = useData();
-  const value = getByPath(data, valuePath) as string | undefined;
+export function DatePicker({
+  element,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.DatePicker>) {
+  const { label, bindPath, placeholder } = element.props;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <label style={{ fontSize: 14, fontWeight: 500 }}>{label}</label>
+      {label && (
+        <label style={{ fontSize: 14, fontWeight: 500 }}>{label}</label>
+      )}
       <input
         type="date"
-        value={value ?? ""}
-        onChange={(e) => set(valuePath, e.target.value)}
+        placeholder={placeholder || undefined}
         style={{
           padding: "8px 12px",
           borderRadius: "var(--radius)",
@@ -27,6 +24,9 @@ export function DatePicker({ element }: ComponentRenderProps) {
           outline: "none",
         }}
       />
+      <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--muted)" }}>
+        Bound to: {bindPath}
+      </p>
     </div>
   );
 }

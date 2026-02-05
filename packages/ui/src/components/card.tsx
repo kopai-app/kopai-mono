@@ -1,10 +1,10 @@
 import { dashboardCatalog } from "../lib/catalog.js";
-import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
+import type { RendererComponentProps } from "../lib/simple-renderer.js";
 
 export function Card({
   element,
   children,
-}: CatalogueComponentProps<typeof dashboardCatalog.components.Card>) {
+}: RendererComponentProps<typeof dashboardCatalog.components.Card>) {
   const { title, description, padding } = element.props as {
     title?: string | null;
     description?: string | null;

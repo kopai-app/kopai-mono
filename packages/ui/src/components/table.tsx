@@ -1,24 +1,22 @@
-import { type ComponentRenderProps } from "@json-render/react";
-import { useData } from "@json-render/react";
-import { getByPath } from "@json-render/core";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function Table({ element }: ComponentRenderProps) {
-  const { title, dataPath, columns } = element.props as {
-    title?: string | null;
-    dataPath: string;
-    columns: Array<{ key: string; label: string; format?: string | null }>;
-  };
+export function Table({
+  element,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Table>) {
+  const { dataPath, columns } = element.props;
 
-  const { data } = useData();
-  const tableData = getByPath(data, dataPath) as
-    | Array<Record<string, unknown>>
-    | undefined;
+  // Static mock data for example page
+  const mockData = [
+    { id: 1, name: "Item A", status: "Active", amount: 1250 },
+    { id: 2, name: "Item B", status: "Pending", amount: 830 },
+    { id: 3, name: "Item C", status: "Completed", amount: 2100 },
+  ];
 
-  if (!tableData || !Array.isArray(tableData)) {
-    return <div style={{ padding: 20, color: "var(--muted)" }}>No data</div>;
-  }
-
-  const formatCell = (value: unknown, format?: string | null) => {
+  const formatCell = (
+    value: unknown,
+    format?: "text" | "currency" | "date" | "badge" | null
+  ) => {
     if (value === null || value === undefined) return "-";
     if (format === "currency" && typeof value === "number") {
       return new Intl.NumberFormat("en-US", {
@@ -50,11 +48,6 @@ export function Table({ element }: ComponentRenderProps) {
 
   return (
     <div>
-      {title && (
-        <h4 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 600 }}>
-          {title}
-        </h4>
-      )}
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -78,7 +71,7 @@ export function Table({ element }: ComponentRenderProps) {
           </tr>
         </thead>
         <tbody>
-          {tableData.map((row, i) => (
+          {mockData.map((row, i) => (
             <tr key={i}>
               {columns.map((col) => (
                 <td
@@ -89,13 +82,16 @@ export function Table({ element }: ComponentRenderProps) {
                     fontSize: 14,
                   }}
                 >
-                  {formatCell(row[col.key], col.format)}
+                  {formatCell(row[col.key as keyof typeof row], col.format)}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+      <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--muted)" }}>
+        Data: {dataPath}
+      </p>
     </div>
   );
 }

@@ -1,10 +1,10 @@
-import { type ComponentRenderProps } from "@json-render/react";
+import { dashboardCatalog } from "../lib/catalog.js";
+import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
 
-export function Empty({ element }: ComponentRenderProps) {
-  const { title, description } = element.props as {
-    title: string;
-    description?: string | null;
-  };
+export function Empty({
+  element,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Empty>) {
+  const { title, description, action, actionLabel } = element.props;
 
   return (
     <div style={{ textAlign: "center", padding: "40px 20px" }}>
@@ -12,9 +12,24 @@ export function Empty({ element }: ComponentRenderProps) {
         {title}
       </h3>
       {description && (
-        <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>
+        <p style={{ margin: "0 0 16px", fontSize: 14, color: "var(--muted)" }}>
           {description}
         </p>
+      )}
+      {action && actionLabel && (
+        <button
+          style={{
+            padding: "8px 16px",
+            borderRadius: "var(--radius)",
+            border: "1px solid var(--border)",
+            background: "var(--card)",
+            color: "var(--foreground)",
+            fontSize: 14,
+            cursor: "pointer",
+          }}
+        >
+          {actionLabel}
+        </button>
       )}
     </div>
   );
