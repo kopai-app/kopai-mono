@@ -1,5 +1,5 @@
 import { dashboardCatalog } from "../lib/catalog.js";
-import type { RendererComponentProps } from "../lib/simple-renderer.js";
+import type { RendererComponentProps } from "../lib/renderer.js";
 
 export function Card({
   element,

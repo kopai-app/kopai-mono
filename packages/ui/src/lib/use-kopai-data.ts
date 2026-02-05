@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { DataSource } from "./dynamic-component-catalog.js";
+import type { DataSource } from "./component-catalog.js";
 import { useKopaiSDK } from "./kopai-provider.js";
 
 export interface UseKopaiDataResult<T> {

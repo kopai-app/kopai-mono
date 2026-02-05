@@ -1,7 +1,7 @@
-import { createSimpleCatalog } from "./simple-component-catalog.js";
+import { createCatalog } from "./component-catalog.js";
 import { z } from "zod";
 
-export const dashboardCatalog = createSimpleCatalog({
+export const dashboardCatalog = createCatalog({
   name: "dashboard",
   components: {
     // Layout Components

@@ -1,5 +1,5 @@
 import { dashboardCatalog } from "../lib/catalog.js";
-import { Renderer } from "../lib/simple-renderer.js";
+import { Renderer } from "../lib/renderer.js";
 import { createRegistry } from "../lib/create-registry.js";
 import { Card } from "../components/card.js";
 import { Grid } from "../components/grid.js";

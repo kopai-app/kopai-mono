@@ -1,5 +1,5 @@
 import { dashboardCatalog } from "../lib/catalog.js";
-import type { CatalogueComponentProps } from "../lib/simple-component-catalog.js";
+import type { CatalogueComponentProps } from "../lib/component-catalog.js";
 
 export function Grid({
   element,

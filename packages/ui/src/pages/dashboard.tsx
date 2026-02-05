@@ -1,9 +1,6 @@
 import { KopaiSDKProvider } from "../lib/kopai-provider.js";
-import { createSimpleCatalog } from "../lib/simple-component-catalog.js";
-import {
-  Renderer,
-  type RendererComponentProps,
-} from "../lib/simple-renderer.js";
+import { createCatalog } from "../lib/component-catalog.js";
+import { Renderer, type RendererComponentProps } from "../lib/renderer.js";
 import { createRegistry } from "../lib/create-registry.js";
 import { KopaiClient } from "@kopai/sdk";
 import { denormalizedSignals } from "@kopai/core";
@@ -55,7 +52,7 @@ function formatAttrs(attrs: Record<string, unknown> | undefined) {
 }
 
 // Create catalog for dashboard OTel components
-const dashboardOtelCatalog = createSimpleCatalog({
+const dashboardOtelCatalog = createCatalog({
   name: "dashboard-otel",
   components: {
     TracesTable: {

@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { createRegistry } from "./create-registry.js";
-import { type RendererComponentProps } from "./simple-renderer.js";
-import { createSimpleCatalog } from "./simple-component-catalog.js";
+import { type RendererComponentProps } from "./renderer.js";
+import { createCatalog } from "./component-catalog.js";
 import z from "zod";
 
 describe("createRegistry", () => {
   // Create a catalog for registry tests
-  const registryCatalog = createSimpleCatalog({
+  const registryCatalog = createCatalog({
     name: "registry-test",
     components: {
       Button: {

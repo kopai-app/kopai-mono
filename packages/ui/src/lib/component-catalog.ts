@@ -26,6 +26,8 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
   }),
 ]);
 
+export type DataSource = z.infer<typeof dataSourceSchema>;
+
 export const componentDefinitionSchema = z
   .object({
     hasChildren: z.boolean(),
@@ -83,7 +85,7 @@ type ElementVariantSchemas<C extends Record<string, { props: unknown }>> = {
   >;
 }[keyof C & string];
 
-export function createSimpleCatalog<
+export function createCatalog<
   C extends Record<string, z.infer<typeof componentDefinitionSchema>>,
 >(catalogConfig: { name: string; components: C }) {
   const elementVariants = (

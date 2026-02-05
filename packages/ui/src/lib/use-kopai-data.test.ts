@@ -6,7 +6,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { useKopaiData } from "./use-kopai-data.js";
 import { KopaiSDKProvider, type KopaiClient } from "./kopai-provider.js";
-import type { DataSource } from "./dynamic-component-catalog.js";
+import type { DataSource } from "./component-catalog.js";
 
 const createMockClient = () => ({
   searchTracesPage: vi.fn(),

@@ -1,18 +1,71 @@
-import { type ComponentType, type ReactNode } from "react";
-import type { z } from "zod";
-import type {
-  Catalog,
-  ComponentDefinition,
-  UIElement,
-  UITree,
-} from "./dynamic-component-catalog.js";
+import type { ReactNode, ComponentType } from "react";
+import {
+  createCatalog,
+  type InferProps,
+  type ComponentDefinition,
+} from "./component-catalog.js";
+import z from "zod";
 import { useKopaiData } from "./use-kopai-data.js";
+import { type RegistryFromCatalog } from "./create-registry.js";
+
+type Catalog = ReturnType<typeof createCatalog>;
+
+type UITree = z.infer<Catalog["uiTreeSchema"]>;
+
+type UIElement = UITree["elements"][string];
+
+// Simplified - renderer just passes through to useKopaiData
+type DataSource = {
+  method: string;
+  params?: Record<string, unknown>;
+};
+
+type BaseElement<Props> = {
+  key: string;
+  type: string;
+  children: string[];
+  parentKey: string;
+  dataSource?: DataSource;
+  props: Props;
+};
+
+type WithData = {
+  hasData: true;
+  data: unknown;
+  loading: boolean;
+  error: Error | null;
+  refetch: (newParams?: Record<string, unknown>) => void;
+};
+
+type WithoutData = {
+  hasData: false;
+};
+
+export type RendererComponentProps<CD extends ComponentDefinition> =
+  CD extends {
+    hasChildren: true;
+    props: infer P;
+  }
+    ?
+        | ({
+            element: BaseElement<InferProps<P>>;
+            children: ReactNode;
+          } & WithoutData)
+        | ({
+            element: BaseElement<InferProps<P>>;
+            children: ReactNode;
+          } & WithData)
+    : CD extends { props: infer P }
+      ?
+          | ({ element: BaseElement<InferProps<P>> } & WithoutData)
+          | ({ element: BaseElement<InferProps<P>> } & WithData)
+      : never;
 
 /**
  * Base props (no dataSource)
  */
-export interface ComponentRenderPropsBase<P = Record<string, unknown>> {
-  element: UIElement<string, P>;
+export interface ComponentRenderPropsBase {
+  element: UIElement;
   children?: ReactNode;
   hasData: false;
 }
@@ -20,8 +73,8 @@ export interface ComponentRenderPropsBase<P = Record<string, unknown>> {
 /**
  * Props with dataSource
  */
-export interface ComponentRenderPropsWithData<P = Record<string, unknown>> {
-  element: UIElement<string, P>;
+export interface ComponentRenderPropsWithData {
+  element: UIElement;
   children?: ReactNode;
   hasData: true;
   data: unknown;
@@ -33,42 +86,30 @@ export interface ComponentRenderPropsWithData<P = Record<string, unknown>> {
 /**
  * Discriminated union for component render props
  */
-export type ComponentRenderProps<P = Record<string, unknown>> =
-  | ComponentRenderPropsBase<P>
-  | ComponentRenderPropsWithData<P>;
+export type ComponentRenderProps =
+  | ComponentRenderPropsBase
+  | ComponentRenderPropsWithData;
 
 /**
  * Component renderer type
  */
-export type ComponentRenderer<P = Record<string, unknown>> = ComponentType<
-  ComponentRenderProps<P>
->;
+export type ComponentRenderer = ComponentType<ComponentRenderProps>;
 
 /**
  * Registry mapping component type names to React components
  */
-export type ComponentRegistry = Record<
-  string,
-  ComponentRenderer<Record<string, unknown>>
->;
+type ComponentRegistry = Record<string, ComponentRenderer>;
 
-/**
- * Derives a type-safe ComponentRegistry from a Catalog.
- * Ensures each component's props match the zod schema.
- */
-export type RegistryFromCatalog<
-  TComponents extends Record<string, ComponentDefinition>,
-> = {
-  [K in keyof TComponents]: ComponentRenderer<z.infer<TComponents[K]["props"]>>;
-};
-
-/**
- * Props for the Renderer component
- */
-export interface RendererProps {
-  tree: UITree | null;
-  registry: ComponentRegistry;
-  fallback?: ComponentRenderer;
+export function createRendererFromCatalog<C extends Catalog>() {
+  return function CatalogRenderer({
+    tree,
+    registry,
+  }: {
+    tree: UITree;
+    registry: RegistryFromCatalog<C>;
+  }) {
+    return <Renderer tree={tree} registry={registry} />;
+  };
 }
 
 /**
@@ -151,9 +192,29 @@ function ElementRenderer({
 }
 
 /**
+ * Props for the Renderer component
+ */
+export interface RendererProps {
+  tree: UITree | null;
+  registry: ComponentRegistry;
+  fallback?: ComponentRenderer;
+}
+
+/**
  * Renders a UITree using a component registry
  */
-export function Renderer({ tree, registry, fallback }: RendererProps) {
+export function Renderer<
+  C extends { components: Record<string, ComponentDefinition> },
+>({
+  tree,
+  registry,
+  fallback,
+}: {
+  tree: z.infer<ReturnType<typeof createCatalog>["uiTreeSchema"]> | null;
+  registry: RegistryFromCatalog<C>;
+  fallback?: ComponentRenderer;
+}) {
+  // export function Renderer({ tree, registry, fallback }: RendererProps) {
   if (!tree || !tree.root) return null;
 
   const rootElement = tree.elements[tree.root];
@@ -163,30 +224,8 @@ export function Renderer({ tree, registry, fallback }: RendererProps) {
     <ElementRenderer
       element={rootElement}
       tree={tree}
-      registry={registry}
+      registry={registry as ComponentRegistry}
       fallback={fallback}
     />
   );
-}
-
-/**
- * Creates a pre-bound Renderer from a Catalog and type-safe registry.
- * Enforces that registry components match catalog schema definitions.
- */
-export function createRendererFromCatalog<
-  TComponents extends Record<string, ComponentDefinition>,
->(
-  _catalog: Catalog<TComponents>,
-  registry: RegistryFromCatalog<TComponents>,
-  fallback?: ComponentRenderer
-): ComponentType<{ tree: UITree | null }> {
-  return function CatalogRenderer({ tree }) {
-    return (
-      <Renderer
-        tree={tree}
-        registry={registry as ComponentRegistry}
-        fallback={fallback}
-      />
-    );
-  };
 }

@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import {
-  dataSourceSchema,
-  createSimpleCatalog,
-} from "./simple-component-catalog.js";
-import type { CatalogueComponentProps } from "./simple-component-catalog.js";
+import { dataSourceSchema, createCatalog } from "./component-catalog.js";
+import type { CatalogueComponentProps } from "./component-catalog.js";
 
 describe("schemas", () => {
   it("datasource", () => {
@@ -31,9 +28,9 @@ describe("schemas", () => {
     } satisfies DataSource;
   });
 
-  describe("createSimpleCatalog", () => {
+  describe("createCatalog", () => {
     it("creates uiTreeSchema that validates component props", () => {
-      const catalog = createSimpleCatalog({
+      const catalog = createCatalog({
         name: "test catalog",
         components: {
           TestComponent: {
@@ -78,7 +75,7 @@ describe("schemas", () => {
     it("returns components with exact types from config", () => {
       expect.assertions(0);
 
-      const catalog = createSimpleCatalog({
+      const catalog = createCatalog({
         name: "test catalog",
         components: {
           TestComponent: {
@@ -105,7 +102,7 @@ describe("schemas", () => {
     });
 
     it("validates multiple components with dataSource", () => {
-      const catalog = createSimpleCatalog({
+      const catalog = createCatalog({
         name: "multi catalog",
         components: {
           Button: {
@@ -172,7 +169,7 @@ describe("schemas", () => {
     it("types multiple components correctly", () => {
       expect.assertions(0);
 
-      const catalog = createSimpleCatalog({
+      const catalog = createCatalog({
         name: "multi catalog",
         components: {
           Button: {
@@ -211,7 +208,7 @@ describe("schemas", () => {
     it("types uiTreeSchema elements with dataSource", () => {
       expect.assertions(0);
 
-      const _catalog = createSimpleCatalog({
+      const _catalog = createCatalog({
         name: "test catalog",
         components: {
           Button: {

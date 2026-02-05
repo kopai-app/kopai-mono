@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
-import type { ComponentDefinition } from "./simple-component-catalog.js";
-import type { RendererComponentProps } from "./simple-renderer.js";
+import type { ComponentDefinition } from "./component-catalog.js";
+import type { RendererComponentProps } from "./renderer.js";
 
 export type RegistryFromCatalog<
   C extends { components: Record<string, ComponentDefinition> },

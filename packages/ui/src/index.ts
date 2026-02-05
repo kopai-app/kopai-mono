@@ -6,9 +6,12 @@ export {
   Renderer,
   createRendererFromCatalog,
   type ComponentRenderProps,
-  type ComponentRegistry,
-  type RegistryFromCatalog,
+  type ComponentRenderer,
 } from "./lib/renderer.js";
+export {
+  createRegistry,
+  type RegistryFromCatalog,
+} from "./lib/create-registry.js";
 export {
   KopaiSDKProvider,
   useKopaiSDK,
