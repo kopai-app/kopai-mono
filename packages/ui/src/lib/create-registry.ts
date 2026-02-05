@@ -13,6 +13,22 @@ export type RegistryFromCatalog<
 /**
  * Creates a type-safe registry from a catalog and component implementations.
  * Ensures all catalog components are provided with correct prop types.
+ *
+ * @param _catalog - The catalog created via createCatalog (used for type inference)
+ * @param components - React component implementations matching catalog definitions
+ * @returns The components registry
+ *
+ * @example
+ * ```tsx
+ * const registry = createRegistry(catalog, {
+ *   Card: ({ element, children }) => (
+ *     <div className="card">{children}</div>
+ *   ),
+ *   Table: ({ element, data }) => (
+ *     <table>{data?.map(row => <tr key={row.id} />)}</table>
+ *   ),
+ * });
+ * ```
  */
 export function createRegistry<
   C extends { components: Record<string, ComponentDefinition> },

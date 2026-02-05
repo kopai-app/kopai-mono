@@ -201,7 +201,22 @@ export interface RendererProps {
 }
 
 /**
- * Renders a UITree using a component registry
+ * Renders a UITree using a component registry.
+ * Recursively renders elements, handling data fetching for elements with dataSource.
+ *
+ * @param tree - The UI tree to render (from LLM output)
+ * @param registry - Component implementations keyed by type
+ * @param fallback - Optional fallback component for unknown types
+ * @returns Rendered React tree or null if tree is invalid
+ *
+ * @example
+ * ```tsx
+ * <Renderer
+ *   tree={uiTree}
+ *   registry={registry}
+ *   fallback={({ element }) => <div>Unknown: {element.type}</div>}
+ * />
+ * ```
  */
 export function Renderer<
   C extends { components: Record<string, ComponentDefinition> },

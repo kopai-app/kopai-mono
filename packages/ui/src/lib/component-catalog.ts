@@ -85,6 +85,26 @@ type ElementVariantSchemas<C extends Record<string, { props: unknown }>> = {
   >;
 }[keyof C & string];
 
+/**
+ * Creates a component catalog with typed UI tree schema for validation.
+ *
+ * @param catalogConfig - Catalog configuration with name and component definitions
+ * @returns Catalog object with name, components, and generated uiTreeSchema
+ *
+ * @example
+ * ```ts
+ * const catalog = createCatalog({
+ *   name: "my-catalog",
+ *   components: {
+ *     Card: {
+ *       hasChildren: true,
+ *       description: "Container card",
+ *       props: z.object({ title: z.string() }),
+ *     },
+ *   },
+ * });
+ * ```
+ */
 export function createCatalog<
   C extends Record<string, z.infer<typeof componentDefinitionSchema>>,
 >(catalogConfig: { name: string; components: C }) {

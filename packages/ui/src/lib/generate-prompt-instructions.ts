@@ -127,6 +127,19 @@ function buildUnifiedSchema(treeSchema: z.ZodTypeAny): object {
   return treeJsonSchema;
 }
 
+/**
+ * Generates LLM prompt instructions from a catalog.
+ * Includes component docs, JSON schema, and usage examples.
+ *
+ * @param catalog - The catalog created via createCatalog
+ * @returns Markdown string with component docs, schema, and examples
+ *
+ * @example
+ * ```ts
+ * const instructions = generatePromptInstructions(catalog);
+ * const prompt = `Build a dashboard UI.\n\n${instructions}`;
+ * ```
+ */
 export function generatePromptInstructions(catalog: Catalog): string {
   const componentNames = Object.keys(catalog.components);
 
