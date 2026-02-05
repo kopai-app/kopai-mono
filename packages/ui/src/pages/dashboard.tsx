@@ -1,12 +1,10 @@
 import { KopaiSDKProvider } from "../lib/kopai-provider.js";
+import { createSimpleCatalog } from "../lib/simple-component-catalog.js";
 import {
-  createRendererFromCatalog,
-  type ComponentRenderProps,
-} from "../lib/renderer.js";
-import {
-  createCatalog,
-  type UITree,
-} from "../lib/dynamic-component-catalog.js";
+  Renderer,
+  createRegistry,
+  type RendererComponentProps,
+} from "../lib/simple-renderer.js";
 import { KopaiClient } from "@kopai/sdk";
 import { denormalizedSignals } from "@kopai/core";
 import { z } from "zod";
@@ -56,11 +54,41 @@ function formatAttrs(attrs: Record<string, unknown> | undefined) {
   return entries.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ") || "-";
 }
 
-// Traces Table
-const tracesTablePropsSchema = z.object({ foo: z.string() });
-type TracesTableProps = z.infer<typeof tracesTablePropsSchema>;
+// Create catalog for dashboard OTel components
+const dashboardOtelCatalog = createSimpleCatalog({
+  name: "dashboard-otel",
+  components: {
+    TracesTable: {
+      props: z.object({}),
+      hasChildren: false,
+      description: "Table displaying OpenTelemetry traces",
+    },
+    LogsTable: {
+      props: z.object({}),
+      hasChildren: false,
+      description: "Table displaying OpenTelemetry logs",
+    },
+    MetricsTable: {
+      props: z.object({}),
+      hasChildren: false,
+      description: "Table displaying OpenTelemetry metrics",
+    },
+    Container: {
+      props: z.object({}),
+      hasChildren: true,
+      description: "Container wrapper with padding",
+    },
+  },
+});
 
-function TracesTable(props: ComponentRenderProps<TracesTableProps>) {
+type UITree = z.infer<typeof dashboardOtelCatalog.uiTreeSchema>;
+
+// Traces Table
+function TracesTable(
+  props: RendererComponentProps<
+    typeof dashboardOtelCatalog.components.TracesTable
+  >
+) {
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading traces...</div>;
@@ -125,7 +153,11 @@ function TracesTable(props: ComponentRenderProps<TracesTableProps>) {
 }
 
 // Logs Table
-function LogsTable(props: ComponentRenderProps) {
+function LogsTable(
+  props: RendererComponentProps<
+    typeof dashboardOtelCatalog.components.LogsTable
+  >
+) {
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading logs...</div>;
@@ -183,7 +215,11 @@ function LogsTable(props: ComponentRenderProps) {
 }
 
 // Metrics Table
-function MetricsTable(props: ComponentRenderProps) {
+function MetricsTable(
+  props: RendererComponentProps<
+    typeof dashboardOtelCatalog.components.MetricsTable
+  >
+) {
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading metrics...</div>;
@@ -250,21 +286,15 @@ function MetricsTable(props: ComponentRenderProps) {
   );
 }
 
-function Container({ children }: ComponentRenderProps) {
-  return <div style={{ padding: 24 }}>{children}</div>;
+function Container(
+  props: RendererComponentProps<
+    typeof dashboardOtelCatalog.components.Container
+  >
+) {
+  return <div style={{ padding: 24 }}>{props.children}</div>;
 }
 
-const catalog = createCatalog({
-  name: "dashboard",
-  components: {
-    TracesTable: { props: tracesTablePropsSchema },
-    LogsTable: { props: z.object({}) },
-    MetricsTable: { props: z.object({}) },
-    Container: { props: z.object({}), hasChildren: true },
-  },
-});
-
-const DashboardRenderer = createRendererFromCatalog(catalog, {
+const registry = createRegistry(dashboardOtelCatalog, {
   TracesTable,
   LogsTable,
   MetricsTable,
@@ -280,12 +310,14 @@ const testTree: UITree = {
       type: "Container",
       props: {},
       children: ["traces-table", "logs-table", "metrics-table"],
+      parentKey: "",
     },
     "traces-table": {
       key: "traces-table",
       type: "TracesTable",
-      props: { foo: "bar" },
+      props: {},
       parentKey: "container-1",
+      children: [],
       dataSource: {
         method: "searchTracesPage",
         params: { limit: 10 },
@@ -296,6 +328,7 @@ const testTree: UITree = {
       type: "LogsTable",
       props: {},
       parentKey: "container-1",
+      children: [],
       dataSource: {
         method: "searchLogsPage",
         params: { limit: 10 },
@@ -306,6 +339,7 @@ const testTree: UITree = {
       type: "MetricsTable",
       props: {},
       parentKey: "container-1",
+      children: [],
       dataSource: {
         method: "searchMetricsPage",
         params: { metricType: "Sum", limit: 10 },
@@ -313,12 +347,6 @@ const testTree: UITree = {
     },
   },
 };
-
-// Validate tree against catalog schema
-const validationResult = catalog.validateTree(testTree);
-if (!validationResult.success) {
-  console.error("Invalid UI tree:", validationResult.error);
-}
 
 // Create SDK client pointing to local server
 const client = new KopaiClient({ baseUrl: "http://localhost:8000/signals" });
@@ -331,7 +359,7 @@ export default function DashboardPage() {
         <p style={{ color: "var(--muted)" }}>
           Real-time telemetry data from KopaiSDK
         </p>
-        <DashboardRenderer tree={testTree} />
+        <Renderer tree={testTree} registry={registry} />
       </div>
     </KopaiSDKProvider>
   );

@@ -1,9 +1,5 @@
 import { dashboardCatalog } from "../lib/catalog.js";
-import {
-  Renderer,
-  createRegistry,
-  type ComponentRegistry,
-} from "../lib/simple-renderer.js";
+import { Renderer, createRegistry } from "../lib/simple-renderer.js";
 import { Card } from "../components/card.js";
 import { Grid } from "../components/grid.js";
 import { Stack } from "../components/stack.js";
@@ -574,10 +570,7 @@ export default function ExamplePage() {
         margin: "0 auto",
       }}
     >
-      <Renderer
-        tree={exampleTree}
-        registry={registry as unknown as ComponentRegistry}
-      />
+      <Renderer tree={exampleTree} registry={registry} />
     </div>
   );
 }

@@ -115,7 +115,7 @@ export type ComponentRenderer = ComponentType<ComponentRenderProps>;
 /**
  * Registry mapping component type names to React components
  */
-export type ComponentRegistry = Record<string, ComponentRenderer>;
+type ComponentRegistry = Record<string, ComponentRenderer>;
 
 export function createRendererFromCatalog<C extends Catalog>() {
   return function CatalogRenderer({
@@ -125,7 +125,7 @@ export function createRendererFromCatalog<C extends Catalog>() {
     tree: UITree;
     registry: RegistryFromCatalog<C>;
   }) {
-    return <Renderer tree={tree} registry={registry as ComponentRegistry} />;
+    return <Renderer tree={tree} registry={registry} />;
   };
 }
 
@@ -220,7 +220,18 @@ export interface RendererProps {
 /**
  * Renders a UITree using a component registry
  */
-export function Renderer({ tree, registry, fallback }: RendererProps) {
+export function Renderer<
+  C extends { components: Record<string, ComponentDefinition> },
+>({
+  tree,
+  registry,
+  fallback,
+}: {
+  tree: z.infer<ReturnType<typeof createSimpleCatalog>["uiTreeSchema"]> | null;
+  registry: RegistryFromCatalog<C>;
+  fallback?: ComponentRenderer;
+}) {
+  // export function Renderer({ tree, registry, fallback }: RendererProps) {
   if (!tree || !tree.root) return null;
 
   const rootElement = tree.elements[tree.root];
@@ -230,7 +241,7 @@ export function Renderer({ tree, registry, fallback }: RendererProps) {
     <ElementRenderer
       element={rootElement}
       tree={tree}
-      registry={registry}
+      registry={registry as ComponentRegistry}
       fallback={fallback}
     />
   );

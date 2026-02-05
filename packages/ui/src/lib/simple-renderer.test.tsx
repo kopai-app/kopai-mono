@@ -8,8 +8,6 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import {
   Renderer,
   createRegistry,
-  type ComponentRenderProps,
-  type ComponentRegistry,
   type RendererComponentProps,
 } from "./simple-renderer.js";
 import { KopaiSDKProvider } from "./kopai-provider.js";
@@ -90,7 +88,44 @@ function Text({
   return createElement("span", null, content);
 }
 
-const registry = { Box, Text } as ComponentRegistry;
+function Capture(
+  _props: RendererComponentProps<typeof _testCatalog.components.Capture>
+) {
+  return createElement("div", null, "captured");
+}
+
+function DataComponent(
+  props: RendererComponentProps<typeof _testCatalog.components.DataComponent>
+) {
+  if (!props.hasData) {
+    return createElement("div", { "data-testid": "no-data" }, "No data source");
+  }
+  const { data, loading, error } = props;
+  if (loading)
+    return createElement("div", { "data-testid": "loading" }, "Loading...");
+  if (error)
+    return createElement("div", { "data-testid": "error" }, error.message);
+  return createElement("div", { "data-testid": "data" }, JSON.stringify(data));
+}
+
+function RefetchComponent(
+  props: RendererComponentProps<typeof _testCatalog.components.RefetchComponent>
+) {
+  if (!props.hasData) return null;
+  return createElement(
+    "div",
+    { "data-testid": "data" },
+    JSON.stringify(props.data)
+  );
+}
+
+const registry = createRegistry(_testCatalog, {
+  Box,
+  Text,
+  Capture,
+  DataComponent,
+  RefetchComponent,
+});
 
 describe("Renderer", () => {
   it("renders null for null tree", () => {
@@ -217,11 +252,22 @@ describe("Renderer", () => {
   });
 
   it("passes hasData=false for elements without dataSource", () => {
-    let receivedProps: ComponentRenderProps | null = null;
-    function Capture(props: ComponentRenderProps) {
+    let receivedProps: RendererComponentProps<
+      typeof _testCatalog.components.Capture
+    > | null = null;
+    function CaptureLocal(
+      props: RendererComponentProps<typeof _testCatalog.components.Capture>
+    ) {
       receivedProps = props;
       return createElement("div", null, "captured");
     }
+    const localRegistry = createRegistry(_testCatalog, {
+      Box,
+      Text,
+      Capture: CaptureLocal,
+      DataComponent,
+      RefetchComponent,
+    });
     const tree = {
       root: "capture-1",
       elements: {
@@ -235,7 +281,7 @@ describe("Renderer", () => {
       },
     } satisfies UITree;
     renderToStaticMarkup(
-      createElement(Renderer, { tree, registry: { Capture } })
+      createElement(Renderer, { tree, registry: localRegistry })
     );
     expect(receivedProps).not.toBeNull();
     expect(receivedProps!.hasData).toBe(false);
@@ -262,28 +308,6 @@ describe("Renderer with dataSource", () => {
     vi.clearAllMocks();
   });
 
-  function DataComponent(props: ComponentRenderProps) {
-    if (!props.hasData) {
-      return createElement(
-        "div",
-        { "data-testid": "no-data" },
-        "No data source"
-      );
-    }
-    const { data, loading, error } = props;
-    if (loading)
-      return createElement("div", { "data-testid": "loading" }, "Loading...");
-    if (error)
-      return createElement("div", { "data-testid": "error" }, error.message);
-    return createElement(
-      "div",
-      { "data-testid": "data" },
-      JSON.stringify(data)
-    );
-  }
-
-  const dataRegistry: ComponentRegistry = { DataComponent };
-
   it("passes data props to component with dataSource", async () => {
     mockClient.searchTracesPage.mockResolvedValueOnce({
       data: [{ traceId: "abc" }],
@@ -304,7 +328,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: dataRegistry }), {
+    render(createElement(Renderer, { tree, registry }), {
       wrapper: Wrapper,
     });
 
@@ -342,7 +366,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: dataRegistry }), {
+    render(createElement(Renderer, { tree, registry }), {
       wrapper: Wrapper,
     });
 
@@ -374,7 +398,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: dataRegistry }), {
+    render(createElement(Renderer, { tree, registry }), {
       wrapper: Wrapper,
     });
 
@@ -391,7 +415,11 @@ describe("Renderer with dataSource", () => {
 
     let capturedRefetch: ((params?: Record<string, unknown>) => void) | null =
       null;
-    function RefetchComponent(props: ComponentRenderProps) {
+    function RefetchComponentLocal(
+      props: RendererComponentProps<
+        typeof _testCatalog.components.RefetchComponent
+      >
+    ) {
       if (!props.hasData) return null;
       capturedRefetch = props.refetch;
       return createElement(
@@ -400,6 +428,14 @@ describe("Renderer with dataSource", () => {
         JSON.stringify(props.data)
       );
     }
+
+    const localRegistry = createRegistry(_testCatalog, {
+      Box,
+      Text,
+      Capture,
+      DataComponent,
+      RefetchComponent: RefetchComponentLocal,
+    });
 
     const tree = {
       root: "data-1",
@@ -416,7 +452,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: { RefetchComponent } }), {
+    render(createElement(Renderer, { tree, registry: localRegistry }), {
       wrapper: Wrapper,
     });
 
@@ -449,12 +485,110 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: dataRegistry }), {
+    render(createElement(Renderer, { tree, registry }), {
       wrapper: Wrapper,
     });
 
     expect(screen.getByTestId("no-data")).toBeDefined();
     expect(screen.getByTestId("no-data").textContent).toBe("No data source");
+  });
+});
+
+describe("createRegistry with Renderer integration", () => {
+  const integrationCatalog = createSimpleCatalog({
+    name: "integration-test",
+    components: {
+      Wrapper: {
+        hasChildren: true,
+        description: "A wrapper",
+        props: z.object({}),
+      },
+      Label: {
+        hasChildren: false,
+        description: "A label",
+        props: z.object({ text: z.string() }),
+      },
+    },
+  });
+
+  type IntegrationUITree = z.infer<typeof integrationCatalog.uiTreeSchema>;
+
+  function Wrapper({
+    children,
+  }: RendererComponentProps<typeof integrationCatalog.components.Wrapper>) {
+    return createElement("div", { "data-testid": "wrapper" }, children);
+  }
+
+  function Label({
+    element,
+  }: RendererComponentProps<typeof integrationCatalog.components.Label>) {
+    return createElement(
+      "span",
+      { "data-testid": "label" },
+      element.props.text
+    );
+  }
+
+  it("renders tree using registry created with createRegistry", () => {
+    const registry = createRegistry(integrationCatalog, {
+      Wrapper,
+      Label,
+    });
+
+    const tree: IntegrationUITree = {
+      root: "wrapper-1",
+      elements: {
+        "wrapper-1": {
+          key: "wrapper-1",
+          type: "Wrapper",
+          props: {},
+          children: ["label-1"],
+          parentKey: "",
+        },
+        "label-1": {
+          key: "label-1",
+          type: "Label",
+          props: { text: "Hello World" },
+          children: [],
+          parentKey: "wrapper-1",
+        },
+      },
+    };
+
+    const result = renderToStaticMarkup(
+      createElement(Renderer, { tree, registry })
+    );
+
+    expect(result).toContain("Hello World");
+    expect(result).toContain('data-testid="wrapper"');
+    expect(result).toContain('data-testid="label"');
+  });
+
+  it("accepts registry from createRegistry without cast", () => {
+    const registry = createRegistry(integrationCatalog, {
+      Wrapper,
+      Label,
+    });
+
+    const tree: IntegrationUITree = {
+      root: "label-1",
+      elements: {
+        "label-1": {
+          key: "label-1",
+          type: "Label",
+          props: { text: "Test" },
+          children: [],
+          parentKey: "",
+        },
+      },
+    };
+
+    // This should compile without any cast - Renderer is now generic
+    const result = renderToStaticMarkup(
+      createElement(Renderer, { tree, registry })
+    );
+
+    expect(result).toContain("Test");
   });
 });
 
