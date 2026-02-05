@@ -6,7 +6,14 @@ import {
 } from "./component-catalog.js";
 import z from "zod";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
-import { type RegistryFromCatalog } from "./create-registry.js";
+
+type RegistryFromCatalog<
+  C extends { components: Record<string, ComponentDefinition> },
+> = {
+  [K in keyof C["components"]]: ComponentType<
+    RendererComponentProps<C["components"][K]>
+  >;
+};
 
 type Catalog = ReturnType<typeof createCatalog>;
 
@@ -100,15 +107,34 @@ export type ComponentRenderer = ComponentType<ComponentRenderProps>;
  */
 type ComponentRegistry = Record<string, ComponentRenderer>;
 
-export function createRendererFromCatalog<C extends Catalog>() {
+/**
+ * Creates a typed Renderer component bound to a catalog and component implementations.
+ *
+ * @param _catalog - The catalog created via createCatalog (used for type inference)
+ * @param components - React component implementations matching catalog definitions
+ * @returns A Renderer component that only needs `tree` and optional `fallback`
+ *
+ * @example
+ * ```tsx
+ * const DashboardRenderer = createRendererFromCatalog(catalog, {
+ *   Card: ({ element, children }) => <div className="card">{children}</div>,
+ *   Table: ({ element, data }) => <table>...</table>,
+ * });
+ *
+ * <DashboardRenderer tree={uiTree} />
+ * ```
+ */
+export function createRendererFromCatalog<
+  C extends { components: Record<string, ComponentDefinition> },
+>(_catalog: C, components: RegistryFromCatalog<C>) {
   return function CatalogRenderer({
     tree,
-    registry,
+    fallback,
   }: {
-    tree: UITree;
-    registry: RegistryFromCatalog<C>;
+    tree: UITree | null;
+    fallback?: ComponentRenderer;
   }) {
-    return <Renderer tree={tree} registry={registry} />;
+    return <Renderer tree={tree} registry={components} fallback={fallback} />;
   };
 }
 
@@ -192,31 +218,8 @@ function ElementRenderer({
 }
 
 /**
- * Props for the Renderer component
- */
-export interface RendererProps {
-  tree: UITree | null;
-  registry: ComponentRegistry;
-  fallback?: ComponentRenderer;
-}
-
-/**
  * Renders a UITree using a component registry.
- * Recursively renders elements, handling data fetching for elements with dataSource.
- *
- * @param tree - The UI tree to render (from LLM output)
- * @param registry - Component implementations keyed by type
- * @param fallback - Optional fallback component for unknown types
- * @returns Rendered React tree or null if tree is invalid
- *
- * @example
- * ```tsx
- * <Renderer
- *   tree={uiTree}
- *   registry={registry}
- *   fallback={({ element }) => <div>Unknown: {element.type}</div>}
- * />
- * ```
+ * Prefer using {@link createRendererFromCatalog} for type-safe rendering.
  */
 export function Renderer<
   C extends { components: Record<string, ComponentDefinition> },
@@ -229,7 +232,6 @@ export function Renderer<
   registry: RegistryFromCatalog<C>;
   fallback?: ComponentRenderer;
 }) {
-  // export function Renderer({ tree, registry, fallback }: RendererProps) {
   if (!tree || !tree.root) return null;
 
   const rootElement = tree.elements[tree.root];

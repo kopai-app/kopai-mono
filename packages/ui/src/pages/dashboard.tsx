@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { KopaiSDKProvider } from "../providers/kopai-provider.js";
 import { createCatalog } from "../lib/component-catalog.js";
-import { Renderer, type RendererComponentProps } from "../lib/renderer.js";
-import { createRegistry } from "../lib/create-registry.js";
+import {
+  createRendererFromCatalog,
+  type RendererComponentProps,
+} from "../lib/renderer.js";
 import { KopaiClient } from "@kopai/sdk";
 import { denormalizedSignals } from "@kopai/core";
 import { z } from "zod";
@@ -346,7 +348,7 @@ function Container(
   return <div style={{ padding: 24 }}>{props.children}</div>;
 }
 
-const registry = createRegistry(dashboardOtelCatalog, {
+const DashboardRenderer = createRendererFromCatalog(dashboardOtelCatalog, {
   TracesTable,
   LogsTable,
   MetricsTable,
@@ -411,7 +413,7 @@ export default function DashboardPage() {
         <p style={{ color: "var(--muted)" }}>
           Real-time telemetry data from KopaiSDK
         </p>
-        <Renderer tree={testTree} registry={registry} />
+        <DashboardRenderer tree={testTree} />
       </div>
     </KopaiSDKProvider>
   );

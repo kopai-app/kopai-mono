@@ -5,8 +5,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { render, screen, waitFor, act } from "@testing-library/react";
-import { Renderer, type RendererComponentProps } from "./renderer.js";
-import { createRegistry } from "./create-registry.js";
+import {
+  createRendererFromCatalog,
+  type RendererComponentProps,
+} from "./renderer.js";
 import { KopaiSDKProvider } from "../providers/kopai-provider.js";
 import { createCatalog } from "./component-catalog.js";
 import z from "zod";
@@ -116,7 +118,7 @@ function RefetchComponent(
   );
 }
 
-const registry = createRegistry(_testCatalog, {
+const TestRenderer = createRendererFromCatalog(_testCatalog, {
   Box,
   Text,
   Capture,
@@ -127,16 +129,14 @@ const registry = createRegistry(_testCatalog, {
 describe("Renderer", () => {
   it("renders null for null tree", () => {
     const result = renderToStaticMarkup(
-      createElement(Renderer, { tree: null, registry })
+      createElement(TestRenderer, { tree: null })
     );
     expect(result).toBe("");
   });
 
   it("renders null for tree without root", () => {
     const tree = { root: "", elements: {} } as unknown as UITree;
-    const result = renderToStaticMarkup(
-      createElement(Renderer, { tree, registry })
-    );
+    const result = renderToStaticMarkup(createElement(TestRenderer, { tree }));
     expect(result).toBe("");
   });
 
@@ -153,9 +153,7 @@ describe("Renderer", () => {
         },
       },
     } satisfies UITree; // should be like this, not casts
-    const result = renderToStaticMarkup(
-      createElement(Renderer, { tree, registry })
-    );
+    const result = renderToStaticMarkup(createElement(TestRenderer, { tree }));
     expect(result).toBe("<span>Hello</span>");
   });
 
@@ -179,9 +177,7 @@ describe("Renderer", () => {
         },
       },
     } satisfies UITree;
-    const result = renderToStaticMarkup(
-      createElement(Renderer, { tree, registry })
-    );
+    const result = renderToStaticMarkup(createElement(TestRenderer, { tree }));
     expect(result).toBe(
       '<div data-type="Box" data-key="box-1"><span>Nested</span></div>'
     );
@@ -214,9 +210,7 @@ describe("Renderer", () => {
         },
       },
     } satisfies UITree;
-    const result = renderToStaticMarkup(
-      createElement(Renderer, { tree, registry })
-    );
+    const result = renderToStaticMarkup(createElement(TestRenderer, { tree }));
     expect(result).toContain("Deep");
     expect(result).toContain('data-key="box-2"');
   });
@@ -241,9 +235,7 @@ describe("Renderer", () => {
         },
       },
     } satisfies UITree;
-    const result = renderToStaticMarkup(
-      createElement(Renderer, { tree, registry })
-    );
+    const result = renderToStaticMarkup(createElement(TestRenderer, { tree }));
     expect(result).toContain("Present");
     expect(result).not.toContain("missing");
   });
@@ -258,7 +250,7 @@ describe("Renderer", () => {
       receivedProps = props;
       return createElement("div", null, "captured");
     }
-    const localRegistry = createRegistry(_testCatalog, {
+    const LocalRenderer = createRendererFromCatalog(_testCatalog, {
       Box,
       Text,
       Capture: CaptureLocal,
@@ -277,9 +269,7 @@ describe("Renderer", () => {
         },
       },
     } satisfies UITree;
-    renderToStaticMarkup(
-      createElement(Renderer, { tree, registry: localRegistry })
-    );
+    renderToStaticMarkup(createElement(LocalRenderer, { tree }));
     expect(receivedProps).not.toBeNull();
     expect(receivedProps!.hasData).toBe(false);
     expect(receivedProps!.element.props).toEqual({ content: "hello" });
@@ -325,7 +315,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry }), {
+    render(createElement(TestRenderer, { tree }), {
       wrapper: Wrapper,
     });
 
@@ -363,7 +353,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry }), {
+    render(createElement(TestRenderer, { tree }), {
       wrapper: Wrapper,
     });
 
@@ -395,7 +385,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry }), {
+    render(createElement(TestRenderer, { tree }), {
       wrapper: Wrapper,
     });
 
@@ -426,7 +416,7 @@ describe("Renderer with dataSource", () => {
       );
     }
 
-    const localRegistry = createRegistry(_testCatalog, {
+    const LocalRenderer = createRendererFromCatalog(_testCatalog, {
       Box,
       Text,
       Capture,
@@ -449,7 +439,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry: localRegistry }), {
+    render(createElement(LocalRenderer, { tree }), {
       wrapper: Wrapper,
     });
 
@@ -482,7 +472,7 @@ describe("Renderer with dataSource", () => {
     } satisfies UITree;
 
     const Wrapper = createWrapper(mockClient);
-    render(createElement(Renderer, { tree, registry }), {
+    render(createElement(TestRenderer, { tree }), {
       wrapper: Wrapper,
     });
 
@@ -491,7 +481,7 @@ describe("Renderer with dataSource", () => {
   });
 });
 
-describe("createRegistry with Renderer integration", () => {
+describe("createRendererFromCatalog integration", () => {
   const integrationCatalog = createCatalog({
     name: "integration-test",
     components: {
@@ -526,12 +516,12 @@ describe("createRegistry with Renderer integration", () => {
     );
   }
 
-  it("renders tree using registry created with createRegistry", () => {
-    const registry = createRegistry(integrationCatalog, {
-      Wrapper,
-      Label,
-    });
+  const IntegrationRenderer = createRendererFromCatalog(integrationCatalog, {
+    Wrapper,
+    Label,
+  });
 
+  it("renders tree using createRendererFromCatalog", () => {
     const tree: IntegrationUITree = {
       root: "wrapper-1",
       elements: {
@@ -553,7 +543,7 @@ describe("createRegistry with Renderer integration", () => {
     };
 
     const result = renderToStaticMarkup(
-      createElement(Renderer, { tree, registry })
+      createElement(IntegrationRenderer, { tree })
     );
 
     expect(result).toContain("Hello World");
@@ -561,12 +551,7 @@ describe("createRegistry with Renderer integration", () => {
     expect(result).toContain('data-testid="label"');
   });
 
-  it("accepts registry from createRegistry without cast", () => {
-    const registry = createRegistry(integrationCatalog, {
-      Wrapper,
-      Label,
-    });
-
+  it("renders single element tree", () => {
     const tree: IntegrationUITree = {
       root: "label-1",
       elements: {
@@ -580,11 +565,127 @@ describe("createRegistry with Renderer integration", () => {
       },
     };
 
-    // This should compile without any cast - Renderer is now generic
     const result = renderToStaticMarkup(
-      createElement(Renderer, { tree, registry })
+      createElement(IntegrationRenderer, { tree })
     );
 
     expect(result).toContain("Test");
+  });
+});
+
+describe("createRendererFromCatalog type safety", () => {
+  const typeCatalog = createCatalog({
+    name: "type-test",
+    components: {
+      Button: {
+        hasChildren: false,
+        description: "A button",
+        props: z.object({ label: z.string() }),
+      },
+      Container: {
+        hasChildren: true,
+        description: "A container",
+        props: z.object({ padding: z.number() }),
+      },
+    },
+  });
+
+  it("creates renderer with correct component types", () => {
+    expect.assertions(0);
+
+    function Button({
+      element,
+    }: RendererComponentProps<typeof typeCatalog.components.Button>) {
+      return createElement("button", null, element.props.label);
+    }
+
+    function Container({
+      element,
+      children,
+    }: RendererComponentProps<typeof typeCatalog.components.Container>) {
+      return createElement(
+        "div",
+        { style: { padding: element.props.padding } },
+        children
+      );
+    }
+
+    const _Renderer = createRendererFromCatalog(typeCatalog, {
+      Button,
+      Container,
+    });
+  });
+
+  it("errors when catalog component is missing", () => {
+    expect.assertions(0);
+
+    function Button({
+      element,
+    }: RendererComponentProps<typeof typeCatalog.components.Button>) {
+      return createElement("button", null, element.props.label);
+    }
+
+    // @ts-expect-error - Container is missing from registry
+    const _Renderer = createRendererFromCatalog(typeCatalog, {
+      Button,
+    });
+  });
+
+  it("errors when component has wrong props type", () => {
+    expect.assertions(0);
+
+    // Wrong props - expects { label: string } but gets { title: string }
+    function Button({ element }: { element: { props: { title: string } } }) {
+      return createElement("button", null, element.props.title);
+    }
+
+    function Container({
+      element,
+      children,
+    }: RendererComponentProps<typeof typeCatalog.components.Container>) {
+      return createElement(
+        "div",
+        { style: { padding: element.props.padding } },
+        children
+      );
+    }
+
+    const _Renderer = createRendererFromCatalog(typeCatalog, {
+      // @ts-expect-error - Button has wrong props type
+      Button,
+      Container,
+    });
+  });
+
+  it("errors when extra component is provided", () => {
+    expect.assertions(0);
+
+    function Button({
+      element,
+    }: RendererComponentProps<typeof typeCatalog.components.Button>) {
+      return createElement("button", null, element.props.label);
+    }
+
+    function Container({
+      element,
+      children,
+    }: RendererComponentProps<typeof typeCatalog.components.Container>) {
+      return createElement(
+        "div",
+        { style: { padding: element.props.padding } },
+        children
+      );
+    }
+
+    function Extra() {
+      return createElement("div", null, "extra");
+    }
+
+    const _Renderer = createRendererFromCatalog(typeCatalog, {
+      Button,
+      Container,
+      // @ts-expect-error - Extra is not in catalog
+      Extra,
+    });
   });
 });

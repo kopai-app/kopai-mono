@@ -1,17 +1,14 @@
 export const name = "@kopai/ui";
 export { uiPlugin } from "./plugin.js";
-export * as Dashboard from "./pages/dashboard.js";
-export { default as ExamplePage } from "./pages/example.js";
+export { createCatalog } from "./lib/component-catalog.js";
+export { generatePromptInstructions } from "./lib/generate-prompt-instructions.js";
 export {
   Renderer,
   createRendererFromCatalog,
+  type RendererComponentProps,
   type ComponentRenderProps,
   type ComponentRenderer,
 } from "./lib/renderer.js";
-export {
-  createRegistry,
-  type RegistryFromCatalog,
-} from "./lib/create-registry.js";
 export {
   KopaiSDKProvider,
   useKopaiSDK,

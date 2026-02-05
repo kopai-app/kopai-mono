@@ -1,6 +1,5 @@
 import { dashboardCatalog } from "../lib/catalog.js";
-import { Renderer } from "../lib/renderer.js";
-import { createRegistry } from "../lib/create-registry.js";
+import { createRendererFromCatalog } from "../lib/renderer.js";
 import { Card } from "../components/card.js";
 import { Grid } from "../components/grid.js";
 import { Stack } from "../components/stack.js";
@@ -16,7 +15,7 @@ import { DatePicker } from "../components/date-picker.js";
 import { Button } from "../components/button.js";
 import { List } from "../components/list.js";
 
-const registry = createRegistry(dashboardCatalog, {
+const ExampleRenderer = createRendererFromCatalog(dashboardCatalog, {
   Card,
   Grid,
   Stack,
@@ -571,7 +570,7 @@ export default function ExamplePage() {
         margin: "0 auto",
       }}
     >
-      <Renderer tree={exampleTree} registry={registry} />
+      <ExampleRenderer tree={exampleTree} />
     </div>
   );
 }
