@@ -1,17 +1,17 @@
 /// <reference types="vitest/globals" />
 import { DatabaseSync } from "node:sqlite";
-import { NodeSqliteTelemetryDatasource } from "./datasource.js";
+import { createOptimizedDatasource } from "./optimized-datasource.js";
 import { otlp, type datasource } from "@kopai/core";
 import { initializeDatabase } from "./initialize-database.js";
 
-describe("NodeSqliteTelemetryDatasource", () => {
+describe("OptimizedDatasource", () => {
   describe("writeMetrics", () => {
     let testConnection: DatabaseSync;
     let ds: datasource.WriteTelemetryDatasource;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
-      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      ds = createOptimizedDatasource(testConnection);
     });
 
     afterEach(() => {
@@ -436,9 +436,9 @@ describe("NodeSqliteTelemetryDatasource", () => {
     let testConnection: DatabaseSync;
     let ds: datasource.WriteTelemetryDatasource;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
-      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      ds = createOptimizedDatasource(testConnection);
     });
 
     afterEach(() => {
@@ -689,9 +689,9 @@ describe("NodeSqliteTelemetryDatasource", () => {
     let testConnection: DatabaseSync;
     let ds: datasource.WriteTelemetryDatasource;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
-      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      ds = createOptimizedDatasource(testConnection);
     });
 
     afterEach(() => {

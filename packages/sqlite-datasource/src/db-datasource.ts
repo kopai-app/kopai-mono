@@ -38,16 +38,7 @@ const queryBuilder = new Kysely<DB>({
   },
 });
 
-const DISCOVER_METRICS_CACHE_TTL_MS = 30_000; // 30 seconds
-
-export class NodeSqliteTelemetryDatasource
-  implements datasource.TelemetryDatasource
-{
-  private discoverMetricsCache: {
-    data: datasource.MetricsDiscoveryResult;
-    timestamp: number;
-  } | null = null;
-
+export class DbDatasource implements datasource.TelemetryDatasource {
   constructor(private sqliteConnection: DatabaseSync) {}
 
   async writeMetrics(
@@ -147,15 +138,15 @@ export class NodeSqliteTelemetryDatasource
       this.sqliteConnection.exec("BEGIN");
       try {
         for (const { table, rows } of [
-          { table: "otel_metrics_gauge", rows: gaugeRows },
-          { table: "otel_metrics_sum", rows: sumRows },
-          { table: "otel_metrics_histogram", rows: histogramRows },
+          { table: "otel_metrics_gauge" as const, rows: gaugeRows },
+          { table: "otel_metrics_sum" as const, rows: sumRows },
+          { table: "otel_metrics_histogram" as const, rows: histogramRows },
           {
-            table: "otel_metrics_exponential_histogram",
+            table: "otel_metrics_exponential_histogram" as const,
             rows: expHistogramRows,
           },
-          { table: "otel_metrics_summary", rows: summaryRows },
-        ] as const) {
+          { table: "otel_metrics_summary" as const, rows: summaryRows },
+        ]) {
           for (const row of rows) {
             const { sql, parameters } = queryBuilder
               .insertInto(table)
@@ -780,49 +771,30 @@ export class NodeSqliteTelemetryDatasource
   }
 
   async discoverMetrics(): Promise<datasource.MetricsDiscoveryResult> {
-    // Check cache
-    const now = Date.now();
-    if (
-      this.discoverMetricsCache &&
-      now - this.discoverMetricsCache.timestamp < DISCOVER_METRICS_CACHE_TTL_MS
-    ) {
-      return this.discoverMetricsCache.data;
-    }
-
     try {
-      // Query 1: Get distinct metrics across all tables
-      const distinctMetricsSql = METRIC_TABLES.map(
-        ({ table, type }) =>
-          `SELECT DISTINCT MetricName, MetricUnit, MetricDescription, '${type}' as MetricType FROM ${table}`
-      ).join(" UNION ");
+      // Build discovery state from DB
+      const discoveryState = new Map<string, DiscoveryMetricState>();
 
-      const distinctMetrics = this.sqliteConnection
-        .prepare(distinctMetricsSql)
-        .all() as {
-        MetricName: string;
-        MetricUnit: string | null;
-        MetricDescription: string | null;
-        MetricType: datasource.MetricType;
-      }[];
-
-      // Query 2: Get all (metric, type, attr_key, attr_value) tuples in one query
+      // Query all (metric, type, attr_key, attr_value) tuples
       const attrTuplesSql = METRIC_TABLES.map(
         ({ table, type }) =>
-          `SELECT MetricName, '${type}' as MetricType, json_each.key as attr_key, json_each.value as attr_value
+          `SELECT MetricName, MetricUnit, MetricDescription, '${type}' as MetricType, json_each.key as attr_key, json_each.value as attr_value
            FROM ${table}, json_each(Attributes)`
       ).join(" UNION ALL ");
 
       const attrTuples = this.sqliteConnection.prepare(attrTuplesSql).all() as {
         MetricName: string;
-        MetricType: string;
+        MetricUnit: string | null;
+        MetricDescription: string | null;
+        MetricType: datasource.MetricType;
         attr_key: string;
         attr_value: string;
       }[];
 
-      // Query 3: Get all (metric, type, res_attr_key, res_attr_value) tuples in one query
+      // Query all resource attribute tuples
       const resAttrTuplesSql = METRIC_TABLES.map(
         ({ table, type }) =>
-          `SELECT MetricName, '${type}' as MetricType, json_each.key as attr_key, json_each.value as attr_value
+          `SELECT MetricName, MetricUnit, MetricDescription, '${type}' as MetricType, json_each.key as attr_key, json_each.value as attr_value
            FROM ${table}, json_each(ResourceAttributes)`
       ).join(" UNION ALL ");
 
@@ -830,84 +802,92 @@ export class NodeSqliteTelemetryDatasource
         .prepare(resAttrTuplesSql)
         .all() as {
         MetricName: string;
-        MetricType: string;
+        MetricUnit: string | null;
+        MetricDescription: string | null;
+        MetricType: datasource.MetricType;
         attr_key: string;
         attr_value: string;
       }[];
 
-      // Build lookup maps: metricKey -> attrKey -> Set of values
-      const attrMap = new Map<string, Map<string, Set<string>>>();
-      const resAttrMap = new Map<string, Map<string, Set<string>>>();
-
-      for (const {
-        MetricName,
-        MetricType,
-        attr_key,
-        attr_value,
-      } of attrTuples) {
-        const metricKey = `${MetricName}:${MetricType}`;
-        if (!attrMap.has(metricKey)) attrMap.set(metricKey, new Map());
-        const keyMap = attrMap.get(metricKey)!;
-        if (!keyMap.has(attr_key)) keyMap.set(attr_key, new Set());
-        keyMap.get(attr_key)!.add(String(attr_value));
+      // Populate discovery state from attributes
+      for (const tuple of attrTuples) {
+        const metricKey = `${tuple.MetricName}:${tuple.MetricType}`;
+        let state = discoveryState.get(metricKey);
+        if (!state) {
+          state = {
+            name: tuple.MetricName,
+            type: tuple.MetricType,
+            unit: tuple.MetricUnit || undefined,
+            description: tuple.MetricDescription || undefined,
+            attributes: new Map(),
+            resourceAttributes: new Map(),
+          };
+          discoveryState.set(metricKey, state);
+        }
+        if (!state.attributes.has(tuple.attr_key)) {
+          state.attributes.set(tuple.attr_key, new Set());
+        }
+        state.attributes.get(tuple.attr_key)!.add(String(tuple.attr_value));
       }
 
-      for (const {
-        MetricName,
-        MetricType,
-        attr_key,
-        attr_value,
-      } of resAttrTuples) {
-        const metricKey = `${MetricName}:${MetricType}`;
-        if (!resAttrMap.has(metricKey)) resAttrMap.set(metricKey, new Map());
-        const keyMap = resAttrMap.get(metricKey)!;
-        if (!keyMap.has(attr_key)) keyMap.set(attr_key, new Set());
-        keyMap.get(attr_key)!.add(String(attr_value));
+      // Populate discovery state from resource attributes
+      for (const tuple of resAttrTuples) {
+        const metricKey = `${tuple.MetricName}:${tuple.MetricType}`;
+        let state = discoveryState.get(metricKey);
+        if (!state) {
+          state = {
+            name: tuple.MetricName,
+            type: tuple.MetricType,
+            unit: tuple.MetricUnit || undefined,
+            description: tuple.MetricDescription || undefined,
+            attributes: new Map(),
+            resourceAttributes: new Map(),
+          };
+          discoveryState.set(metricKey, state);
+        }
+        if (!state.resourceAttributes.has(tuple.attr_key)) {
+          state.resourceAttributes.set(tuple.attr_key, new Set());
+        }
+        state.resourceAttributes
+          .get(tuple.attr_key)!
+          .add(String(tuple.attr_value));
       }
 
-      // Build result
+      // Convert discovery state to result format
       const metrics: datasource.DiscoveredMetric[] = [];
 
-      for (const metric of distinctMetrics) {
-        const metricKey = `${metric.MetricName}:${metric.MetricType}`;
-
-        // Process attributes
+      for (const state of discoveryState.values()) {
+        // Process attributes with truncation
         let attrsTruncated = false;
         const attributes: Record<string, string[]> = {};
-        const attrKeyMap = attrMap.get(metricKey);
-        if (attrKeyMap) {
-          for (const [key, valueSet] of attrKeyMap) {
-            const values = Array.from(valueSet);
-            if (values.length > MAX_ATTR_VALUES) {
-              attrsTruncated = true;
-              attributes[key] = values.slice(0, MAX_ATTR_VALUES);
-            } else {
-              attributes[key] = values;
-            }
+        for (const [key, valueSet] of state.attributes) {
+          const values = Array.from(valueSet) as string[];
+          if (values.length > MAX_ATTR_VALUES) {
+            attrsTruncated = true;
+            attributes[key] = values.slice(0, MAX_ATTR_VALUES);
+          } else {
+            attributes[key] = values;
           }
         }
 
-        // Process resource attributes
+        // Process resource attributes with truncation
         let resAttrsTruncated = false;
         const resourceAttributes: Record<string, string[]> = {};
-        const resAttrKeyMap = resAttrMap.get(metricKey);
-        if (resAttrKeyMap) {
-          for (const [key, valueSet] of resAttrKeyMap) {
-            const values = Array.from(valueSet);
-            if (values.length > MAX_ATTR_VALUES) {
-              resAttrsTruncated = true;
-              resourceAttributes[key] = values.slice(0, MAX_ATTR_VALUES);
-            } else {
-              resourceAttributes[key] = values;
-            }
+        for (const [key, valueSet] of state.resourceAttributes) {
+          const values = Array.from(valueSet) as string[];
+          if (values.length > MAX_ATTR_VALUES) {
+            resAttrsTruncated = true;
+            resourceAttributes[key] = values.slice(0, MAX_ATTR_VALUES);
+          } else {
+            resourceAttributes[key] = values;
           }
         }
 
         metrics.push({
-          name: metric.MetricName,
-          type: metric.MetricType,
-          unit: metric.MetricUnit || undefined,
-          description: metric.MetricDescription || undefined,
+          name: state.name,
+          type: state.type,
+          unit: state.unit,
+          description: state.description,
           attributes: {
             values: attributes,
             ...(attrsTruncated && { _truncated: true }),
@@ -919,9 +899,7 @@ export class NodeSqliteTelemetryDatasource
         });
       }
 
-      const result = { metrics };
-      this.discoverMetricsCache = { data: result, timestamp: now };
-      return result;
+      return { metrics };
     } catch (error) {
       if (error instanceof SqliteDatasourceQueryError) throw error;
       throw new SqliteDatasourceQueryError("Failed to discover metrics", {
@@ -930,6 +908,16 @@ export class NodeSqliteTelemetryDatasource
     }
   }
 }
+
+/** In-memory state for a single discovered metric */
+type DiscoveryMetricState = {
+  name: string;
+  type: datasource.MetricType;
+  unit?: string;
+  description?: string;
+  attributes: Map<string, Set<string>>;
+  resourceAttributes: Map<string, Set<string>>;
+};
 
 function toSpanRow(
   resource: otlp.Resource | undefined,
