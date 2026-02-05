@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { KopaiSDKProvider } from "../lib/kopai-provider.js";
 import { createCatalog } from "../lib/component-catalog.js";
 import { Renderer, type RendererComponentProps } from "../lib/renderer.js";
@@ -56,17 +57,17 @@ const dashboardOtelCatalog = createCatalog({
   name: "dashboard-otel",
   components: {
     TracesTable: {
-      props: z.object({}),
+      props: z.object({ limit: z.number().optional() }),
       hasChildren: false,
       description: "Table displaying OpenTelemetry traces",
     },
     LogsTable: {
-      props: z.object({}),
+      props: z.object({ limit: z.number().optional() }),
       hasChildren: false,
       description: "Table displaying OpenTelemetry logs",
     },
     MetricsTable: {
-      props: z.object({}),
+      props: z.object({ limit: z.number().optional() }),
       hasChildren: false,
       description: "Table displaying OpenTelemetry metrics",
     },
@@ -86,6 +87,14 @@ function TracesTable(
     typeof dashboardOtelCatalog.components.TracesTable
   >
 ) {
+  const { limit: initialLimit } = props.element.props;
+  const [currentLimit, setCurrentLimit] = useState(initialLimit ?? 10);
+  const refetchFn = props.hasData ? props.refetch : null;
+  useEffect(() => {
+    if (refetchFn) {
+      refetchFn({ limit: currentLimit });
+    }
+  }, [currentLimit, refetchFn]);
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading traces...</div>;
@@ -97,6 +106,16 @@ function TracesTable(
     <div style={{ marginBottom: 32 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h2 style={{ margin: 0 }}>Traces ({traces.length})</h2>
+        <select
+          value={currentLimit}
+          onChange={(e) => setCurrentLimit(Number(e.target.value))}
+        >
+          <option value={5}>5</option>
+          <option value={10}>10</option>
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+        </select>
         <button onClick={() => refetch()}>Refresh</button>
       </div>
       <div style={{ overflowX: "auto" }}>
@@ -155,6 +174,14 @@ function LogsTable(
     typeof dashboardOtelCatalog.components.LogsTable
   >
 ) {
+  const { limit: initialLimit } = props.element.props;
+  const [currentLimit, setCurrentLimit] = useState(initialLimit ?? 10);
+  const refetchFn = props.hasData ? props.refetch : null;
+  useEffect(() => {
+    if (refetchFn) {
+      refetchFn({ limit: currentLimit });
+    }
+  }, [currentLimit, refetchFn]);
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading logs...</div>;
@@ -165,6 +192,16 @@ function LogsTable(
     <div style={{ marginBottom: 32 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h2 style={{ margin: 0 }}>Logs ({logs.length})</h2>
+        <select
+          value={currentLimit}
+          onChange={(e) => setCurrentLimit(Number(e.target.value))}
+        >
+          <option value={5}>5</option>
+          <option value={10}>10</option>
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+        </select>
         <button onClick={() => refetch()}>Refresh</button>
       </div>
       <div style={{ overflowX: "auto" }}>
@@ -217,6 +254,14 @@ function MetricsTable(
     typeof dashboardOtelCatalog.components.MetricsTable
   >
 ) {
+  const { limit: initialLimit } = props.element.props;
+  const [currentLimit, setCurrentLimit] = useState(initialLimit ?? 10);
+  const refetchFn = props.hasData ? props.refetch : null;
+  useEffect(() => {
+    if (refetchFn) {
+      refetchFn({ limit: currentLimit });
+    }
+  }, [currentLimit, refetchFn]);
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading metrics...</div>;
@@ -228,6 +273,16 @@ function MetricsTable(
     <div style={{ marginBottom: 32 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h2 style={{ margin: 0 }}>Metrics ({metrics.length})</h2>
+        <select
+          value={currentLimit}
+          onChange={(e) => setCurrentLimit(Number(e.target.value))}
+        >
+          <option value={5}>5</option>
+          <option value={10}>10</option>
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+        </select>
         <button onClick={() => refetch()}>Refresh</button>
       </div>
       <div style={{ overflowX: "auto" }}>
