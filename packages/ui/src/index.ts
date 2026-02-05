@@ -16,4 +16,4 @@ export {
   KopaiSDKProvider,
   useKopaiSDK,
   type KopaiClient,
-} from "./lib/kopai-provider.js";
+} from "./providers/kopai-provider.js";

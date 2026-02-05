@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { DataSource } from "./component-catalog.js";
-import { useKopaiSDK } from "./kopai-provider.js";
+import type { DataSource } from "../lib/component-catalog.js";
+import { useKopaiSDK } from "../providers/kopai-provider.js";
 
 export interface UseKopaiDataResult<T> {
   data: T | null;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { KopaiSDKProvider } from "../lib/kopai-provider.js";
+import { KopaiSDKProvider } from "../providers/kopai-provider.js";
 import { createCatalog } from "../lib/component-catalog.js";
 import { Renderer, type RendererComponentProps } from "../lib/renderer.js";
 import { createRegistry } from "../lib/create-registry.js";

@@ -5,7 +5,7 @@ import {
   type ComponentDefinition,
 } from "./component-catalog.js";
 import z from "zod";
-import { useKopaiData } from "./use-kopai-data.js";
+import { useKopaiData } from "../hooks/use-kopai-data.js";
 import { type RegistryFromCatalog } from "./create-registry.js";
 
 type Catalog = ReturnType<typeof createCatalog>;

@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { Renderer, type RendererComponentProps } from "./renderer.js";
 import { createRegistry } from "./create-registry.js";
-import { KopaiSDKProvider } from "./kopai-provider.js";
+import { KopaiSDKProvider } from "../providers/kopai-provider.js";
 import { createCatalog } from "./component-catalog.js";
 import z from "zod";
 import type { KopaiClient } from "@kopai/sdk";
