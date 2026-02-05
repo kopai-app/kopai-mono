@@ -575,6 +575,119 @@ describe("NodeSqliteTelemetryDatasource", () => {
       expect(parseResult.success).toBe(true);
     });
 
+    it("returns nested object/array attribute values (recursive AnyValue)", async () => {
+      // OTel attributes can contain nested objects and arrays of objects (e.g. errorCauses)
+      await ds.writeTraces({
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                {
+                  key: "service.name",
+                  value: { stringValue: "test-service" },
+                },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: { name: "test-scope" },
+                spans: [
+                  {
+                    traceId: "trace-with-nested-attr",
+                    spanId: "span1",
+                    name: "test-span",
+                    startTimeUnixNano: "1000000000000000",
+                    endTimeUnixNano: "1001000000000000",
+                    attributes: [
+                      {
+                        key: "errorCauses",
+                        value: {
+                          arrayValue: {
+                            values: [
+                              {
+                                kvlistValue: {
+                                  values: [
+                                    {
+                                      key: "message",
+                                      value: {
+                                        stringValue: "Connection refused",
+                                      },
+                                    },
+                                    { key: "code", value: { intValue: "500" } },
+                                  ],
+                                },
+                              },
+                              {
+                                kvlistValue: {
+                                  values: [
+                                    {
+                                      key: "message",
+                                      value: { stringValue: "Timeout" },
+                                    },
+                                    { key: "code", value: { intValue: "504" } },
+                                  ],
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      },
+                      {
+                        key: "nested.config",
+                        value: {
+                          kvlistValue: {
+                            values: [
+                              { key: "retries", value: { intValue: "3" } },
+                              {
+                                key: "hosts",
+                                value: {
+                                  arrayValue: {
+                                    values: [
+                                      { stringValue: "host1" },
+                                      { stringValue: "host2" },
+                                    ],
+                                  },
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = await readDs.getTraces({
+        traceId: "trace-with-nested-attr",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+
+      // Verify nested structures are preserved
+      // Note: intValue is stored as string per OTLP spec (supports int64)
+      expect(row.SpanAttributes).toEqual({
+        errorCauses: [
+          { message: "Connection refused", code: "500" },
+          { message: "Timeout", code: "504" },
+        ],
+        "nested.config": {
+          retries: "3",
+          hosts: ["host1", "host2"],
+        },
+      });
+
+      // Validate schema accepts nested object/array attribute values
+      const parseResult = denormalizedSignals.otelTracesSchema.safeParse(row);
+      expect(parseResult.success).toBe(true);
+    });
+
     it("parses Events and Links fields as arrays", async () => {
       await insertSpan({
         traceId: "trace-with-events-links",
