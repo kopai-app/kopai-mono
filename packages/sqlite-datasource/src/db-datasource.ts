@@ -134,34 +134,34 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           }
         }
       }
+    }
 
-      this.sqliteConnection.exec("BEGIN");
-      try {
-        for (const { table, rows } of [
-          { table: "otel_metrics_gauge" as const, rows: gaugeRows },
-          { table: "otel_metrics_sum" as const, rows: sumRows },
-          { table: "otel_metrics_histogram" as const, rows: histogramRows },
-          {
-            table: "otel_metrics_exponential_histogram" as const,
-            rows: expHistogramRows,
-          },
-          { table: "otel_metrics_summary" as const, rows: summaryRows },
-        ]) {
-          for (const row of rows) {
-            const { sql, parameters } = queryBuilder
-              .insertInto(table)
-              .values(row)
-              .compile();
-            this.sqliteConnection
-              .prepare(sql)
-              .run(...(parameters as (string | number | bigint | null)[]));
-          }
+    this.sqliteConnection.exec("BEGIN");
+    try {
+      for (const { table, rows } of [
+        { table: "otel_metrics_gauge" as const, rows: gaugeRows },
+        { table: "otel_metrics_sum" as const, rows: sumRows },
+        { table: "otel_metrics_histogram" as const, rows: histogramRows },
+        {
+          table: "otel_metrics_exponential_histogram" as const,
+          rows: expHistogramRows,
+        },
+        { table: "otel_metrics_summary" as const, rows: summaryRows },
+      ]) {
+        for (const row of rows) {
+          const { sql, parameters } = queryBuilder
+            .insertInto(table)
+            .values(row)
+            .compile();
+          this.sqliteConnection
+            .prepare(sql)
+            .run(...(parameters as (string | number | bigint | null)[]));
         }
-        this.sqliteConnection.exec("COMMIT");
-      } catch (error) {
-        this.sqliteConnection.exec("ROLLBACK");
-        throw error;
       }
+      this.sqliteConnection.exec("COMMIT");
+    } catch (error) {
+      this.sqliteConnection.exec("ROLLBACK");
+      throw error;
     }
 
     return { rejectedDataPoints: "" };

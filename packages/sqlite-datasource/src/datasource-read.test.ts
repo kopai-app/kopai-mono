@@ -2059,6 +2059,61 @@ describe("OptimizedDatasource", () => {
       const result = await badDs.discoverMetrics();
       expect(result.metrics).toEqual([]);
     });
+
+    it("extractAnyValue should handle nested arrayValue attributes", async () => {
+      // This test reproduces a bug where extractAnyValue doesn't recursively
+      // handle nested OTel AnyValue types (arrayValue, kvlistValue).
+      // Instead of extracting ["a", "b"], it returns the raw OTel structure.
+      await ds.writeMetrics({
+        resourceMetrics: [
+          {
+            resource: { attributes: [] },
+            scopeMetrics: [
+              {
+                scope: { name: "test" },
+                metrics: [
+                  {
+                    name: "metric.with.array.attr",
+                    gauge: {
+                      dataPoints: [
+                        {
+                          timeUnixNano: "1000000000000000",
+                          asDouble: 1.0,
+                          attributes: [
+                            {
+                              key: "tags",
+                              value: {
+                                arrayValue: {
+                                  values: [
+                                    { stringValue: "tag-a" },
+                                    { stringValue: "tag-b" },
+                                  ],
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = await ds.discoverMetrics();
+      const metric = result.metrics[0];
+      assertDefined(metric);
+
+      // EXPECTED: The attribute value should be the string representation of ["tag-a", "tag-b"]
+      // BUG: It returns the raw OTel structure as a string like '[object Object]' or
+      //      the JSON of {arrayValue: {values: [...]}}
+      const tagsValue = metric.attributes.values.tags?.[0];
+      expect(tagsValue).not.toContain("arrayValue");
+      expect(tagsValue).not.toBe("[object Object]");
+    });
   });
 });
 

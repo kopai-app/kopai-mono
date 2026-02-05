@@ -238,6 +238,22 @@ export class OptimizedDatasource implements datasource.TelemetryDatasource {
     if (v.intValue !== undefined) return v.intValue;
     if (v.doubleValue !== undefined) return v.doubleValue;
     if (v.bytesValue !== undefined) return v.bytesValue;
+    if (v.arrayValue && typeof v.arrayValue === "object") {
+      const arr = v.arrayValue as { values?: unknown[] };
+      return (arr.values ?? []).map((item) => this.extractAnyValue(item));
+    }
+    if (v.kvlistValue && typeof v.kvlistValue === "object") {
+      const kvlist = v.kvlistValue as {
+        values?: { key?: string; value?: unknown }[];
+      };
+      const result: Record<string, unknown> = {};
+      for (const kv of kvlist.values ?? []) {
+        if (kv.key) {
+          result[kv.key] = this.extractAnyValue(kv.value);
+        }
+      }
+      return result;
+    }
     return value;
   }
 }

@@ -430,6 +430,67 @@ describe("OptimizedDatasource", () => {
         "ValueAtQuantiles.Value": "[45,90,120]",
       });
     });
+
+    it("does not duplicate rows when multiple resourceMetrics in single write", async () => {
+      const metricsData: datasource.MetricsData = {
+        resourceMetrics: [
+          {
+            resource: {
+              attributes: [
+                { key: "service.name", value: { stringValue: "service-1" } },
+              ],
+            },
+            scopeMetrics: [
+              {
+                scope: { name: "scope-1" },
+                metrics: [
+                  {
+                    name: "metric.from.resource.1",
+                    gauge: {
+                      dataPoints: [
+                        { timeUnixNano: "1000000000", asDouble: 1.0 },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            resource: {
+              attributes: [
+                { key: "service.name", value: { stringValue: "service-2" } },
+              ],
+            },
+            scopeMetrics: [
+              {
+                scope: { name: "scope-2" },
+                metrics: [
+                  {
+                    name: "metric.from.resource.2",
+                    gauge: {
+                      dataPoints: [
+                        { timeUnixNano: "2000000000", asDouble: 2.0 },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await ds.writeMetrics(metricsData);
+
+      // EXPECTED: 2 rows (one per resourceMetric)
+      // BUG: 3 rows (1 from iter 1, then 2 from iter 2 which re-inserts iter 1's row)
+      const rows = testConnection
+        .prepare("SELECT MetricName, ServiceName FROM otel_metrics_gauge")
+        .all();
+
+      expect(rows).toHaveLength(2);
+    });
   });
 
   describe("writeTraces", () => {
