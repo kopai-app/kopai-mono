@@ -38,9 +38,16 @@ const queryBuilder = new Kysely<DB>({
   },
 });
 
+const DISCOVER_METRICS_CACHE_TTL_MS = 30_000; // 30 seconds
+
 export class NodeSqliteTelemetryDatasource
   implements datasource.TelemetryDatasource
 {
+  private discoverMetricsCache: {
+    data: datasource.MetricsDiscoveryResult;
+    timestamp: number;
+  } | null = null;
+
   constructor(private sqliteConnection: DatabaseSync) {}
 
   async writeMetrics(
@@ -137,22 +144,32 @@ export class NodeSqliteTelemetryDatasource
         }
       }
 
-      for (const { table, rows } of [
-        { table: "otel_metrics_gauge", rows: gaugeRows },
-        { table: "otel_metrics_sum", rows: sumRows },
-        { table: "otel_metrics_histogram", rows: histogramRows },
-        { table: "otel_metrics_exponential_histogram", rows: expHistogramRows },
-        { table: "otel_metrics_summary", rows: summaryRows },
-      ] as const) {
-        for (const row of rows) {
-          const { sql, parameters } = queryBuilder
-            .insertInto(table)
-            .values(row)
-            .compile();
-          this.sqliteConnection
-            .prepare(sql)
-            .run(...(parameters as (string | number | bigint | null)[]));
+      this.sqliteConnection.exec("BEGIN");
+      try {
+        for (const { table, rows } of [
+          { table: "otel_metrics_gauge", rows: gaugeRows },
+          { table: "otel_metrics_sum", rows: sumRows },
+          { table: "otel_metrics_histogram", rows: histogramRows },
+          {
+            table: "otel_metrics_exponential_histogram",
+            rows: expHistogramRows,
+          },
+          { table: "otel_metrics_summary", rows: summaryRows },
+        ] as const) {
+          for (const row of rows) {
+            const { sql, parameters } = queryBuilder
+              .insertInto(table)
+              .values(row)
+              .compile();
+            this.sqliteConnection
+              .prepare(sql)
+              .run(...(parameters as (string | number | bigint | null)[]));
+          }
         }
+        this.sqliteConnection.exec("COMMIT");
+      } catch (error) {
+        this.sqliteConnection.exec("ROLLBACK");
+        throw error;
       }
     }
 
@@ -193,40 +210,47 @@ export class NodeSqliteTelemetryDatasource
       }
     }
 
-    // Insert span rows
-    for (const row of spanRows) {
-      const { sql, parameters } = queryBuilder
-        .insertInto("otel_traces")
-        .values(row)
-        .compile();
-      this.sqliteConnection
-        .prepare(sql)
-        .run(...(parameters as (string | number | bigint | null)[]));
-    }
+    // Insert span rows and upsert trace_id_ts in a transaction
+    this.sqliteConnection.exec("BEGIN");
+    try {
+      for (const row of spanRows) {
+        const { sql, parameters } = queryBuilder
+          .insertInto("otel_traces")
+          .values(row)
+          .compile();
+        this.sqliteConnection
+          .prepare(sql)
+          .run(...(parameters as (string | number | bigint | null)[]));
+      }
 
-    // Upsert trace_id_ts lookup table
-    for (const [traceId, { min, max }] of traceTimestamps) {
-      const { sql, parameters } = queryBuilder
-        .insertInto("otel_traces_trace_id_ts")
-        .values({ TraceId: traceId, Start: min, End: max })
-        .onConflict((oc) =>
-          oc.column("TraceId").doUpdateSet({
-            Start: (eb) =>
-              eb.fn("min", [
-                eb.ref("otel_traces_trace_id_ts.Start"),
-                eb.val(min),
-              ]),
-            End: (eb) =>
-              eb.fn("max", [
-                eb.ref("otel_traces_trace_id_ts.End"),
-                eb.val(max),
-              ]),
-          })
-        )
-        .compile();
-      this.sqliteConnection
-        .prepare(sql)
-        .run(...(parameters as (string | number | bigint | null)[]));
+      // Upsert trace_id_ts lookup table
+      for (const [traceId, { min, max }] of traceTimestamps) {
+        const { sql, parameters } = queryBuilder
+          .insertInto("otel_traces_trace_id_ts")
+          .values({ TraceId: traceId, Start: min, End: max })
+          .onConflict((oc) =>
+            oc.column("TraceId").doUpdateSet({
+              Start: (eb) =>
+                eb.fn("min", [
+                  eb.ref("otel_traces_trace_id_ts.Start"),
+                  eb.val(min),
+                ]),
+              End: (eb) =>
+                eb.fn("max", [
+                  eb.ref("otel_traces_trace_id_ts.End"),
+                  eb.val(max),
+                ]),
+            })
+          )
+          .compile();
+        this.sqliteConnection
+          .prepare(sql)
+          .run(...(parameters as (string | number | bigint | null)[]));
+      }
+      this.sqliteConnection.exec("COMMIT");
+    } catch (error) {
+      this.sqliteConnection.exec("ROLLBACK");
+      throw error;
     }
 
     return { rejectedSpans: "" };
@@ -257,14 +281,21 @@ export class NodeSqliteTelemetryDatasource
       }
     }
 
-    for (const row of logRows) {
-      const { sql, parameters } = queryBuilder
-        .insertInto("otel_logs")
-        .values(row)
-        .compile();
-      this.sqliteConnection
-        .prepare(sql)
-        .run(...(parameters as (string | number | bigint | null)[]));
+    this.sqliteConnection.exec("BEGIN");
+    try {
+      for (const row of logRows) {
+        const { sql, parameters } = queryBuilder
+          .insertInto("otel_logs")
+          .values(row)
+          .compile();
+        this.sqliteConnection
+          .prepare(sql)
+          .run(...(parameters as (string | number | bigint | null)[]));
+      }
+      this.sqliteConnection.exec("COMMIT");
+    } catch (error) {
+      this.sqliteConnection.exec("ROLLBACK");
+      throw error;
     }
 
     return { rejectedLogRecords: "" };
@@ -749,8 +780,17 @@ export class NodeSqliteTelemetryDatasource
   }
 
   async discoverMetrics(): Promise<datasource.MetricsDiscoveryResult> {
+    // Check cache
+    const now = Date.now();
+    if (
+      this.discoverMetricsCache &&
+      now - this.discoverMetricsCache.timestamp < DISCOVER_METRICS_CACHE_TTL_MS
+    ) {
+      return this.discoverMetricsCache.data;
+    }
+
     try {
-      // Step 1: Get distinct metrics across all tables using UNION
+      // Query 1: Get distinct metrics across all tables
       const distinctMetricsSql = METRIC_TABLES.map(
         ({ table, type }) =>
           `SELECT DISTINCT MetricName, MetricUnit, MetricDescription, '${type}' as MetricType FROM ${table}`
@@ -765,80 +805,101 @@ export class NodeSqliteTelemetryDatasource
         MetricType: datasource.MetricType;
       }[];
 
+      // Query 2: Get all (metric, type, attr_key, attr_value) tuples in one query
+      const attrTuplesSql = METRIC_TABLES.map(
+        ({ table, type }) =>
+          `SELECT MetricName, '${type}' as MetricType, json_each.key as attr_key, json_each.value as attr_value
+           FROM ${table}, json_each(Attributes)`
+      ).join(" UNION ALL ");
+
+      const attrTuples = this.sqliteConnection.prepare(attrTuplesSql).all() as {
+        MetricName: string;
+        MetricType: string;
+        attr_key: string;
+        attr_value: string;
+      }[];
+
+      // Query 3: Get all (metric, type, res_attr_key, res_attr_value) tuples in one query
+      const resAttrTuplesSql = METRIC_TABLES.map(
+        ({ table, type }) =>
+          `SELECT MetricName, '${type}' as MetricType, json_each.key as attr_key, json_each.value as attr_value
+           FROM ${table}, json_each(ResourceAttributes)`
+      ).join(" UNION ALL ");
+
+      const resAttrTuples = this.sqliteConnection
+        .prepare(resAttrTuplesSql)
+        .all() as {
+        MetricName: string;
+        MetricType: string;
+        attr_key: string;
+        attr_value: string;
+      }[];
+
+      // Build lookup maps: metricKey -> attrKey -> Set of values
+      const attrMap = new Map<string, Map<string, Set<string>>>();
+      const resAttrMap = new Map<string, Map<string, Set<string>>>();
+
+      for (const {
+        MetricName,
+        MetricType,
+        attr_key,
+        attr_value,
+      } of attrTuples) {
+        const metricKey = `${MetricName}:${MetricType}`;
+        if (!attrMap.has(metricKey)) attrMap.set(metricKey, new Map());
+        const keyMap = attrMap.get(metricKey)!;
+        if (!keyMap.has(attr_key)) keyMap.set(attr_key, new Set());
+        keyMap.get(attr_key)!.add(String(attr_value));
+      }
+
+      for (const {
+        MetricName,
+        MetricType,
+        attr_key,
+        attr_value,
+      } of resAttrTuples) {
+        const metricKey = `${MetricName}:${MetricType}`;
+        if (!resAttrMap.has(metricKey)) resAttrMap.set(metricKey, new Map());
+        const keyMap = resAttrMap.get(metricKey)!;
+        if (!keyMap.has(attr_key)) keyMap.set(attr_key, new Set());
+        keyMap.get(attr_key)!.add(String(attr_value));
+      }
+
+      // Build result
       const metrics: datasource.DiscoveredMetric[] = [];
 
       for (const metric of distinctMetrics) {
-        const table = METRIC_TABLES.find(
-          (t) => t.type === metric.MetricType
-        )!.table;
+        const metricKey = `${metric.MetricName}:${metric.MetricType}`;
 
-        // Step 2: Get distinct attribute keys for this metric
-        const attrKeysSql = `
-          SELECT DISTINCT json_each.key as key
-          FROM ${table}, json_each(Attributes)
-          WHERE MetricName = ?
-        `;
-        const attrKeys = this.sqliteConnection
-          .prepare(attrKeysSql)
-          .all(metric.MetricName) as { key: string }[];
-
-        // Step 3: Get distinct values for each attribute key (limit 101 to detect truncation)
+        // Process attributes
         let attrsTruncated = false;
         const attributes: Record<string, string[]> = {};
-
-        for (const { key } of attrKeys) {
-          const valuesSql = `
-            SELECT DISTINCT json_each.value as value
-            FROM ${table}, json_each(Attributes)
-            WHERE MetricName = ? AND json_each.key = ?
-            LIMIT ${MAX_ATTR_VALUES + 1}
-          `;
-          const values = this.sqliteConnection
-            .prepare(valuesSql)
-            .all(metric.MetricName, key) as { value: string }[];
-
-          if (values.length > MAX_ATTR_VALUES) {
-            attrsTruncated = true;
-            attributes[key] = values
-              .slice(0, MAX_ATTR_VALUES)
-              .map((v) => String(v.value));
-          } else {
-            attributes[key] = values.map((v) => String(v.value));
+        const attrKeyMap = attrMap.get(metricKey);
+        if (attrKeyMap) {
+          for (const [key, valueSet] of attrKeyMap) {
+            const values = Array.from(valueSet);
+            if (values.length > MAX_ATTR_VALUES) {
+              attrsTruncated = true;
+              attributes[key] = values.slice(0, MAX_ATTR_VALUES);
+            } else {
+              attributes[key] = values;
+            }
           }
         }
 
-        // Step 4: Get distinct resource attribute keys for this metric
-        const resAttrKeysSql = `
-          SELECT DISTINCT json_each.key as key
-          FROM ${table}, json_each(ResourceAttributes)
-          WHERE MetricName = ?
-        `;
-        const resAttrKeys = this.sqliteConnection
-          .prepare(resAttrKeysSql)
-          .all(metric.MetricName) as { key: string }[];
-
-        // Step 5: Get distinct values for each resource attribute key
+        // Process resource attributes
         let resAttrsTruncated = false;
         const resourceAttributes: Record<string, string[]> = {};
-
-        for (const { key } of resAttrKeys) {
-          const valuesSql = `
-            SELECT DISTINCT json_each.value as value
-            FROM ${table}, json_each(ResourceAttributes)
-            WHERE MetricName = ? AND json_each.key = ?
-            LIMIT ${MAX_ATTR_VALUES + 1}
-          `;
-          const values = this.sqliteConnection
-            .prepare(valuesSql)
-            .all(metric.MetricName, key) as { value: string }[];
-
-          if (values.length > MAX_ATTR_VALUES) {
-            resAttrsTruncated = true;
-            resourceAttributes[key] = values
-              .slice(0, MAX_ATTR_VALUES)
-              .map((v) => String(v.value));
-          } else {
-            resourceAttributes[key] = values.map((v) => String(v.value));
+        const resAttrKeyMap = resAttrMap.get(metricKey);
+        if (resAttrKeyMap) {
+          for (const [key, valueSet] of resAttrKeyMap) {
+            const values = Array.from(valueSet);
+            if (values.length > MAX_ATTR_VALUES) {
+              resAttrsTruncated = true;
+              resourceAttributes[key] = values.slice(0, MAX_ATTR_VALUES);
+            } else {
+              resourceAttributes[key] = values;
+            }
           }
         }
 
@@ -858,7 +919,9 @@ export class NodeSqliteTelemetryDatasource
         });
       }
 
-      return { metrics };
+      const result = { metrics };
+      this.discoverMetricsCache = { data: result, timestamp: now };
+      return result;
     } catch (error) {
       if (error instanceof SqliteDatasourceQueryError) throw error;
       throw new SqliteDatasourceQueryError("Failed to discover metrics", {
