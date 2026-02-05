@@ -2,9 +2,9 @@ import { KopaiSDKProvider } from "../lib/kopai-provider.js";
 import { createSimpleCatalog } from "../lib/simple-component-catalog.js";
 import {
   Renderer,
-  createRegistry,
   type RendererComponentProps,
 } from "../lib/simple-renderer.js";
+import { createRegistry } from "../lib/create-registry.js";
 import { KopaiClient } from "@kopai/sdk";
 import { denormalizedSignals } from "@kopai/core";
 import { z } from "zod";
