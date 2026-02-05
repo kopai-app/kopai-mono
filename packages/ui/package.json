@@ -35,8 +35,6 @@
   },
   "dependencies": {
     "@fastify/vite": "^8.1.0",
-    "@json-render/core": "^0.3.0",
-    "@json-render/react": "^0.2.0",
     "@kopai/core": "workspace:*",
     "@kopai/sdk": "workspace:*",
     "fastify": "^5.7.2"

@@ -281,12 +281,6 @@ importers:
       "@fastify/vite":
         specifier: ^8.1.0
         version: 8.4.1(fastify@5.7.2)(vite@6.4.1(@types/node@25.0.10)(tsx@4.21.0)(yaml@2.8.2))
-      "@json-render/core":
-        specifier: ^0.3.0
-        version: 0.3.0(zod@4.3.6)
-      "@json-render/react":
-        specifier: ^0.2.0
-        version: 0.2.0(react@19.2.3)(zod@4.3.6)
       "@kopai/core":
         specifier: workspace:*
         version: link:../core
@@ -1550,30 +1544,6 @@ packages:
       {
         integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==,
       }
-
-  "@json-render/core@0.2.0":
-    resolution:
-      {
-        integrity: sha512-LBKv4M5skz7JRpTn53g6qF/zj5u/xUhuCp6WtJn/ZTIxGEAogH8sn3Ql/Nk/O0sgbQHtriRmoJuI23/5fGCXPw==,
-      }
-    peerDependencies:
-      zod: ^4.0.0
-
-  "@json-render/core@0.3.0":
-    resolution:
-      {
-        integrity: sha512-/Om3SNSNkOOkcx07luCBizN8stDrpQ0haclo8iv+1U40WpTjNsJ5u4vt8GIrKMjr/Cdm+cCoV+PiwGEZ/m1yVQ==,
-      }
-    peerDependencies:
-      zod: ^4.0.0
-
-  "@json-render/react@0.2.0":
-    resolution:
-      {
-        integrity: sha512-4tdoMfc3t0Je+DMNsyJguz7aJkqfLhEY8/mvBchL9kweRfJHAZocT7doyqRCGAnCBtIXCKQ8YAbm0sb0Qr9OFw==,
-      }
-    peerDependencies:
-      react: ^19.0.0
 
   "@lukeed/ms@2.0.2":
     resolution:
@@ -4237,8 +4207,7 @@ packages:
           targets:
             - cpu: x64
               os: win32
-    version: 24.13.0
-    hasBin: true
+    version: 0.0.0
 
   nodemon@3.1.11:
     resolution:
@@ -6565,21 +6534,6 @@ snapshots:
     dependencies:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.5.5
-
-  "@json-render/core@0.2.0(zod@4.3.6)":
-    dependencies:
-      zod: 4.3.6
-
-  "@json-render/core@0.3.0(zod@4.3.6)":
-    dependencies:
-      zod: 4.3.6
-
-  "@json-render/react@0.2.0(react@19.2.3)(zod@4.3.6)":
-    dependencies:
-      "@json-render/core": 0.2.0(zod@4.3.6)
-      react: 19.2.3
-    transitivePeerDependencies:
-      - zod
 
   "@lukeed/ms@2.0.2": {}
 
