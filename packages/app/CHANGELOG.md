@@ -1,5 +1,19 @@
 # @kopai/app
 
+## 0.4.0
+
+### Minor Changes
+
+- 853f95e: improve performance
+
+### Patch Changes
+
+- Updated dependencies [853f95e]
+  - @kopai/sqlite-datasource@0.5.0
+  - @kopai/core@0.5.0
+  - @kopai/api@0.2.3
+  - @kopai/collector@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes

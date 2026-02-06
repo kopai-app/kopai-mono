@@ -12,7 +12,6 @@ Language SDK documentation for OpenTelemetry.
 | Ruby          | https://opentelemetry.io/docs/languages/ruby/   |
 | PHP           | https://opentelemetry.io/docs/languages/php/    |
 | Rust          | https://opentelemetry.io/docs/languages/rust/   |
-| Swift         | https://opentelemetry.io/docs/languages/swift/  |
 | Erlang/Elixir | https://opentelemetry.io/docs/languages/erlang/ |
 | C++           | https://opentelemetry.io/docs/languages/cpp/    |
 

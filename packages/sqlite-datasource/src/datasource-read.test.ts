@@ -1,6 +1,9 @@
 /// <reference types="vitest/globals" />
 import { DatabaseSync } from "node:sqlite";
-import { NodeSqliteTelemetryDatasource } from "./datasource.js";
+import {
+  OptimizedDatasource,
+  createOptimizedDatasource,
+} from "./optimized-datasource.js";
 import { otlp, denormalizedSignals, type datasource } from "@kopai/core";
 import { initializeDatabase } from "./initialize-database.js";
 import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
@@ -12,16 +15,16 @@ function assertDefined<T>(
   if (value === undefined || value === null) throw new Error(msg);
 }
 
-describe("NodeSqliteTelemetryDatasource", () => {
+describe("OptimizedDatasource", () => {
   describe("getTraces", () => {
     let testConnection: DatabaseSync;
-    let ds: NodeSqliteTelemetryDatasource;
+    let ds: OptimizedDatasource;
     let readDs: datasource.ReadTelemetryDatasource;
     let insertSpan: ReturnType<typeof createInsertSpan>;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
-      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      ds = createOptimizedDatasource(testConnection);
       readDs = ds;
       insertSpan = createInsertSpan(ds);
     });
@@ -575,6 +578,119 @@ describe("NodeSqliteTelemetryDatasource", () => {
       expect(parseResult.success).toBe(true);
     });
 
+    it("returns nested object/array attribute values (recursive AnyValue)", async () => {
+      // OTel attributes can contain nested objects and arrays of objects (e.g. errorCauses)
+      await ds.writeTraces({
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                {
+                  key: "service.name",
+                  value: { stringValue: "test-service" },
+                },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: { name: "test-scope" },
+                spans: [
+                  {
+                    traceId: "trace-with-nested-attr",
+                    spanId: "span1",
+                    name: "test-span",
+                    startTimeUnixNano: "1000000000000000",
+                    endTimeUnixNano: "1001000000000000",
+                    attributes: [
+                      {
+                        key: "errorCauses",
+                        value: {
+                          arrayValue: {
+                            values: [
+                              {
+                                kvlistValue: {
+                                  values: [
+                                    {
+                                      key: "message",
+                                      value: {
+                                        stringValue: "Connection refused",
+                                      },
+                                    },
+                                    { key: "code", value: { intValue: "500" } },
+                                  ],
+                                },
+                              },
+                              {
+                                kvlistValue: {
+                                  values: [
+                                    {
+                                      key: "message",
+                                      value: { stringValue: "Timeout" },
+                                    },
+                                    { key: "code", value: { intValue: "504" } },
+                                  ],
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      },
+                      {
+                        key: "nested.config",
+                        value: {
+                          kvlistValue: {
+                            values: [
+                              { key: "retries", value: { intValue: "3" } },
+                              {
+                                key: "hosts",
+                                value: {
+                                  arrayValue: {
+                                    values: [
+                                      { stringValue: "host1" },
+                                      { stringValue: "host2" },
+                                    ],
+                                  },
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = await readDs.getTraces({
+        traceId: "trace-with-nested-attr",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+
+      // Verify nested structures are preserved
+      // Note: intValue is stored as string per OTLP spec (supports int64)
+      expect(row.SpanAttributes).toEqual({
+        errorCauses: [
+          { message: "Connection refused", code: "500" },
+          { message: "Timeout", code: "504" },
+        ],
+        "nested.config": {
+          retries: "3",
+          hosts: ["host1", "host2"],
+        },
+      });
+
+      // Validate schema accepts nested object/array attribute values
+      const parseResult = denormalizedSignals.otelTracesSchema.safeParse(row);
+      expect(parseResult.success).toBe(true);
+    });
+
     it("parses Events and Links fields as arrays", async () => {
       await insertSpan({
         traceId: "trace-with-events-links",
@@ -621,7 +737,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
     it("throws SqliteDatasourceQueryError on DB error", async () => {
       // Create a separate connection to close for this test
       const badConnection = initializeDatabase(":memory:");
-      const badDs = new NodeSqliteTelemetryDatasource(badConnection);
+      const badDs = createOptimizedDatasource(badConnection);
       badConnection.close();
 
       await expect(badDs.getTraces({})).rejects.toThrow(
@@ -632,13 +748,13 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
   describe("getLogs", () => {
     let testConnection: DatabaseSync;
-    let ds: NodeSqliteTelemetryDatasource;
+    let ds: OptimizedDatasource;
     let readDs: datasource.ReadTelemetryDatasource;
     let insertLog: ReturnType<typeof createInsertLog>;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
-      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      ds = createOptimizedDatasource(testConnection);
       readDs = ds;
       insertLog = createInsertLog(ds);
     });
@@ -1059,7 +1175,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
     it("throws SqliteDatasourceQueryError on DB error", async () => {
       const badConnection = initializeDatabase(":memory:");
-      const badDs = new NodeSqliteTelemetryDatasource(badConnection);
+      const badDs = createOptimizedDatasource(badConnection);
       badConnection.close();
 
       await expect(badDs.getLogs({})).rejects.toThrow(
@@ -1070,7 +1186,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
   describe("getMetrics", () => {
     let testConnection: DatabaseSync;
-    let ds: NodeSqliteTelemetryDatasource;
+    let ds: OptimizedDatasource;
     let readDs: datasource.ReadTelemetryDatasource;
     let insertGauge: ReturnType<typeof createInsertGauge>;
     let insertSum: ReturnType<typeof createInsertSum>;
@@ -1078,9 +1194,9 @@ describe("NodeSqliteTelemetryDatasource", () => {
     let insertExpHistogram: ReturnType<typeof createInsertExpHistogram>;
     let insertSummary: ReturnType<typeof createInsertSummary>;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
-      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      ds = createOptimizedDatasource(testConnection);
       readDs = ds;
       insertGauge = createInsertGauge(ds);
       insertSum = createInsertSum(ds);
@@ -1658,7 +1774,7 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
     it("throws SqliteDatasourceQueryError on DB error", async () => {
       const badConnection = initializeDatabase(":memory:");
-      const badDs = new NodeSqliteTelemetryDatasource(badConnection);
+      const badDs = createOptimizedDatasource(badConnection);
       badConnection.close();
 
       await expect(badDs.getMetrics({ metricType: "Gauge" })).rejects.toThrow(
@@ -1669,14 +1785,14 @@ describe("NodeSqliteTelemetryDatasource", () => {
 
   describe("discoverMetrics", () => {
     let testConnection: DatabaseSync;
-    let ds: NodeSqliteTelemetryDatasource;
+    let ds: OptimizedDatasource;
     let insertGauge: ReturnType<typeof createInsertGauge>;
     let insertSum: ReturnType<typeof createInsertSum>;
     let insertHistogram: ReturnType<typeof createInsertHistogram>;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
-      ds = new NodeSqliteTelemetryDatasource(testConnection);
+      ds = createOptimizedDatasource(testConnection);
       insertGauge = createInsertGauge(ds);
       insertSum = createInsertSum(ds);
       insertHistogram = createInsertHistogram(ds);
@@ -1905,14 +2021,98 @@ describe("NodeSqliteTelemetryDatasource", () => {
       });
     });
 
-    it("throws SqliteDatasourceQueryError on DB error", async () => {
+    it("populates discovery state during writes (in-memory)", async () => {
+      // First write
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.75,
+        attributes: { host: "host-1" },
+      });
+
+      const result1 = await ds.discoverMetrics();
+      expect(result1.metrics).toHaveLength(1);
+      expect(result1.metrics[0]?.attributes.values.host).toEqual(["host-1"]);
+
+      // Second write adds new attribute value - should be reflected immediately
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.8,
+        attributes: { host: "host-2" },
+      });
+
+      const result2 = await ds.discoverMetrics();
+      expect(result2.metrics).toHaveLength(1);
+      expect(result2.metrics[0]?.attributes.values.host).toEqual(
+        expect.arrayContaining(["host-1", "host-2"])
+      );
+    });
+
+    it("OptimizedDatasource.discoverMetrics returns in-memory state (no DB error on closed connection)", async () => {
+      // OptimizedDatasource.discoverMetrics() returns from in-memory state, not from DB
       const badConnection = initializeDatabase(":memory:");
-      const badDs = new NodeSqliteTelemetryDatasource(badConnection);
+      const badDs = createOptimizedDatasource(badConnection);
       badConnection.close();
 
-      await expect(badDs.discoverMetrics()).rejects.toThrow(
-        SqliteDatasourceQueryError
-      );
+      // Should NOT throw - returns from in-memory state
+      const result = await badDs.discoverMetrics();
+      expect(result.metrics).toEqual([]);
+    });
+
+    it("extractAnyValue should handle nested arrayValue attributes", async () => {
+      // This test reproduces a bug where extractAnyValue doesn't recursively
+      // handle nested OTel AnyValue types (arrayValue, kvlistValue).
+      // Instead of extracting ["a", "b"], it returns the raw OTel structure.
+      await ds.writeMetrics({
+        resourceMetrics: [
+          {
+            resource: { attributes: [] },
+            scopeMetrics: [
+              {
+                scope: { name: "test" },
+                metrics: [
+                  {
+                    name: "metric.with.array.attr",
+                    gauge: {
+                      dataPoints: [
+                        {
+                          timeUnixNano: "1000000000000000",
+                          asDouble: 1.0,
+                          attributes: [
+                            {
+                              key: "tags",
+                              value: {
+                                arrayValue: {
+                                  values: [
+                                    { stringValue: "tag-a" },
+                                    { stringValue: "tag-b" },
+                                  ],
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const result = await ds.discoverMetrics();
+      const metric = result.metrics[0];
+      assertDefined(metric);
+
+      // EXPECTED: The attribute value should be the string representation of ["tag-a", "tag-b"]
+      // BUG: It returns the raw OTel structure as a string like '[object Object]' or
+      //      the JSON of {arrayValue: {values: [...]}}
+      const tagsValue = metric.attributes.values.tags?.[0];
+      expect(tagsValue).not.toContain("arrayValue");
+      expect(tagsValue).not.toBe("[object Object]");
     });
   });
 });

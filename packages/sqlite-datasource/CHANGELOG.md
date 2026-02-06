@@ -1,5 +1,16 @@
 # @kopai/sqlite-datasource
 
+## 0.5.0
+
+### Minor Changes
+
+- 853f95e: improve performance
+
+### Patch Changes
+
+- Updated dependencies [853f95e]
+  - @kopai/core@0.5.0
+
 ## 0.4.0
 
 ### Minor Changes

@@ -1,13 +1,21 @@
 import { z } from "zod";
 
-const attributeValue = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.array(z.string()),
-  z.array(z.number()),
-  z.array(z.boolean()),
-]);
+type AttributeValue =
+  | string
+  | number
+  | boolean
+  | AttributeValue[]
+  | { [key: string]: AttributeValue };
+
+const attributeValue: z.ZodType<AttributeValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(attributeValue),
+    z.record(z.string(), attributeValue),
+  ])
+);
 
 export const otelTracesSchema = z.object({
   // Required fields
