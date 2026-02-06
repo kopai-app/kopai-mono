@@ -44,10 +44,10 @@
   "dependencies": {
     "@kopai/core": "workspace:*",
     "@kopai/sdk": "workspace:*",
-    "commander": "^14.0.2"
+    "commander": "^14.0.3"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "tsdown": "^0.20.1"
+    "tsdown": "^0.20.3"
   }
 }

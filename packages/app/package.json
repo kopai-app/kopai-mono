@@ -62,14 +62,14 @@
     "@kopai/core": "workspace:*",
     "@kopai/sqlite-datasource": "workspace:*",
     "close-with-grace": "^2.4.0",
-    "fastify": "^5.7.2",
+    "fastify": "^5.7.4",
     "fastify-type-provider-zod": "^6.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
     "nodemon": "^3.1.11",
-    "tsdown": "^0.20.1",
+    "tsdown": "^0.20.3",
     "typescript": "^5.9.3"
   }
 }
