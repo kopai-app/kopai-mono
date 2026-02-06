@@ -1,5 +1,11 @@
 # @kopai/core
 
+## 0.5.0
+
+### Minor Changes
+
+- 853f95e: improve performance
+
 ## 0.4.0
 
 ### Minor Changes

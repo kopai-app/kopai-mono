@@ -1,5 +1,12 @@
 # @kopai/ui
 
+## 0.0.5
+
+### Patch Changes
+
+- Updated dependencies [853f95e]
+  - @kopai/core@0.5.0
+
 ## 0.0.4
 
 ### Patch Changes
