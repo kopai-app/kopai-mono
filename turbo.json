@@ -8,8 +8,10 @@
       "outputs": ["dist/**"]
     },
     "dev": {
-      "cache": false,
-      "persistent": true
+      "dependsOn": ["build", "^build"],
+      "persistent": true,
+      "interruptible": true,
+      "cache": false
     },
     "lint": {
       "dependsOn": ["^lint"]
