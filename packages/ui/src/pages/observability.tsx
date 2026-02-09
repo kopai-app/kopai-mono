@@ -1,15 +1,23 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useSyncExternalStore,
+} from "react";
 import { observabilityCatalog } from "../lib/observability-catalog.js";
 import { createRendererFromCatalog } from "../lib/renderer.js";
 import { KopaiSDKProvider, useKopaiSDK } from "../providers/kopai-provider.js";
 import { KopaiClient } from "@kopai/sdk";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
-import type { denormalizedSignals } from "@kopai/core";
+import { useLiveLogs } from "../hooks/use-live-logs.js";
+import type { denormalizedSignals, dataFilterSchemas } from "@kopai/core";
 import type { DataSource } from "../lib/component-catalog.js";
 
 // Observability components
 import {
   LogTimeline,
+  LogFilter,
   TabBar,
   ServiceList,
   TraceSearch,
@@ -30,7 +38,6 @@ import {
 } from "../components/observability/renderers/index.js";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
-type OtelLogsRow = denormalizedSignals.OtelLogsRow;
 
 // ---------------------------------------------------------------------------
 // Tab config
@@ -52,33 +59,195 @@ interface URLState {
   tab: Tab;
   service: string | null;
   trace: string | null;
+  span: string | null;
 }
 
 function readURLState(): URLState {
   const params = new URLSearchParams(window.location.search);
   const service = params.get("service");
   const trace = params.get("trace");
+  const span = params.get("span");
   const rawTab = params.get("tab");
   const tab = service
     ? "services"
     : rawTab === "logs" || rawTab === "metrics"
       ? rawTab
       : "services";
-  return { tab, service, trace };
+  return { tab, service, trace, span };
 }
 
-function pushURLState(state: {
-  tab: Tab;
-  service?: string | null;
-  trace?: string | null;
-}) {
+function pushURLState(
+  state: {
+    tab: Tab;
+    service?: string | null;
+    trace?: string | null;
+    span?: string | null;
+  },
+  { replace = false }: { replace?: boolean } = {}
+) {
   const params = new URLSearchParams();
   if (state.tab !== "services") params.set("tab", state.tab);
   if (state.service) params.set("service", state.service);
   if (state.trace) params.set("trace", state.trace);
+  if (state.span) params.set("span", state.span);
   const qs = params.toString();
   const url = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
-  history.pushState(null, "", url);
+  if (replace) {
+    history.replaceState(null, "", url);
+  } else {
+    history.pushState(null, "", url);
+  }
+  dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function subscribeURL(cb: () => void) {
+  window.addEventListener("popstate", cb);
+  return () => window.removeEventListener("popstate", cb);
+}
+
+let _cachedSearch = "";
+let _cachedState: URLState = {
+  tab: "services",
+  service: null,
+  trace: null,
+  span: null,
+};
+
+function getURLSnapshot(): URLState {
+  const search = window.location.search;
+  if (search !== _cachedSearch) {
+    _cachedSearch = search;
+    _cachedState = readURLState();
+  }
+  return _cachedState;
+}
+
+function useURLState(): URLState {
+  return useSyncExternalStore(subscribeURL, getURLSnapshot);
+}
+
+// ---------------------------------------------------------------------------
+// Log filter URL helpers
+// ---------------------------------------------------------------------------
+
+function parseKeyValuesFromURL(
+  raw: string
+): Record<string, string> | undefined {
+  const result: Record<string, string> = {};
+  let hasAny = false;
+  for (const part of raw.split(",")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx < 1) continue;
+    result[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
+    hasAny = true;
+  }
+  return hasAny ? result : undefined;
+}
+
+function serializeKeyValues(rec: Record<string, string> | undefined): string {
+  if (!rec) return "";
+  return Object.entries(rec)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(",");
+}
+
+interface LogURLState {
+  filters: Partial<dataFilterSchemas.LogsDataFilter>;
+  selectedServices: string[];
+  selectedLogId: string | null;
+}
+
+function readLogFilters(): LogURLState {
+  const p = new URLSearchParams(window.location.search);
+  const filters: Partial<dataFilterSchemas.LogsDataFilter> = {
+    limit: 200,
+    sortOrder: "DESC",
+  };
+
+  const severity = p.get("severity");
+  if (severity) filters.severityText = severity;
+
+  const body = p.get("body");
+  if (body) filters.bodyContains = body;
+
+  const sort = p.get("sort");
+  if (sort === "ASC" || sort === "DESC") filters.sortOrder = sort;
+
+  const limit = p.get("limit");
+  if (limit) {
+    const n = parseInt(limit, 10);
+    if (n >= 1 && n <= 1000) filters.limit = n;
+  }
+
+  const traceId = p.get("traceId");
+  if (traceId) filters.traceId = traceId;
+
+  const spanId = p.get("spanId");
+  if (spanId) filters.spanId = spanId;
+
+  const scope = p.get("scope");
+  if (scope) filters.scopeName = scope;
+
+  const tsMin = p.get("tsMin");
+  if (tsMin) filters.timestampMin = tsMin;
+
+  const tsMax = p.get("tsMax");
+  if (tsMax) filters.timestampMax = tsMax;
+
+  const logAttrs = p.get("logAttrs");
+  if (logAttrs) filters.logAttributes = parseKeyValuesFromURL(logAttrs);
+
+  const resAttrs = p.get("resAttrs");
+  if (resAttrs) filters.resourceAttributes = parseKeyValuesFromURL(resAttrs);
+
+  const scopeAttrs = p.get("scopeAttrs");
+  if (scopeAttrs) filters.scopeAttributes = parseKeyValuesFromURL(scopeAttrs);
+
+  const services = p.get("services");
+  const selectedServices = services ? services.split(",").filter(Boolean) : [];
+
+  if (selectedServices.length === 1) filters.serviceName = selectedServices[0];
+
+  const selectedLogId = p.get("log") || null;
+
+  return { filters, selectedServices, selectedLogId };
+}
+
+function writeLogFiltersToURL(
+  filters: Partial<dataFilterSchemas.LogsDataFilter>,
+  selectedServices: string[],
+  selectedLogId: string | null
+) {
+  const p = new URLSearchParams();
+  p.set("tab", "logs");
+
+  if (filters.severityText) p.set("severity", filters.severityText);
+  if (filters.bodyContains) p.set("body", filters.bodyContains);
+  if (selectedServices.length) p.set("services", selectedServices.join(","));
+  if (filters.sortOrder && filters.sortOrder !== "DESC")
+    p.set("sort", filters.sortOrder);
+  if (filters.limit != null && filters.limit !== 200)
+    p.set("limit", String(filters.limit));
+  if (filters.traceId) p.set("traceId", filters.traceId);
+  if (filters.spanId) p.set("spanId", filters.spanId);
+  if (filters.scopeName) p.set("scope", filters.scopeName);
+  if (filters.timestampMin) p.set("tsMin", filters.timestampMin);
+  if (filters.timestampMax) p.set("tsMax", filters.timestampMax);
+
+  const la = serializeKeyValues(filters.logAttributes);
+  if (la) p.set("logAttrs", la);
+  const ra = serializeKeyValues(filters.resourceAttributes);
+  if (ra) p.set("resAttrs", ra);
+  const sa = serializeKeyValues(filters.scopeAttributes);
+  if (sa) p.set("scopeAttrs", sa);
+
+  if (selectedLogId) p.set("log", selectedLogId);
+
+  const qs = p.toString();
+  const url = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+  history.replaceState(null, "", url);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,27 +270,64 @@ function parseDuration(input: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Logs tab (static)
+// Logs tab (live-tailing)
 // ---------------------------------------------------------------------------
 
-const LOGS_DS: DataSource = {
-  method: "searchLogsPage",
-  params: { limit: 200 },
-};
-
 function LogsTab() {
-  const { data, loading, error } = useKopaiData<{
-    data: OtelLogsRow[];
-    nextCursor: string | null;
-  }>(LOGS_DS);
+  const [initState] = useState(() => readLogFilters());
+  const [filters, setFilters] = useState<
+    Partial<dataFilterSchemas.LogsDataFilter>
+  >(initState.filters);
+  const [selectedServices, setSelectedServices] = useState<string[]>(
+    initState.selectedServices
+  );
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(
+    initState.selectedLogId
+  );
+
+  // Sync filter state to URL
+  useEffect(() => {
+    writeLogFiltersToURL(filters, selectedServices, selectedLogId);
+  }, [filters, selectedServices, selectedLogId]);
+
+  const { logs, isLive, loading, error, setLive } = useLiveLogs({
+    params: filters,
+    pollIntervalMs: 3_000,
+  });
+
+  // Client-side multi-service filter (API only supports single serviceName)
+  const filteredLogs = useMemo(() => {
+    if (selectedServices.length <= 1) return logs;
+    const set = new Set(selectedServices);
+    return logs.filter((r) => set.has(r.ServiceName ?? ""));
+  }, [logs, selectedServices]);
+
+  const handleLogClick = useCallback((log: { logId: string }) => {
+    setSelectedLogId(log.logId);
+  }, []);
 
   return (
-    <div style={{ height: "calc(100vh - 160px)" }}>
-      <LogTimeline
-        rows={data?.data ?? []}
-        isLoading={loading}
-        error={error ?? undefined}
-      />
+    <div style={{ height: "calc(100vh - 160px)" }} className="flex flex-col">
+      <div className="shrink-0 mb-3">
+        <LogFilter
+          value={filters}
+          onChange={setFilters}
+          rows={logs}
+          selectedServices={selectedServices}
+          onSelectedServicesChange={setSelectedServices}
+        />
+      </div>
+      <div className="flex-1 min-h-0">
+        <LogTimeline
+          rows={filteredLogs}
+          isLoading={loading}
+          error={error ?? undefined}
+          streaming={isLive}
+          selectedLogId={selectedLogId ?? undefined}
+          onLogClick={handleLogClick}
+          onAtBottomChange={(atBottom) => setLive(atBottom)}
+        />
+      </div>
     </div>
   );
 }
@@ -320,10 +526,14 @@ function TraceSearchView({
 function TraceDetailView({
   service,
   traceId,
+  selectedSpanId,
+  onSelectSpan,
   onBack,
 }: {
   service: string;
   traceId: string;
+  selectedSpanId: string | null;
+  onSelectSpan: (spanId: string) => void;
   onBack: () => void;
 }) {
   const ds = useMemo<DataSource>(
@@ -343,6 +553,8 @@ function TraceDetailView({
       rows={data ?? []}
       isLoading={loading}
       error={error ?? undefined}
+      selectedSpanId={selectedSpanId ?? undefined}
+      onSpanClick={(span) => onSelectSpan(span.spanId)}
       onBack={onBack}
     />
   );
@@ -351,15 +563,19 @@ function TraceDetailView({
 function ServicesTab({
   selectedService,
   selectedTraceId,
+  selectedSpanId,
   onSelectService,
   onSelectTrace,
+  onSelectSpan,
   onBackToServices,
   onBackToTraceList,
 }: {
   selectedService: string | null;
   selectedTraceId: string | null;
+  selectedSpanId: string | null;
   onSelectService: (service: string) => void;
   onSelectTrace: (traceId: string) => void;
+  onSelectSpan: (spanId: string) => void;
   onBackToServices: () => void;
   onBackToTraceList: () => void;
 }) {
@@ -368,6 +584,8 @@ function ServicesTab({
       <TraceDetailView
         service={selectedService}
         traceId={selectedTraceId}
+        selectedSpanId={selectedSpanId}
+        onSelectSpan={onSelectSpan}
         onBack={onBackToTraceList}
       />
     );
@@ -587,42 +805,23 @@ function MetricsTab() {
 const client = new KopaiClient({ baseUrl: "http://localhost:8000/signals" });
 
 export default function ObservabilityPage() {
-  const [activeTab, setActiveTab] = useState<Tab>(() => readURLState().tab);
-  const [selectedService, setSelectedService] = useState<string | null>(
-    () => readURLState().service
-  );
-  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(
-    () => readURLState().trace
-  );
-
-  // Sync back from URL on popstate (back/forward)
-  useEffect(() => {
-    const onPopState = () => {
-      const s = readURLState();
-      setActiveTab(s.tab);
-      setSelectedService(s.service);
-      setSelectedTraceId(s.trace);
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  const {
+    tab: activeTab,
+    service: selectedService,
+    trace: selectedTraceId,
+    span: selectedSpanId,
+  } = useURLState();
 
   const handleTabChange = useCallback((tab: Tab) => {
-    setActiveTab(tab);
-    setSelectedService(null);
-    setSelectedTraceId(null);
     pushURLState({ tab });
   }, []);
 
   const handleSelectService = useCallback((service: string) => {
-    setSelectedService(service);
-    setSelectedTraceId(null);
     pushURLState({ tab: "services", service });
   }, []);
 
   const handleSelectTrace = useCallback(
     (traceId: string) => {
-      setSelectedTraceId(traceId);
       pushURLState({
         tab: "services",
         service: selectedService,
@@ -632,14 +831,26 @@ export default function ObservabilityPage() {
     [selectedService]
   );
 
+  const handleSelectSpan = useCallback(
+    (spanId: string) => {
+      pushURLState(
+        {
+          tab: "services",
+          service: selectedService,
+          trace: selectedTraceId,
+          span: spanId,
+        },
+        { replace: true }
+      );
+    },
+    [selectedService, selectedTraceId]
+  );
+
   const handleBackToServices = useCallback(() => {
-    setSelectedService(null);
-    setSelectedTraceId(null);
     pushURLState({ tab: "services" });
   }, []);
 
   const handleBackToTraceList = useCallback(() => {
-    setSelectedTraceId(null);
     pushURLState({ tab: "services", service: selectedService });
   }, [selectedService]);
 
@@ -657,8 +868,10 @@ export default function ObservabilityPage() {
           <ServicesTab
             selectedService={selectedService}
             selectedTraceId={selectedTraceId}
+            selectedSpanId={selectedSpanId}
             onSelectService={handleSelectService}
             onSelectTrace={handleSelectTrace}
+            onSelectSpan={handleSelectSpan}
             onBackToServices={handleBackToServices}
             onBackToTraceList={handleBackToTraceList}
           />

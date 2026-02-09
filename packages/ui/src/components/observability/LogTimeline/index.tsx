@@ -34,9 +34,8 @@ export interface LogTimelineProps {
   error?: Error;
   streaming?: boolean;
   maxLogs?: number;
-  totalReceived?: number;
   searchText?: string;
-  onPause?: () => void;
+  onAtBottomChange?: (isAtBottom: boolean) => void;
 }
 
 function simpleHash(str: string): string {
@@ -102,9 +101,8 @@ export function LogTimeline({
   error,
   streaming = false,
   maxLogs = DEFAULT_MAX_LOGS,
-  totalReceived,
   searchText = "",
-  onPause,
+  onAtBottomChange,
 }: LogTimelineProps) {
   const [internalSelectedLogId, setInternalSelectedLogId] = useState<
     string | null
@@ -115,6 +113,7 @@ export function LogTimeline({
   const scrollRef = useRef<HTMLDivElement>(null);
   const announcementRef = useRef<HTMLDivElement>(null);
   const wasAtBottomRef = useRef(true);
+  const hasScrolledToInitialRef = useRef(false);
 
   const allLogs = useMemo(() => buildLogs(rows), [rows]);
 
@@ -139,11 +138,17 @@ export function LogTimeline({
     return scrollHeight - scrollTop - clientHeight < BOTTOM_THRESHOLD_PX;
   }, []);
 
+  const prevAtBottomRef = useRef(true);
+
   const handleScroll = useCallback(() => {
     const atBottom = checkIfAtBottom();
     wasAtBottomRef.current = atBottom;
     setIsAtBottom(atBottom);
-  }, [checkIfAtBottom]);
+    if (atBottom !== prevAtBottomRef.current) {
+      prevAtBottomRef.current = atBottom;
+      onAtBottomChange?.(atBottom);
+    }
+  }, [checkIfAtBottom, onAtBottomChange]);
 
   useEffect(() => {
     const atBottom = checkIfAtBottom();
@@ -163,6 +168,16 @@ export function LogTimeline({
     estimateSize: () => LOG_ROW_HEIGHT,
     overscan: OVERSCAN_COUNT,
   });
+
+  // Scroll to externally-selected log on initial data load
+  useEffect(() => {
+    if (hasScrolledToInitialRef.current) return;
+    if (!externalSelectedLogId || boundedLogs.length === 0) return;
+    const idx = boundedLogs.findIndex((l) => l.logId === externalSelectedLogId);
+    if (idx === -1) return;
+    hasScrolledToInitialRef.current = true;
+    virtualizer.scrollToIndex(idx, { align: "center" });
+  }, [externalSelectedLogId, boundedLogs, virtualizer]);
 
   const handleLogClick = useCallback(
     (log: LogEntry) => {
@@ -194,8 +209,12 @@ export function LogTimeline({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       wasAtBottomRef.current = true;
       setIsAtBottom(true);
+      if (!prevAtBottomRef.current) {
+        prevAtBottomRef.current = true;
+        onAtBottomChange?.(true);
+      }
     }
-  }, []);
+  }, [onAtBottomChange]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -306,25 +325,10 @@ export function LogTimeline({
                       d="M4 6h16M4 12h16M4 18h7"
                     />
                   </svg>
-                  {totalReceived ?? boundedLogs.length}{" "}
-                  {(totalReceived ?? boundedLogs.length) === 1 ? "log" : "logs"}
+                  {boundedLogs.length}{" "}
+                  {boundedLogs.length === 1 ? "log" : "logs"}
                 </div>
-                {streaming && (
-                  <span className="text-xs text-green-600 dark:text-green-400">
-                    LIVE
-                  </span>
-                )}
               </div>
-              {streaming && onPause && (
-                <button
-                  onClick={onPause}
-                  className="px-3 py-1 text-xs font-medium rounded-md text-white"
-                  style={{ backgroundColor: "rgb(34 197 94)" }}
-                  aria-label="Stop streaming"
-                >
-                  Stop streaming
-                </button>
-              )}
             </div>
           </div>
 

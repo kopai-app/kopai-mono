@@ -1,5 +1,6 @@
 import type { denormalizedSignals } from "@kopai/core";
 import { TraceTimeline } from "../TraceTimeline/index.js";
+import type { SpanNode } from "../types.js";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 
@@ -9,6 +10,8 @@ export interface TraceDetailProps {
   rows: OtelTracesRow[];
   isLoading?: boolean;
   error?: Error;
+  selectedSpanId?: string;
+  onSpanClick?: (span: SpanNode) => void;
   onBack: () => void;
 }
 
@@ -18,6 +21,8 @@ export function TraceDetail({
   rows,
   isLoading,
   error,
+  selectedSpanId,
+  onSpanClick,
   onBack,
 }: TraceDetailProps) {
   return (
@@ -36,7 +41,13 @@ export function TraceDetail({
         </span>
       </div>
 
-      <TraceTimeline rows={rows} isLoading={isLoading} error={error} />
+      <TraceTimeline
+        rows={rows}
+        isLoading={isLoading}
+        error={error}
+        selectedSpanId={selectedSpanId}
+        onSpanClick={onSpanClick}
+      />
     </div>
   );
 }

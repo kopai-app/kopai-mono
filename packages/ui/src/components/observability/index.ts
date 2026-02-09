@@ -21,6 +21,9 @@ export type { TraceTimelineProps } from "./TraceTimeline/index.js";
 export { LogTimeline } from "./LogTimeline/index.js";
 export type { LogTimelineProps } from "./LogTimeline/index.js";
 
+export { LogFilter } from "./LogTimeline/LogFilter.js";
+export type { LogFilterProps } from "./LogTimeline/LogFilter.js";
+
 export { MetricTimeSeries } from "./MetricTimeSeries/index.js";
 export type {
   MetricTimeSeriesProps,
