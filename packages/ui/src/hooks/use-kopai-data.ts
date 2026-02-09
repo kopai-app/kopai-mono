@@ -52,6 +52,7 @@ export function useKopaiData<T = unknown>(
     queryKey: ["kopai", dataSource?.method, dataSource?.params],
     queryFn: ({ signal }) => fetchForDataSource(client, dataSource!, signal),
     enabled: !!dataSource,
+    refetchInterval: dataSource?.refetchIntervalMs,
   });
 
   return {

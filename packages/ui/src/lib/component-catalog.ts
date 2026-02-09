@@ -7,22 +7,27 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
   z.object({
     method: z.literal("searchTracesPage"),
     params: dataFilterSchemas.tracesDataFilterSchema,
+    refetchIntervalMs: z.number().optional(),
   }),
   z.object({
     method: z.literal("searchLogsPage"),
     params: dataFilterSchemas.logsDataFilterSchema,
+    refetchIntervalMs: z.number().optional(),
   }),
   z.object({
     method: z.literal("searchMetricsPage"),
     params: dataFilterSchemas.metricsDataFilterSchema,
+    refetchIntervalMs: z.number().optional(),
   }),
   z.object({
     method: z.literal("getTrace"),
     params: z.object({ traceId: z.string() }),
+    refetchIntervalMs: z.number().optional(),
   }),
   z.object({
     method: z.literal("discoverMetrics"),
     params: z.object({}).optional(),
+    refetchIntervalMs: z.number().optional(),
   }),
 ]);
 

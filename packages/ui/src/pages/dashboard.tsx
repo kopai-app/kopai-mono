@@ -375,6 +375,7 @@ const testTree: UITree = {
       dataSource: {
         method: "searchTracesPage",
         params: { limit: 10 },
+        refetchIntervalMs: 30_000,
       },
     },
     "logs-table": {
@@ -386,6 +387,7 @@ const testTree: UITree = {
       dataSource: {
         method: "searchLogsPage",
         params: { limit: 10 },
+        refetchIntervalMs: 30_000,
       },
     },
     "metrics-table": {
@@ -397,6 +399,7 @@ const testTree: UITree = {
       dataSource: {
         method: "searchMetricsPage",
         params: { metricType: "Sum", limit: 10 },
+        refetchIntervalMs: 30_000,
       },
     },
   },
