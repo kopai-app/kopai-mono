@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { DataSource } from "../lib/component-catalog.js";
 import { useKopaiSDK } from "../providers/kopai-provider.js";
 
@@ -6,119 +6,58 @@ export interface UseKopaiDataResult<T> {
   data: T | null;
   loading: boolean;
   error: Error | null;
-  refetch: (newParams?: Record<string, unknown>) => void;
+  refetch: () => void;
+}
+
+function fetchForDataSource(
+  client: ReturnType<typeof useKopaiSDK>,
+  dataSource: DataSource,
+  signal: AbortSignal
+): Promise<unknown> {
+  switch (dataSource.method) {
+    case "searchTracesPage":
+      return client.searchTracesPage(
+        dataSource.params as Parameters<typeof client.searchTracesPage>[0],
+        { signal }
+      );
+    case "searchLogsPage":
+      return client.searchLogsPage(
+        dataSource.params as Parameters<typeof client.searchLogsPage>[0],
+        { signal }
+      );
+    case "searchMetricsPage":
+      return client.searchMetricsPage(
+        dataSource.params as Parameters<typeof client.searchMetricsPage>[0],
+        { signal }
+      );
+    case "getTrace":
+      return client.getTrace(dataSource.params.traceId, { signal });
+    case "discoverMetrics":
+      return client.discoverMetrics({ signal });
+    default: {
+      const exhaustiveCheck: never = dataSource;
+      throw new Error(
+        `Unknown method: ${(exhaustiveCheck as DataSource).method}`
+      );
+    }
+  }
 }
 
 export function useKopaiData<T = unknown>(
   dataSource: DataSource | undefined
 ): UseKopaiDataResult<T> {
   const client = useKopaiSDK();
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const paramsOverrideRef = useRef<Record<string, unknown> | undefined>(
-    undefined
-  );
 
-  const fetchData = useCallback(
-    async (signal: AbortSignal, params: Record<string, unknown>) => {
-      if (!dataSource) return;
+  const { data, isFetching, error, refetch } = useQuery<unknown, Error>({
+    queryKey: ["kopai", dataSource?.method, dataSource?.params],
+    queryFn: ({ signal }) => fetchForDataSource(client, dataSource!, signal),
+    enabled: !!dataSource,
+  });
 
-      setLoading(true);
-      setError(null);
-
-      try {
-        let result: unknown;
-
-        switch (dataSource.method) {
-          case "searchTracesPage":
-            result = await client.searchTracesPage(
-              { ...dataSource.params, ...params } as Parameters<
-                typeof client.searchTracesPage
-              >[0],
-              { signal }
-            );
-            break;
-          case "searchLogsPage":
-            result = await client.searchLogsPage(
-              { ...dataSource.params, ...params } as Parameters<
-                typeof client.searchLogsPage
-              >[0],
-              { signal }
-            );
-            break;
-          case "searchMetricsPage":
-            result = await client.searchMetricsPage(
-              { ...dataSource.params, ...params } as Parameters<
-                typeof client.searchMetricsPage
-              >[0],
-              { signal }
-            );
-            break;
-          case "getTrace":
-            result = await client.getTrace(
-              (params.traceId as string) ?? dataSource.params.traceId,
-              { signal }
-            );
-            break;
-          case "discoverMetrics":
-            result = await client.discoverMetrics({ signal });
-            break;
-          default: {
-            const exhaustiveCheck: never = dataSource;
-            throw new Error(
-              `Unknown method: ${(exhaustiveCheck as DataSource).method}`
-            );
-          }
-        }
-
-        if (!signal.aborted) {
-          setData(result as T);
-        }
-      } catch (err) {
-        if (!signal.aborted) {
-          setError(err instanceof Error ? err : new Error(String(err)));
-        }
-      } finally {
-        if (!signal.aborted) {
-          setLoading(false);
-        }
-      }
-    },
-    [client, dataSource]
-  );
-
-  useEffect(() => {
-    if (!dataSource) {
-      setData(null);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    // Cancel previous request
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    fetchData(controller.signal, paramsOverrideRef.current ?? {});
-
-    return () => {
-      controller.abort();
-    };
-  }, [dataSource, fetchData]);
-
-  const refetch = useCallback(
-    (newParams?: Record<string, unknown>) => {
-      paramsOverrideRef.current = newParams;
-      abortControllerRef.current?.abort();
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      fetchData(controller.signal, newParams ?? {});
-    },
-    [fetchData]
-  );
-
-  return { data, loading, error, refetch };
+  return {
+    data: (data as T) ?? null,
+    loading: isFetching,
+    error: error ?? null,
+    refetch,
+  };
 }

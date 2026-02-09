@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { KopaiClient as SDKClient } from "@kopai/sdk";
 
 export type KopaiClient = Pick<
@@ -16,6 +17,16 @@ interface KopaiSDKContextValue {
 
 const KopaiSDKContext = createContext<KopaiSDKContextValue | null>(null);
 
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+      retry: false,
+    },
+  },
+});
+
 interface KopaiSDKProviderProps {
   client: KopaiClient;
   children: ReactNode;
@@ -23,9 +34,11 @@ interface KopaiSDKProviderProps {
 
 export function KopaiSDKProvider({ client, children }: KopaiSDKProviderProps) {
   return (
-    <KopaiSDKContext.Provider value={{ client }}>
-      {children}
-    </KopaiSDKContext.Provider>
+    <QueryClientProvider client={queryClient}>
+      <KopaiSDKContext.Provider value={{ client }}>
+        {children}
+      </KopaiSDKContext.Provider>
+    </QueryClientProvider>
   );
 }
 

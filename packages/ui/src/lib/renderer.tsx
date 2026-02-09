@@ -1,4 +1,10 @@
-import type { ReactNode, ComponentType } from "react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  type ReactNode,
+  type ComponentType,
+} from "react";
 import {
   createCatalog,
   type InferProps,
@@ -6,6 +12,7 @@ import {
 } from "./component-catalog.js";
 import z from "zod";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
+import type { DataSource } from "./component-catalog.js";
 
 type RegistryFromCatalog<
   C extends { components: Record<string, ComponentDefinition> },
@@ -22,7 +29,7 @@ type UITree = z.infer<Catalog["uiTreeSchema"]>;
 type UIElement = UITree["elements"][string];
 
 // Simplified - renderer just passes through to useKopaiData
-type DataSource = {
+type RendererDataSource = {
   method: string;
   params?: Record<string, unknown>;
 };
@@ -32,7 +39,7 @@ type BaseElement<Props> = {
   type: string;
   children: string[];
   parentKey: string;
-  dataSource?: DataSource;
+  dataSource?: RendererDataSource;
   props: Props;
 };
 
@@ -41,7 +48,8 @@ type WithData = {
   data: unknown;
   loading: boolean;
   error: Error | null;
-  refetch: (newParams?: Record<string, unknown>) => void;
+  refetch: () => void;
+  updateParams: (params: Record<string, unknown>) => void;
 };
 
 type WithoutData = {
@@ -87,7 +95,8 @@ export interface ComponentRenderPropsWithData {
   data: unknown;
   loading: boolean;
   error: Error | null;
-  refetch: (newParams?: Record<string, unknown>) => void;
+  refetch: () => void;
+  updateParams: (params: Record<string, unknown>) => void;
 }
 
 /**
@@ -150,7 +159,25 @@ function DataSourceElement({
   Component: ComponentRenderer;
   children?: ReactNode;
 }) {
-  const { data, loading, error, refetch } = useKopaiData(element.dataSource);
+  const [paramsOverride, setParamsOverride] = useState<Record<string, unknown>>(
+    {}
+  );
+
+  const effectiveDataSource = useMemo(() => {
+    if (!element.dataSource) return undefined;
+    const merged = {
+      ...element.dataSource,
+      params: { ...element.dataSource.params, ...paramsOverride },
+    };
+    return merged as DataSource;
+  }, [element.dataSource, paramsOverride]);
+
+  const { data, loading, error, refetch } = useKopaiData(effectiveDataSource);
+
+  const updateParams = useCallback((params: Record<string, unknown>) => {
+    setParamsOverride((prev) => ({ ...prev, ...params }));
+  }, []);
+
   return (
     <Component
       element={element}
@@ -159,6 +186,7 @@ function DataSourceElement({
       loading={loading}
       error={error}
       refetch={refetch}
+      updateParams={updateParams}
     >
       {children}
     </Component>

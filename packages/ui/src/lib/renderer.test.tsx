@@ -9,7 +9,7 @@ import {
   createRendererFromCatalog,
   type RendererComponentProps,
 } from "./renderer.js";
-import { KopaiSDKProvider } from "../providers/kopai-provider.js";
+import { KopaiSDKProvider, queryClient } from "../providers/kopai-provider.js";
 import { createCatalog } from "./component-catalog.js";
 import z from "zod";
 import type { KopaiClient } from "@kopai/sdk";
@@ -292,6 +292,7 @@ describe("Renderer with dataSource", () => {
 
   beforeEach(() => {
     mockClient = createMockClient();
+    queryClient.clear();
     vi.clearAllMocks();
   });
 
@@ -395,20 +396,21 @@ describe("Renderer with dataSource", () => {
     expect(screen.getByTestId("error").textContent).toBe("Network error");
   });
 
-  it("provides refetch function", async () => {
+  it("provides updateParams that triggers refetch with new params", async () => {
     mockClient.searchTracesPage
       .mockResolvedValueOnce({ data: [{ traceId: "first" }] })
       .mockResolvedValueOnce({ data: [{ traceId: "second" }] });
 
-    let capturedRefetch: ((params?: Record<string, unknown>) => void) | null =
-      null;
+    let capturedUpdateParams:
+      | ((params: Record<string, unknown>) => void)
+      | null = null;
     function RefetchComponentLocal(
       props: RendererComponentProps<
         typeof _testCatalog.components.RefetchComponent
       >
     ) {
       if (!props.hasData) return null;
-      capturedRefetch = props.refetch;
+      capturedUpdateParams = props.updateParams;
       return createElement(
         "div",
         { "data-testid": "data" },
@@ -444,11 +446,11 @@ describe("Renderer with dataSource", () => {
     });
 
     await waitFor(() => {
-      expect(capturedRefetch).not.toBeNull();
+      expect(capturedUpdateParams).not.toBeNull();
     });
 
     act(() => {
-      capturedRefetch!({ limit: 5 });
+      capturedUpdateParams!({ limit: 5 });
     });
 
     await waitFor(() => {

@@ -91,12 +91,12 @@ function TracesTable(
 ) {
   const { limit: initialLimit } = props.element.props;
   const [currentLimit, setCurrentLimit] = useState(initialLimit ?? 10);
-  const refetchFn = props.hasData ? props.refetch : null;
+  const updateParamsFn = props.hasData ? props.updateParams : null;
   useEffect(() => {
-    if (refetchFn) {
-      refetchFn({ limit: currentLimit });
+    if (updateParamsFn) {
+      updateParamsFn({ limit: currentLimit });
     }
-  }, [currentLimit, refetchFn]);
+  }, [currentLimit, updateParamsFn]);
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading traces...</div>;
@@ -178,12 +178,12 @@ function LogsTable(
 ) {
   const { limit: initialLimit } = props.element.props;
   const [currentLimit, setCurrentLimit] = useState(initialLimit ?? 10);
-  const refetchFn = props.hasData ? props.refetch : null;
+  const updateParamsFn = props.hasData ? props.updateParams : null;
   useEffect(() => {
-    if (refetchFn) {
-      refetchFn({ limit: currentLimit });
+    if (updateParamsFn) {
+      updateParamsFn({ limit: currentLimit });
     }
-  }, [currentLimit, refetchFn]);
+  }, [currentLimit, updateParamsFn]);
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading logs...</div>;
@@ -258,12 +258,12 @@ function MetricsTable(
 ) {
   const { limit: initialLimit } = props.element.props;
   const [currentLimit, setCurrentLimit] = useState(initialLimit ?? 10);
-  const refetchFn = props.hasData ? props.refetch : null;
+  const updateParamsFn = props.hasData ? props.updateParams : null;
   useEffect(() => {
-    if (refetchFn) {
-      refetchFn({ limit: currentLimit });
+    if (updateParamsFn) {
+      updateParamsFn({ limit: currentLimit });
     }
-  }, [currentLimit, refetchFn]);
+  }, [currentLimit, updateParamsFn]);
   if (!props.hasData) return <div>No data source</div>;
   const { data, loading, error, refetch } = props;
   if (loading) return <div>Loading metrics...</div>;

@@ -39,6 +39,7 @@
     "@fastify/vite": "^8.1.0",
     "@kopai/core": "workspace:*",
     "@kopai/sdk": "workspace:*",
+    "@tanstack/react-query": "^5",
     "@tanstack/react-virtual": "^3.11.2",
     "fastify": "^5.7.2",
     "recharts": "^2.15.4"

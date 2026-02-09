@@ -7,6 +7,7 @@ import { createElement, type ReactNode } from "react";
 import { useKopaiData } from "./use-kopai-data.js";
 import {
   KopaiSDKProvider,
+  queryClient,
   type KopaiClient,
 } from "../providers/kopai-provider.js";
 import type { DataSource } from "../lib/component-catalog.js";
@@ -32,6 +33,7 @@ describe("useKopaiData", () => {
 
   beforeEach(() => {
     mockClient = createMockClient();
+    queryClient.clear();
     vi.clearAllMocks();
   });
 
@@ -96,7 +98,7 @@ describe("useKopaiData", () => {
         expect(result.current.loading).toBe(false);
       });
 
-      expect(result.current.error).toBe(error);
+      expect(result.current.error).toEqual(error);
       expect(result.current.data).toBeNull();
     });
   });
@@ -197,7 +199,7 @@ describe("useKopaiData", () => {
   });
 
   describe("refetch", () => {
-    it("refetches with new params", async () => {
+    it("refetches same query on refetch()", async () => {
       const mockData1 = { data: [{ id: "1" }], nextCursor: "cursor1" };
       const mockData2 = { data: [{ id: "2" }], nextCursor: null };
       mockClient.searchTracesPage
@@ -218,7 +220,7 @@ describe("useKopaiData", () => {
       });
 
       act(() => {
-        result.current.refetch({ cursor: "cursor1" });
+        result.current.refetch();
       });
 
       await waitFor(() => {
@@ -226,15 +228,45 @@ describe("useKopaiData", () => {
       });
 
       expect(mockClient.searchTracesPage).toHaveBeenCalledTimes(2);
-      expect(mockClient.searchTracesPage).toHaveBeenLastCalledWith(
-        { limit: 10, cursor: "cursor1" },
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
+    });
+  });
+
+  describe("dataSource change", () => {
+    it("triggers new fetch when dataSource changes", async () => {
+      const tracesData = { data: [{ traceId: "t1" }] };
+      const logsData = { data: [{ body: "log1" }] };
+      mockClient.searchTracesPage.mockResolvedValue(tracesData);
+      mockClient.searchLogsPage.mockResolvedValue(logsData);
+
+      const { result, rerender } = renderHook(
+        ({ ds }: { ds: DataSource }) => useKopaiData(ds),
+        {
+          wrapper: wrapper(mockClient),
+          initialProps: {
+            ds: { method: "searchTracesPage", params: {} } as DataSource,
+          },
+        }
       );
+
+      await waitFor(() => {
+        expect(result.current.data).toEqual(tracesData);
+      });
+
+      rerender({
+        ds: { method: "searchLogsPage", params: {} } as DataSource,
+      });
+
+      await waitFor(() => {
+        expect(result.current.data).toEqual(logsData);
+      });
+
+      expect(mockClient.searchTracesPage).toHaveBeenCalledTimes(1);
+      expect(mockClient.searchLogsPage).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("cleanup", () => {
-    it("aborts request on unmount", async () => {
+    it("cancels in-flight request on unmount", async () => {
       let abortSignal: AbortSignal | undefined;
       mockClient.searchTracesPage.mockImplementation(
         async (_: unknown, opts?: { signal?: AbortSignal }) => {
@@ -259,42 +291,6 @@ describe("useKopaiData", () => {
       unmount();
 
       expect(abortSignal?.aborted).toBe(true);
-    });
-
-    it("aborts previous request on dataSource change", async () => {
-      const signals: AbortSignal[] = [];
-      mockClient.searchTracesPage.mockImplementation(
-        async (_: unknown, opts?: { signal?: AbortSignal }) => {
-          if (opts?.signal) signals.push(opts.signal);
-          return { data: [], nextCursor: null };
-        }
-      );
-      mockClient.searchLogsPage.mockImplementation(
-        async (_: unknown, opts?: { signal?: AbortSignal }) => {
-          if (opts?.signal) signals.push(opts.signal);
-          return { data: [], nextCursor: null };
-        }
-      );
-
-      const { rerender } = renderHook<unknown, { ds: DataSource }>(
-        ({ ds }) => useKopaiData(ds),
-        {
-          wrapper: wrapper(mockClient),
-          initialProps: { ds: { method: "searchTracesPage", params: {} } },
-        }
-      );
-
-      await waitFor(() => {
-        expect(signals.length).toBe(1);
-      });
-
-      rerender({ ds: { method: "searchLogsPage", params: {} } });
-
-      await waitFor(() => {
-        expect(signals.length).toBe(2);
-      });
-
-      expect(signals[0]?.aborted).toBe(true);
     });
   });
 });
