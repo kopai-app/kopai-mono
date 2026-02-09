@@ -48,11 +48,10 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "dev": "tsdown --watch",
+    "dev": "node --env-file-if-exists=.env ./dist/cli.mjs start",
     "lint": "eslint src",
     "type-check": "tsc --noEmit",
-    "start": "node ./dist/cli.mjs start",
-    "start:dev": "nodemon --watch ./dist --watch '../*/dist' --env-file=.env ./dist/cli.mjs start"
+    "start": "node ./dist/cli.mjs start"
   },
   "dependencies": {
     "@fastify/swagger": "^9.6.1",
@@ -69,7 +68,6 @@
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "nodemon": "^3.1.11",
     "tsdown": "^0.20.1",
     "typescript": "^5.9.3"
   }
