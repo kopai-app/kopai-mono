@@ -1,19 +1,21 @@
 import { dashboardCatalog } from "../lib/catalog.js";
 import { createRendererFromCatalog } from "../lib/renderer.js";
-import { Card } from "../components/card.js";
-import { Grid } from "../components/grid.js";
-import { Stack } from "../components/stack.js";
-import { Text } from "../components/text.js";
-import { Heading } from "../components/heading.js";
-import { Badge } from "../components/badge.js";
-import { Divider } from "../components/divider.js";
-import { Metric } from "../components/metric.js";
-import { Empty } from "../components/empty.js";
-import { Chart } from "../components/chart.js";
-import { Table } from "../components/table.js";
-import { DatePicker } from "../components/date-picker.js";
-import { Button } from "../components/button.js";
-import { List } from "../components/list.js";
+import {
+  Badge,
+  Button,
+  Card,
+  Chart,
+  DatePicker,
+  Divider,
+  Empty,
+  Grid,
+  Heading,
+  List,
+  Metric,
+  Stack,
+  Table,
+  Text,
+} from "../components/dashboard/index.js";
 
 const ExampleRenderer = createRendererFromCatalog(dashboardCatalog, {
   Card,

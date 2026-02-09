@@ -58,7 +58,7 @@ const THRESHOLD_COLORS: Record<
     fill: "#ef4444",
   },
   gray: {
-    bg: "bg-gray-900",
+    bg: "bg-background",
     border: "border-gray-800",
     text: "text-gray-400",
     stroke: "#9ca3af",
@@ -69,7 +69,7 @@ const THRESHOLD_COLORS: Record<
 function getColorConfig(color: string) {
   return (
     THRESHOLD_COLORS[color] ?? {
-      bg: "bg-gray-900",
+      bg: "bg-background",
       border: "border-gray-800",
       text: "text-gray-400",
       stroke: color,
@@ -175,7 +175,7 @@ export function MetricStat({
   const colorConfig = getColorConfig(thresholdColor);
   const shouldColorBackground = colorBackground ?? thresholds !== undefined;
   const displayLabel = label ?? metricName;
-  const bgClass = shouldColorBackground ? colorConfig.bg : "bg-gray-900";
+  const bgClass = shouldColorBackground ? colorConfig.bg : "bg-background";
   const borderClass = shouldColorBackground
     ? `border ${colorConfig.border}`
     : "";
@@ -184,7 +184,7 @@ export function MetricStat({
   if (isLoading) {
     return (
       <div
-        className={`bg-gray-900 rounded-lg p-4 animate-pulse ${className}`}
+        className={`bg-background rounded-lg p-4 animate-pulse ${className}`}
         data-testid="metric-stat-loading"
       >
         <div className="h-4 w-24 bg-gray-700 rounded mb-2" />
@@ -196,7 +196,7 @@ export function MetricStat({
   if (error) {
     return (
       <div
-        className={`bg-gray-900 rounded-lg p-4 border border-red-800 ${className}`}
+        className={`bg-background rounded-lg p-4 border border-red-800 ${className}`}
         data-testid="metric-stat-error"
       >
         <p className="text-red-400 text-sm">{error.message}</p>
@@ -207,7 +207,7 @@ export function MetricStat({
   if (latestValue === null) {
     return (
       <div
-        className={`bg-gray-900 rounded-lg p-4 border border-gray-800 ${className}`}
+        className={`bg-background rounded-lg p-4 border border-gray-800 ${className}`}
         data-testid="metric-stat-empty"
       >
         <p className="text-gray-500 text-sm">{displayLabel}</p>

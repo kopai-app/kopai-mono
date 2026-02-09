@@ -133,7 +133,7 @@ export function MetricHistogram({
   if (error) {
     return (
       <div
-        className="flex items-center justify-center bg-gray-900 rounded-lg border border-red-800"
+        className="flex items-center justify-center bg-background rounded-lg border border-red-800"
         style={{ height }}
       >
         <div className="text-center p-4">
@@ -147,7 +147,7 @@ export function MetricHistogram({
   if (rows.length === 0 || buckets.length === 0) {
     return (
       <div
-        className="flex items-center justify-center bg-gray-900 rounded-lg border border-gray-800"
+        className="flex items-center justify-center bg-background rounded-lg border border-gray-800"
         style={{ height }}
       >
         <p className="text-gray-500">No histogram data available</p>
@@ -157,7 +157,7 @@ export function MetricHistogram({
 
   return (
     <div
-      className="bg-gray-900 rounded-lg p-4"
+      className="bg-background rounded-lg p-4"
       style={{ height }}
       data-testid="metric-histogram"
     >
@@ -258,7 +258,7 @@ function HistogramTooltip({
   const bucket = payload[0]?.payload;
   if (!bucket) return null;
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg">
+    <div className="bg-background border border-gray-700 rounded-lg p-3 shadow-lg">
       <p className="text-gray-300 text-sm font-medium mb-2">
         Bucket: {bucket.bucket}
         {unit ? ` ${unit}` : ""}
@@ -276,7 +276,7 @@ function HistogramTooltip({
 function HistogramLoadingSkeleton({ height = 400 }: { height?: number }) {
   return (
     <div
-      className="bg-gray-900 rounded-lg p-4 animate-pulse"
+      className="bg-background rounded-lg p-4 animate-pulse"
       style={{ height }}
       data-testid="metric-histogram-loading"
     >

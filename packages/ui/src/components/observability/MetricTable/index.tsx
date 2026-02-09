@@ -93,7 +93,7 @@ export function MetricTable({
 
   if (isLoading) {
     return (
-      <div className={`bg-gray-900 rounded-lg p-4 ${className}`}>
+      <div className={`bg-background rounded-lg p-4 ${className}`}>
         <div className="animate-pulse" data-testid="metric-table-loading">
           <div className="h-10 bg-gray-800 rounded mb-2" />
           {[1, 2, 3, 4, 5].map((i) => (
@@ -107,7 +107,7 @@ export function MetricTable({
   if (error) {
     return (
       <div
-        className={`bg-gray-900 rounded-lg p-4 border border-red-800 ${className}`}
+        className={`bg-background rounded-lg p-4 border border-red-800 ${className}`}
         data-testid="metric-table-error"
       >
         <p className="text-red-400">Error loading metrics: {error.message}</p>
@@ -118,7 +118,7 @@ export function MetricTable({
   if (tableRows.length === 0) {
     return (
       <div
-        className={`bg-gray-900 rounded-lg p-4 border border-gray-800 ${className}`}
+        className={`bg-background rounded-lg p-4 border border-gray-800 ${className}`}
         data-testid="metric-table-empty"
       >
         <p className="text-gray-500 text-center py-4">
@@ -130,7 +130,7 @@ export function MetricTable({
 
   return (
     <div
-      className={`bg-gray-900 rounded-lg overflow-hidden ${className}`}
+      className={`bg-background rounded-lg overflow-hidden ${className}`}
       data-testid="metric-table"
     >
       <div className="overflow-x-auto">

@@ -255,7 +255,7 @@ export function MetricTimeSeries({
   if (error) {
     return (
       <div
-        className="flex items-center justify-center bg-gray-900 rounded-lg border border-red-800"
+        className="flex items-center justify-center bg-background rounded-lg border border-red-800"
         style={{ height }}
       >
         <div className="text-center p-4">
@@ -269,7 +269,7 @@ export function MetricTimeSeries({
   if (rows.length === 0 || displayData.length === 0) {
     return (
       <div
-        className="flex items-center justify-center bg-gray-900 rounded-lg border border-gray-800"
+        className="flex items-center justify-center bg-background rounded-lg border border-gray-800"
         style={{ height }}
       >
         <p className="text-gray-500">No metric data available</p>
@@ -279,7 +279,7 @@ export function MetricTimeSeries({
 
   return (
     <div
-      className="bg-gray-900 rounded-lg p-4"
+      className="bg-background rounded-lg p-4"
       style={{ height }}
       data-testid="metric-time-series"
     >
@@ -409,7 +409,7 @@ function CustomTooltip({
 }) {
   if (!active || !payload || !label) return null;
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg">
+    <div className="bg-background border border-gray-700 rounded-lg p-3 shadow-lg">
       <p className="text-gray-400 text-xs mb-2">{formatTime(label)}</p>
       {payload.map((entry, i) => (
         <p key={i} className="text-sm" style={{ color: entry.color }}>
@@ -425,7 +425,7 @@ function CustomTooltip({
 function MetricLoadingSkeleton({ height = 400 }: { height?: number }) {
   return (
     <div
-      className="bg-gray-900 rounded-lg p-4 animate-pulse"
+      className="bg-background rounded-lg p-4 animate-pulse"
       style={{ height }}
       data-testid="metric-time-series-loading"
     >

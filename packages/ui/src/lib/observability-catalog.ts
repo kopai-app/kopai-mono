@@ -87,59 +87,50 @@ export const observabilityCatalog = createCatalog({
       description: "Empty state placeholder",
     },
 
-    // DataDisplay Components (observability-specific)
-    Table: {
-      props: z.object({
-        columns: z.array(
-          z.object({
-            key: z.string(),
-            label: z.string(),
-            format: z
-              .enum([
-                "text",
-                "timestamp",
-                "duration",
-                "truncate",
-                "badge",
-                "json",
-              ])
-              .nullable(),
-          })
-        ),
-        title: z.string().nullable(),
-      }),
+    // Observability Components
+    LogTimeline: {
+      props: z.object({ height: z.number().nullable() }),
       hasChildren: false,
-      description: "Table with data from dataSource",
+      description:
+        "Log timeline with virtual scroll, severity filtering, detail pane",
     },
 
-    Metric: {
-      props: z.object({
-        label: z.string(),
-        valueKey: z.string(),
-        format: z.enum(["number", "count", "duration"]).nullable(),
-      }),
+    TraceDetail: {
+      props: z.object({ height: z.number().nullable() }),
       hasChildren: false,
-      description: "Single metric from dataSource",
+      description:
+        "Trace detail with traceId input field and waterfall timeline",
     },
 
-    Chart: {
+    MetricTimeSeries: {
       props: z.object({
-        type: z.enum(["bar", "line", "area"]),
-        title: z.string().nullable(),
-        xKey: z.string(),
-        yKey: z.string(),
         height: z.number().nullable(),
+        showBrush: z.boolean().nullable(),
       }),
       hasChildren: false,
-      description: "Chart from dataSource array",
+      description: "Time series line chart for Gauge/Sum metrics",
     },
 
-    List: {
+    MetricHistogram: {
+      props: z.object({ height: z.number().nullable() }),
+      hasChildren: false,
+      description: "Histogram bar chart for distribution metrics",
+    },
+
+    MetricStat: {
       props: z.object({
-        emptyMessage: z.string().nullable(),
+        label: z.string().nullable(),
+        showSparkline: z.boolean().nullable(),
       }),
-      hasChildren: true,
-      description: "Iterate dataSource array",
+      hasChildren: false,
+      description:
+        "Single metric KPI card with sparkline and threshold coloring",
+    },
+
+    MetricTable: {
+      props: z.object({ maxRows: z.number().nullable() }),
+      hasChildren: false,
+      description: "Tabular display of metric data points",
     },
   },
 });

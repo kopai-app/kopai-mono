@@ -1,4 +1,20 @@
 // Components
+export { TabBar } from "./TabBar/index.js";
+export type { TabBarProps, Tab } from "./TabBar/index.js";
+
+export { ServiceList } from "./ServiceList/index.js";
+export type { ServiceListProps, ServiceEntry } from "./ServiceList/index.js";
+
+export { TraceSearch } from "./TraceSearch/index.js";
+export type {
+  TraceSearchProps,
+  TraceSearchFilters,
+  TraceSummary,
+} from "./TraceSearch/index.js";
+
+export { TraceDetail } from "./TraceDetail/index.js";
+export type { TraceDetailProps } from "./TraceDetail/index.js";
+
 export { TraceTimeline } from "./TraceTimeline/index.js";
 export type { TraceTimelineProps } from "./TraceTimeline/index.js";
 
