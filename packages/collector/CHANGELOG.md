@@ -1,5 +1,11 @@
 # @kopai/collector
 
+## 0.4.0
+
+### Minor Changes
+
+- ce8272f: Accept gzipped otel data
+
 ## 0.3.1
 
 ### Patch Changes
