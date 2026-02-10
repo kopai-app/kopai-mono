@@ -1,3 +1,4 @@
+export { OtelMetricDiscovery } from "./OtelMetricDiscovery.js";
 export { OtelMetricHistogram } from "./OtelMetricHistogram.js";
 export { OtelMetricStat } from "./OtelMetricStat.js";
 export { OtelMetricTable } from "./OtelMetricTable.js";

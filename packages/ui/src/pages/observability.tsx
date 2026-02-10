@@ -6,14 +6,14 @@ import {
   useSyncExternalStore,
   useRef,
 } from "react";
-import { observabilityCatalog } from "../lib/observability-catalog.js";
-import { createRendererFromCatalog } from "../lib/renderer.js";
 import { KopaiSDKProvider, useKopaiSDK } from "../providers/kopai-provider.js";
 import { KopaiClient } from "@kopai/sdk";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
 import { useLiveLogs } from "../hooks/use-live-logs.js";
 import type { denormalizedSignals, dataFilterSchemas } from "@kopai/core";
 import type { DataSource } from "../lib/component-catalog.js";
+import { observabilityCatalog } from "../lib/observability-catalog.js";
+import { createRendererFromCatalog } from "../lib/renderer.js";
 
 // Observability components
 import {
@@ -32,15 +32,17 @@ import type {
 } from "../components/observability/index.js";
 
 import { SERVICES_SHORTCUTS } from "../components/observability/ServiceList/shortcuts.js";
-
-// Renderer components (for Metrics tab)
-import { Card, Grid, Stack } from "../components/dashboard/index.js";
+import { OtelMetricDiscovery } from "../components/observability/renderers/index.js";
 import {
-  OtelMetricTimeSeries,
-  OtelMetricHistogram,
-  OtelMetricStat,
-  OtelMetricTable,
-} from "../components/observability/renderers/index.js";
+  Heading,
+  Text,
+  Card,
+  Stack,
+  Grid,
+  Badge,
+  Divider,
+  Empty,
+} from "../components/dashboard/index.js";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 
@@ -371,14 +373,13 @@ function ServiceListView({
 
   const services = useMemo(() => {
     if (!data?.data) return [];
-    const counts = new Map<string, number>();
+    const names = new Set<string>();
     for (const row of data.data) {
-      const svc = row.ServiceName ?? "unknown";
-      counts.set(svc, (counts.get(svc) ?? 0) + 1);
+      names.add(row.ServiceName ?? "unknown");
     }
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, count]) => ({ name, spanCount: count }));
+    return Array.from(names)
+      .sort()
+      .map((name) => ({ name }));
   }, [data]);
 
   return (
@@ -649,199 +650,79 @@ function ServicesTab({
 }
 
 // ---------------------------------------------------------------------------
-// Metrics tab (configurable, uses renderer)
+// Metrics tab — renderer + catalog
 // ---------------------------------------------------------------------------
 
 const MetricsRenderer = createRendererFromCatalog(observabilityCatalog, {
   Card,
   Grid,
   Stack,
-  Heading: () => null,
-  Text: () => null,
-  Badge: () => null,
-  Divider: () => null,
-  Empty: () => null,
+  Heading,
+  Text,
+  Badge,
+  Divider,
+  Empty,
   LogTimeline: () => null,
   TraceDetail: () => null,
-  MetricTimeSeries: OtelMetricTimeSeries,
-  MetricHistogram: OtelMetricHistogram,
-  MetricStat: OtelMetricStat,
-  MetricTable: OtelMetricTable,
+  MetricTimeSeries: () => null,
+  MetricHistogram: () => null,
+  MetricStat: () => null,
+  MetricTable: () => null,
+  MetricDiscovery: OtelMetricDiscovery,
 });
 
-const metricsTree = {
+const METRICS_TREE = {
   root: "root",
   elements: {
     root: {
       key: "root",
       type: "Stack" as const,
-      children: [
-        "stats-grid",
-        "cpu-chart-card",
-        "duration-card",
-        "metrics-table-card",
-      ],
+      children: ["heading", "description", "discovery-card"],
       parentKey: "",
-      props: { direction: "vertical", gap: "lg", align: null },
+      props: {
+        direction: "vertical" as const,
+        gap: "md" as const,
+        align: null,
+      },
     },
-
-    // Stats Grid
-    "stats-grid": {
-      key: "stats-grid",
-      type: "Grid" as const,
-      children: ["stat-active-req-card", "stat-cpu-card", "stat-memory-card"],
+    heading: {
+      key: "heading",
+      type: "Heading" as const,
+      children: [],
       parentKey: "root",
-      props: { columns: 3, gap: "md" },
+      props: { text: "Metrics", level: "h2" as const },
     },
-    "stat-active-req-card": {
-      key: "stat-active-req-card",
-      type: "Card" as const,
-      children: ["stat-active-req"],
-      parentKey: "stats-grid",
-      props: { title: null, description: null, padding: "md" },
-    },
-    "stat-active-req": {
-      key: "stat-active-req",
-      type: "MetricStat" as const,
+    description: {
+      key: "description",
+      type: "Text" as const,
       children: [],
-      parentKey: "stat-active-req-card",
-      dataSource: {
-        method: "searchMetricsPage" as const,
-        params: {
-          metricType: "Sum" as const,
-          metricName: "http.server.active_requests",
-          limit: 50,
-        },
-        refetchIntervalMs: 30_000,
-      },
-      props: { label: "Active Requests", showSparkline: true },
-    },
-    "stat-cpu-card": {
-      key: "stat-cpu-card",
-      type: "Card" as const,
-      children: ["stat-cpu"],
-      parentKey: "stats-grid",
-      props: { title: null, description: null, padding: "md" },
-    },
-    "stat-cpu": {
-      key: "stat-cpu",
-      type: "MetricStat" as const,
-      children: [],
-      parentKey: "stat-cpu-card",
-      dataSource: {
-        method: "searchMetricsPage" as const,
-        params: {
-          metricType: "Gauge" as const,
-          metricName: "system.cpu.utilization",
-          limit: 50,
-        },
-        refetchIntervalMs: 30_000,
-      },
-      props: { label: "CPU Utilization", showSparkline: true },
-    },
-    "stat-memory-card": {
-      key: "stat-memory-card",
-      type: "Card" as const,
-      children: ["stat-memory"],
-      parentKey: "stats-grid",
-      props: { title: null, description: null, padding: "md" },
-    },
-    "stat-memory": {
-      key: "stat-memory",
-      type: "MetricStat" as const,
-      children: [],
-      parentKey: "stat-memory-card",
-      dataSource: {
-        method: "searchMetricsPage" as const,
-        params: {
-          metricType: "Gauge" as const,
-          metricName: "system.memory.utilization",
-          limit: 50,
-        },
-        refetchIntervalMs: 30_000,
-      },
-      props: { label: "Memory Utilization", showSparkline: true },
-    },
-
-    // CPU Time Series
-    "cpu-chart-card": {
-      key: "cpu-chart-card",
-      type: "Card" as const,
-      children: ["cpu-time-series"],
       parentKey: "root",
-      props: { title: "CPU Utilization", description: null, padding: "md" },
-    },
-    "cpu-time-series": {
-      key: "cpu-time-series",
-      type: "MetricTimeSeries" as const,
-      children: [],
-      parentKey: "cpu-chart-card",
-      dataSource: {
-        method: "searchMetricsPage" as const,
-        params: {
-          metricType: "Gauge" as const,
-          metricName: "system.cpu.utilization",
-          limit: 500,
-        },
-        refetchIntervalMs: 30_000,
+      props: {
+        content: "Discovered OpenTelemetry metrics",
+        variant: "body" as const,
+        color: "muted" as const,
       },
-      props: { height: 400, showBrush: true },
     },
-
-    // Request Duration Histogram
-    "duration-card": {
-      key: "duration-card",
+    "discovery-card": {
+      key: "discovery-card",
       type: "Card" as const,
-      children: ["duration-histogram"],
+      children: ["metric-discovery"],
       parentKey: "root",
-      props: { title: "Request Duration", description: null, padding: "md" },
+      props: { title: null, description: null, padding: null },
     },
-    "duration-histogram": {
-      key: "duration-histogram",
-      type: "MetricHistogram" as const,
+    "metric-discovery": {
+      key: "metric-discovery",
+      type: "MetricDiscovery" as const,
       children: [],
-      parentKey: "duration-card",
-      dataSource: {
-        method: "searchMetricsPage" as const,
-        params: {
-          metricType: "Histogram" as const,
-          metricName: "http.server.request.duration",
-          limit: 100,
-        },
-        refetchIntervalMs: 30_000,
-      },
-      props: { height: 400 },
-    },
-
-    // JVM Memory Table
-    "metrics-table-card": {
-      key: "metrics-table-card",
-      type: "Card" as const,
-      children: ["jvm-memory-table"],
-      parentKey: "root",
-      props: { title: "JVM Memory", description: null, padding: "md" },
-    },
-    "jvm-memory-table": {
-      key: "jvm-memory-table",
-      type: "MetricTable" as const,
-      children: [],
-      parentKey: "metrics-table-card",
-      dataSource: {
-        method: "searchMetricsPage" as const,
-        params: {
-          metricType: "Sum" as const,
-          metricName: "jvm.memory.used",
-          limit: 50,
-        },
-        refetchIntervalMs: 30_000,
-      },
-      props: { maxRows: 25 },
+      parentKey: "discovery-card",
+      dataSource: { method: "discoverMetrics" as const },
+      props: {},
     },
   },
 };
 
 function MetricsTab() {
-  return <MetricsRenderer tree={metricsTree} />;
+  return <MetricsRenderer tree={METRICS_TREE} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -932,5 +813,3 @@ export default function ObservabilityPage() {
     </KopaiSDKProvider>
   );
 }
-
-export { metricsTree, MetricsRenderer };

@@ -1,6 +1,5 @@
 export interface ServiceEntry {
   name: string;
-  spanCount: number;
 }
 
 export interface ServiceListProps {
@@ -43,12 +42,9 @@ export function ServiceList({
         <button
           key={svc.name}
           onClick={() => onSelect(svc.name)}
-          className="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-foreground/30 hover:bg-muted/50 transition-colors flex items-center justify-between group"
+          className="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-foreground/30 hover:bg-muted/50 transition-colors group"
         >
           <span className="font-medium text-foreground">{svc.name}</span>
-          <span className="text-xs text-muted-foreground group-hover:text-foreground/70">
-            {svc.spanCount} spans
-          </span>
         </button>
       ))}
     </div>

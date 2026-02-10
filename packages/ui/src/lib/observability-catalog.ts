@@ -132,5 +132,12 @@ export const observabilityCatalog = createCatalog({
       hasChildren: false,
       description: "Tabular display of metric data points",
     },
+
+    MetricDiscovery: {
+      props: z.object({}),
+      hasChildren: false,
+      description:
+        "Table of discovered metric names, types, units and descriptions",
+    },
   },
 });
