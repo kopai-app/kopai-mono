@@ -9,8 +9,13 @@ document.body.classList.add("bg-background");
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <div className="min-h-screen bg-background text-foreground p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Observability</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1
+          className="text-xl font-normal"
+          style={{ fontFamily: "ui-monospace, monospace" }}
+        >
+          <span>|--k&gt;</span> <span>kopai</span>
+        </h1>
         <button
           className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
           onClick={() =>
