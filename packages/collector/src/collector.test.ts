@@ -1,4 +1,5 @@
 /// <reference types="vitest/globals" />
+import { gzipSync } from "node:zlib";
 import fastify, { type FastifyInstance } from "fastify";
 import { collectorRoutes } from "./index.js";
 import { CollectorError } from "./routes/errors.js";
@@ -559,6 +560,68 @@ describe("collectorRoutes", () => {
       expect(response.json()).toEqual({
         error: "Internal Server Error",
       });
+    });
+
+    it("decompresses gzip-encoded request bodies", async () => {
+      const writeTracesSpy = vi.fn().mockResolvedValue({
+        rejectedSpans: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: writeTracesSpy,
+          writeLogs: vi.fn(),
+        },
+      });
+
+      const tracesPayload: datasource.TracesData = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                { key: "service.name", value: { stringValue: "test-service" } },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: { name: "test-instrumentation" },
+                spans: [
+                  {
+                    traceId: "abc123",
+                    spanId: "def456",
+                    name: "test-span",
+                    kind: 2,
+                    startTimeUnixNano: "1704067200000000000",
+                    endTimeUnixNano: "1704067260000000000",
+                    status: { code: 1 },
+                    attributes: [],
+                    events: [],
+                    links: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const jsonBody = JSON.stringify(tracesPayload);
+      const gzippedBody = gzipSync(Buffer.from(jsonBody));
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        headers: {
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+        },
+        body: gzippedBody,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(writeTracesSpy).toHaveBeenCalledWith(tracesPayload);
     });
   });
 

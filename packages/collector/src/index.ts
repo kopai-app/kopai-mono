@@ -1,3 +1,4 @@
+import { createGunzip } from "node:zlib";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { datasource } from "@kopai/core";
 import {
@@ -17,6 +18,17 @@ export const collectorRoutes: FastifyPluginAsyncZod<{
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
   fastify.setErrorHandler(collectorErrorHandler);
+
+  // Decompress gzip request bodies (OTLP/HTTP defaults to gzip compression)
+  fastify.addHook("preParsing", async (request, _reply, payload) => {
+    const encoding = request.headers["content-encoding"];
+    if (encoding === "gzip" || encoding === "x-gzip") {
+      delete request.headers["content-encoding"];
+      delete request.headers["content-length"];
+      return payload.pipe(createGunzip());
+    }
+    return payload;
+  });
 
   // Register protobuf support (OTLP/HTTP with application/x-protobuf)
   fastify.register(protobufPlugin);
