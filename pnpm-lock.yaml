@@ -84,6 +84,9 @@ importers:
       "@fastify/swagger-ui":
         specifier: ^5.2.5
         version: 5.2.5
+      "@fastify/vite":
+        specifier: ^8.1.0
+        version: 8.4.1(fastify@5.7.4)(vite@6.4.1(@types/node@25.2.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.2))
       "@kopai/api":
         specifier: workspace:*
         version: link:../api
@@ -115,12 +118,39 @@ importers:
       "@kopai/tsconfig":
         specifier: workspace:*
         version: link:../tsconfig
+      "@types/react":
+        specifier: ^19.2.10
+        version: 19.2.13
+      "@types/react-dom":
+        specifier: ^19.1.0
+        version: 19.2.3(@types/react@19.2.13)
+      "@vitejs/plugin-react":
+        specifier: ^4.5.2
+        version: 4.7.0(vite@6.4.1(@types/node@25.2.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.2))
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.4.24(postcss@8.5.6)
+      postcss:
+        specifier: ^8.5.3
+        version: 8.5.6
+      react:
+        specifier: ^19.2.4
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.4(react@19.2.4)
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.19(tsx@4.21.0)(yaml@2.8.2)
       tsdown:
         specifier: ^0.20.3
         version: 0.20.3(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vite:
+        specifier: ^6.3.5
+        version: 6.4.1(@types/node@25.2.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/cli:
     dependencies:
@@ -275,9 +305,6 @@ importers:
 
   packages/ui:
     dependencies:
-      "@fastify/vite":
-        specifier: ^8.1.0
-        version: 8.4.1(fastify@5.7.4)(vite@6.4.1(@types/node@25.2.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.2))
       "@kopai/core":
         specifier: workspace:*
         version: link:../core
@@ -290,9 +317,6 @@ importers:
       "@tanstack/react-virtual":
         specifier: ^3.11.2
         version: 3.13.18(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      fastify:
-        specifier: ^5.7.2
-        version: 5.7.4
       recharts:
         specifier: ^2.15.4
         version: 2.15.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

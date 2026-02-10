@@ -47,13 +47,15 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && vite build",
+    "build:client": "vite build",
     "dev": "node --env-file-if-exists=.env ./dist/cli.mjs start",
     "lint": "eslint src",
     "type-check": "tsc --noEmit",
     "start": "node ./dist/cli.mjs start"
   },
   "dependencies": {
+    "@fastify/vite": "^8.1.0",
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.5",
     "@kopai/api": "workspace:*",
@@ -68,7 +70,16 @@
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^3.4.17",
     "tsdown": "^0.20.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^6.3.5"
   }
 }

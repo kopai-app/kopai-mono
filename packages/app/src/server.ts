@@ -17,7 +17,8 @@ import {
   initializeDatabase,
   createOptimizedDatasource,
 } from "@kopai/sqlite-datasource";
-import { uiPlugin } from "@kopai/ui";
+import { resolve } from "node:path";
+import FastifyVite from "@fastify/vite";
 
 const apiServer = fastify({
   logger: true,
@@ -27,7 +28,7 @@ const apiServer = fastify({
 apiServer.setValidatorCompiler(validatorCompiler);
 apiServer.setSerializerCompiler(serializerCompiler);
 
-const uiRoutes = ["/", "/dashboard", "/dashboard/*", "/api/generate"];
+const uiRoutes = ["/", "/*"];
 apiServer.register(fastifySwagger, {
   openapi: {
     info: {
@@ -78,7 +79,17 @@ apiServer.after(() => {
   apiServer.register(apiRoutes, {
     readTelemetryDatasource: telemetryDatasource,
   });
-  apiServer.register(uiPlugin);
+  apiServer.register(async (fastify) => {
+    await fastify.register(FastifyVite, {
+      root: resolve(import.meta.dirname, ".."),
+      distDir: resolve(import.meta.dirname, "..", "dist", "client"),
+      dev: false,
+      spa: true,
+    });
+    fastify.get("/", (_req, reply) => reply.html());
+    fastify.get("/*", (_req, reply) => reply.html());
+    await fastify.vite.ready();
+  });
 });
 
 const collectorServer = fastify({

@@ -18,30 +18,28 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./globals.css": "./src/styles/globals.css"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "scripts": {
-    "build": "tsdown && vite build",
-    "build:client": "vite build",
-    "dev": "vite",
+    "build": "tsdown",
     "lint": "eslint src",
     "type-check": "tsc --noEmit",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@fastify/vite": "^8.1.0",
     "@kopai/core": "workspace:*",
     "@kopai/sdk": "workspace:*",
     "@tanstack/react-query": "^5",
     "@tanstack/react-virtual": "^3.11.2",
-    "fastify": "^5.7.2",
     "recharts": "^2.15.4"
   },
   "peerDependencies": {
