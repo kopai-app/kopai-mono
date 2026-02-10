@@ -8,6 +8,7 @@ export interface LogDetailPaneProps {
   onClose: () => void;
   onTraceLinkClick?: (traceId: string, spanId: string) => void;
   initialTab?: "message" | "attributes" | "resource" | "context";
+  wordWrap?: boolean;
 }
 
 type TabType = "message" | "attributes" | "resource" | "context";
@@ -17,6 +18,7 @@ export function LogDetailPane({
   onClose,
   onTraceLinkClick,
   initialTab = "message",
+  wordWrap = true,
 }: LogDetailPaneProps) {
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [copiedId, setCopiedId] = useState(false);
@@ -157,7 +159,13 @@ export function LogDetailPane({
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
         {activeTab === "message" && (
-          <pre className="text-sm text-foreground whitespace-pre-wrap break-words font-mono bg-muted p-3 rounded">
+          <pre
+            className={`text-sm text-foreground font-mono bg-muted p-3 rounded ${
+              wordWrap
+                ? "whitespace-pre-wrap break-words"
+                : "whitespace-pre overflow-x-auto"
+            }`}
+          >
             {log.body || "No message body"}
           </pre>
         )}

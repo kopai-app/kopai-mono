@@ -6,6 +6,8 @@ export interface LogRowProps {
   isSelected: boolean;
   onClick: () => void;
   searchText?: string;
+  relativeTime?: boolean;
+  referenceTimeMs?: number;
 }
 
 function formatTimestamp(timeMs: number): string {
@@ -15,6 +17,17 @@ function formatTimestamp(timeMs: number): string {
   const seconds = String(date.getSeconds()).padStart(2, "0");
   const ms = String(date.getMilliseconds()).padStart(3, "0");
   return `${hours}:${minutes}:${seconds}.${ms}`;
+}
+
+function formatRelativeTime(timeMs: number, referenceMs: number): string {
+  const diffMs = timeMs - referenceMs;
+  const sign = diffMs >= 0 ? "+" : "-";
+  const abs = Math.abs(diffMs);
+  if (abs < 1000) return `${sign}${abs}ms`;
+  if (abs < 60_000) return `${sign}${(abs / 1000).toFixed(1)}s`;
+  const mins = Math.floor(abs / 60_000);
+  const secs = ((abs % 60_000) / 1000).toFixed(0);
+  return `${sign}${mins}m${secs}s`;
 }
 
 function truncateMessage(message: string, maxLength = 120): string {
@@ -91,10 +104,15 @@ export const LogRow = memo(function LogRow({
   isSelected,
   onClick,
   searchText,
+  relativeTime,
+  referenceTimeMs,
 }: LogRowProps) {
   const severityColor = getSeverityColor(log.severityText);
   const message = useMemo(() => log.body || "", [log.body]);
-  const timestamp = formatTimestamp(log.timeUnixMs);
+  const timestamp =
+    relativeTime && referenceTimeMs != null
+      ? formatRelativeTime(log.timeUnixMs, referenceTimeMs)
+      : formatTimestamp(log.timeUnixMs);
   const lineCount = message.split("\n").length;
   const hasMultipleLines = lineCount > 1;
 

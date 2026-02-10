@@ -42,6 +42,15 @@ export type { MetricTableProps } from "./MetricTable/index.js";
 export { RawDataTable } from "./RawDataTable/index.js";
 export type { RawDataTableProps } from "./RawDataTable/index.js";
 
+export { KeyboardShortcutsProvider } from "../KeyboardShortcuts/index.js";
+export { ShortcutsHelpDialog } from "../KeyboardShortcuts/index.js";
+export { useRegisterShortcuts } from "../KeyboardShortcuts/index.js";
+export type {
+  KeyboardShortcut,
+  ShortcutGroup,
+  ShortcutsRegistry,
+} from "../KeyboardShortcuts/index.js";
+
 // Types
 export type {
   SpanNode,

@@ -10,6 +10,8 @@ import type { LogEntry } from "../types.js";
 import { LogRow } from "./LogRow.js";
 import { LogDetailPane } from "./LogDetailPane/index.js";
 import { LoadingSkeleton } from "../shared/LoadingSkeleton.js";
+import { useRegisterShortcuts } from "../../KeyboardShortcuts/index.js";
+import { LOG_VIEWER_SHORTCUTS } from "./shortcuts.js";
 
 type OtelLogsRow = denormalizedSignals.OtelLogsRow;
 
@@ -104,11 +106,15 @@ export function LogTimeline({
   searchText = "",
   onAtBottomChange,
 }: LogTimelineProps) {
+  useRegisterShortcuts("log-viewer", LOG_VIEWER_SHORTCUTS);
+
   const [internalSelectedLogId, setInternalSelectedLogId] = useState<
     string | null
   >(null);
   const [isDetailPaneOpen, setIsDetailPaneOpen] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [wordWrap, setWordWrap] = useState(true);
+  const [relativeTime, setRelativeTime] = useState(false);
   const selectedLogId = externalSelectedLogId ?? internalSelectedLogId;
   const scrollRef = useRef<HTMLDivElement>(null);
   const announcementRef = useRef<HTMLDivElement>(null);
@@ -126,6 +132,11 @@ export function LogTimeline({
   const selectedLog = useMemo(() => {
     return boundedLogs.find((log) => log.logId === selectedLogId) ?? null;
   }, [boundedLogs, selectedLogId]);
+
+  const referenceTimeMs = useMemo(
+    () => (boundedLogs.length > 0 ? boundedLogs[0]!.timeUnixMs : 0),
+    [boundedLogs]
+  );
 
   useEffect(() => {
     if (externalSelectedLogId) setIsDetailPaneOpen(true);
@@ -216,34 +227,62 @@ export function LogTimeline({
     }
   }, [onAtBottomChange]);
 
+  const navigateUp = useCallback(() => {
+    const idx = boundedLogs.findIndex((l) => l.logId === selectedLogId);
+    if (idx > 0) {
+      const prev = boundedLogs[idx - 1];
+      if (prev) {
+        handleLogClick(prev);
+        virtualizer.scrollToIndex(idx - 1, { align: "auto" });
+      }
+    } else if (idx === -1 && boundedLogs.length > 0) {
+      const targetIdx = boundedLogs.length - 1;
+      const last = boundedLogs[targetIdx];
+      if (last) {
+        handleLogClick(last);
+        virtualizer.scrollToIndex(targetIdx, { align: "auto" });
+      }
+    }
+  }, [boundedLogs, selectedLogId, handleLogClick, virtualizer]);
+
+  const navigateDown = useCallback(() => {
+    const idx = boundedLogs.findIndex((l) => l.logId === selectedLogId);
+    if (idx >= 0 && idx < boundedLogs.length - 1) {
+      const next = boundedLogs[idx + 1];
+      if (next) {
+        handleLogClick(next);
+        virtualizer.scrollToIndex(idx + 1, { align: "auto" });
+      }
+    } else if (idx === -1 && boundedLogs.length > 0) {
+      const first = boundedLogs[0];
+      if (first) {
+        handleLogClick(first);
+        virtualizer.scrollToIndex(0, { align: "auto" });
+      }
+    }
+  }, [boundedLogs, selectedLogId, handleLogClick, virtualizer]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      )
+        return;
       switch (e.key) {
-        case "ArrowUp": {
+        case "ArrowUp":
+        case "k":
+        case "K":
           e.preventDefault();
-          const idx = boundedLogs.findIndex((l) => l.logId === selectedLogId);
-          if (idx > 0) {
-            const prev = boundedLogs[idx - 1];
-            if (prev) handleLogClick(prev);
-          } else if (idx === -1 && boundedLogs.length > 0) {
-            const last = boundedLogs[boundedLogs.length - 1];
-            if (last) handleLogClick(last);
-          }
+          navigateUp();
           break;
-        }
-        case "ArrowDown": {
+        case "ArrowDown":
+        case "j":
+        case "J":
           e.preventDefault();
-          const idx = boundedLogs.findIndex((l) => l.logId === selectedLogId);
-          if (idx >= 0 && idx < boundedLogs.length - 1) {
-            const next = boundedLogs[idx + 1];
-            if (next) handleLogClick(next);
-          } else if (idx === -1 && boundedLogs.length > 0) {
-            const first = boundedLogs[0];
-            if (first) handleLogClick(first);
-          }
+          navigateDown();
           break;
-        }
         case "Escape":
           if (isDetailPaneOpen) {
             e.preventDefault();
@@ -255,6 +294,81 @@ export function LogTimeline({
           e.preventDefault();
           handleScrollToBottom();
           break;
+        case "/": {
+          e.preventDefault();
+          const input = document.querySelector<HTMLInputElement>(
+            '[data-testid="filter-bodyContains"]'
+          );
+          if (input) {
+            // Ensure filter panel is open first
+            const panel = document.querySelector('[data-testid="log-filter"]');
+            const toggle = panel?.querySelector<HTMLButtonElement>(
+              '[data-testid="log-filter-toggle"]'
+            );
+            // Check if panel content is visible (has more than just the toggle button)
+            if (toggle && !panel?.querySelector(".border-t")) {
+              toggle.click();
+              // Focus after panel opens
+              requestAnimationFrame(() => {
+                document
+                  .querySelector<HTMLInputElement>(
+                    '[data-testid="filter-bodyContains"]'
+                  )
+                  ?.focus();
+              });
+            } else {
+              input.focus();
+            }
+          }
+          break;
+        }
+        case "f":
+        case "F": {
+          e.preventDefault();
+          const toggle = document.querySelector<HTMLButtonElement>(
+            '[data-testid="log-filter-toggle"]'
+          );
+          toggle?.click();
+          break;
+        }
+        case "Enter": {
+          if (selectedLogId && !isDetailPaneOpen) {
+            e.preventDefault();
+            const log = boundedLogs.find((l) => l.logId === selectedLogId);
+            if (log) handleLogClick(log);
+          }
+          break;
+        }
+        case "Home": {
+          e.preventDefault();
+          if (boundedLogs.length > 0) {
+            const first = boundedLogs[0];
+            if (first) {
+              handleLogClick(first);
+              virtualizer.scrollToIndex(0);
+            }
+          }
+          break;
+        }
+        case "c":
+        case "C": {
+          if (e.ctrlKey || e.metaKey) break;
+          e.preventDefault();
+          if (selectedLog) {
+            navigator.clipboard.writeText(selectedLog.body).catch(() => {});
+          }
+          break;
+        }
+        case "w":
+        case "W":
+          e.preventDefault();
+          setWordWrap((v) => !v);
+          break;
+        case "t":
+        case "T":
+          e.preventDefault();
+          setRelativeTime((v) => !v);
+          break;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -262,10 +376,14 @@ export function LogTimeline({
   }, [
     boundedLogs,
     selectedLogId,
+    selectedLog,
+    navigateUp,
+    navigateDown,
     handleLogClick,
     handleCloseDetailPane,
     handleScrollToBottom,
     isDetailPaneOpen,
+    virtualizer,
   ]);
 
   if (isLoading && !boundedLogs.length) return <LoadingSkeleton />;
@@ -363,6 +481,8 @@ export function LogTimeline({
                         isSelected={log.logId === selectedLogId}
                         onClick={logClickHandlers.get(log.logId)!}
                         searchText={searchText}
+                        relativeTime={relativeTime}
+                        referenceTimeMs={referenceTimeMs}
                       />
                     </div>
                   );
@@ -400,6 +520,7 @@ export function LogTimeline({
             log={selectedLog}
             onClose={handleCloseDetailPane}
             onTraceLinkClick={onTraceLinkClick}
+            wordWrap={wordWrap}
           />
         )}
       </div>

@@ -4,6 +4,7 @@ import {
   useEffect,
   useCallback,
   useSyncExternalStore,
+  useRef,
 } from "react";
 import { observabilityCatalog } from "../lib/observability-catalog.js";
 import { createRendererFromCatalog } from "../lib/renderer.js";
@@ -22,11 +23,15 @@ import {
   ServiceList,
   TraceSearch,
   TraceDetail,
+  KeyboardShortcutsProvider,
+  useRegisterShortcuts,
 } from "../components/observability/index.js";
 import type {
   TraceSummary,
   TraceSearchFilters,
 } from "../components/observability/index.js";
+
+import { SERVICES_SHORTCUTS } from "../components/observability/ServiceList/shortcuts.js";
 
 // Renderer components (for Metrics tab)
 import { Card, Grid, Stack } from "../components/dashboard/index.js";
@@ -306,6 +311,18 @@ function LogsTab() {
     setSelectedLogId(log.logId);
   }, []);
 
+  const handleTraceLinkClick = useCallback(
+    (traceId: string) => {
+      const log = filteredLogs.find((l) => l.TraceId === traceId);
+      pushURLState({
+        tab: "services",
+        service: log?.ServiceName ?? undefined,
+        trace: traceId,
+      });
+    },
+    [filteredLogs]
+  );
+
   return (
     <div style={{ height: "calc(100vh - 160px)" }} className="flex flex-col">
       <div className="shrink-0 mb-3">
@@ -325,6 +342,7 @@ function LogsTab() {
           streaming={isLive}
           selectedLogId={selectedLogId ?? undefined}
           onLogClick={handleLogClick}
+          onTraceLinkClick={handleTraceLinkClick}
           onAtBottomChange={(atBottom) => setLive(atBottom)}
         />
       </div>
@@ -579,6 +597,34 @@ function ServicesTab({
   onBackToServices: () => void;
   onBackToTraceList: () => void;
 }) {
+  useRegisterShortcuts("services-tab", SERVICES_SHORTCUTS);
+
+  // Backspace → navigate back based on drill-down depth
+  const backToServicesRef = useRef(onBackToServices);
+  backToServicesRef.current = onBackToServices;
+  const backToTraceListRef = useRef(onBackToTraceList);
+  backToTraceListRef.current = onBackToTraceList;
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      )
+        return;
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        if (selectedTraceId && selectedService) {
+          backToTraceListRef.current();
+        } else if (selectedService) {
+          backToServicesRef.current();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedService, selectedTraceId]);
+
   if (selectedTraceId && selectedService) {
     return (
       <TraceDetailView
@@ -856,28 +902,50 @@ export default function ObservabilityPage() {
 
   return (
     <KopaiSDKProvider client={client}>
-      <div className="min-h-screen bg-background text-foreground p-6">
-        <h1 className="text-2xl font-bold mb-4">Observability</h1>
-        <TabBar
-          tabs={TABS}
-          active={activeTab}
-          onChange={handleTabChange as (key: string) => void}
-        />
-        {activeTab === "logs" && <LogsTab />}
-        {activeTab === "services" && (
-          <ServicesTab
-            selectedService={selectedService}
-            selectedTraceId={selectedTraceId}
-            selectedSpanId={selectedSpanId}
-            onSelectService={handleSelectService}
-            onSelectTrace={handleSelectTrace}
-            onSelectSpan={handleSelectSpan}
-            onBackToServices={handleBackToServices}
-            onBackToTraceList={handleBackToTraceList}
+      <KeyboardShortcutsProvider
+        onNavigateServices={() => pushURLState({ tab: "services" })}
+        onNavigateLogs={() => pushURLState({ tab: "logs" })}
+        onNavigateMetrics={() => pushURLState({ tab: "metrics" })}
+      >
+        <div className="min-h-screen bg-background text-foreground p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold">Observability</h1>
+            <button
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              onClick={() =>
+                document.dispatchEvent(
+                  new KeyboardEvent("keydown", { key: "?", shiftKey: true })
+                )
+              }
+            >
+              Press{" "}
+              <kbd className="px-1 py-0.5 text-xs border border-zinc-700 rounded bg-zinc-800">
+                ?
+              </kbd>{" "}
+              for shortcuts
+            </button>
+          </div>
+          <TabBar
+            tabs={TABS}
+            active={activeTab}
+            onChange={handleTabChange as (key: string) => void}
           />
-        )}
-        {activeTab === "metrics" && <MetricsTab />}
-      </div>
+          {activeTab === "logs" && <LogsTab />}
+          {activeTab === "services" && (
+            <ServicesTab
+              selectedService={selectedService}
+              selectedTraceId={selectedTraceId}
+              selectedSpanId={selectedSpanId}
+              onSelectService={handleSelectService}
+              onSelectTrace={handleSelectTrace}
+              onSelectSpan={handleSelectSpan}
+              onBackToServices={handleBackToServices}
+              onBackToTraceList={handleBackToTraceList}
+            />
+          )}
+          {activeTab === "metrics" && <MetricsTab />}
+        </div>
+      </KeyboardShortcutsProvider>
     </KopaiSDKProvider>
   );
 }

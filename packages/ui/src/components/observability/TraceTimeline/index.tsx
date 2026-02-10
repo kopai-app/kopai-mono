@@ -18,6 +18,8 @@ import { TraceHeader } from "./TraceHeader.js";
 import { SpanRow } from "./SpanRow.js";
 import { DetailPane } from "./DetailPane/index.js";
 import { LoadingSkeleton } from "../shared/LoadingSkeleton.js";
+import { useRegisterShortcuts } from "../../KeyboardShortcuts/index.js";
+import { TRACE_VIEWER_SHORTCUTS } from "./shortcuts.js";
 
 export interface TraceTimelineProps {
   rows: OtelTracesRow[];
@@ -155,6 +157,8 @@ export function TraceTimeline({
   isLoading,
   error,
 }: TraceTimelineProps) {
+  useRegisterShortcuts("trace-viewer", TRACE_VIEWER_SHORTCUTS);
+
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [internalSelectedSpanId, setInternalSelectedSpanId] = useState<
     string | null
@@ -298,6 +302,19 @@ export function TraceTimeline({
           e.preventDefault();
           handleDeselect();
           break;
+        case "Enter": {
+          if (selectedSpanId) {
+            e.preventDefault();
+            const detailPane = document.querySelector(
+              '[role="complementary"][aria-label="Span details"]'
+            );
+            if (detailPane) {
+              detailPane.scrollIntoView({ behavior: "smooth", block: "start" });
+              (detailPane as HTMLElement).focus?.();
+            }
+          }
+          break;
+        }
         case "e":
         case "E":
           if (e.ctrlKey && e.shiftKey) {
@@ -310,6 +327,14 @@ export function TraceTimeline({
           if (e.ctrlKey && e.shiftKey) {
             e.preventDefault();
             handleCollapseAll();
+          } else if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            const selected = flattenedSpans.find(
+              (item) => item.span.spanId === selectedSpanId
+            );
+            if (selected) {
+              navigator.clipboard.writeText(selected.span.name).catch(() => {});
+            }
           }
           break;
       }
@@ -323,6 +348,8 @@ export function TraceTimeline({
     handleDeselect,
     handleExpandAll,
     handleCollapseAll,
+    selectedSpanId,
+    flattenedSpans,
   ]);
 
   if (isLoading) return <LoadingSkeleton />;
