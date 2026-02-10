@@ -1,8 +1,12 @@
 /// <reference types="vitest/globals" />
+import { gzipSync } from "node:zlib";
+import { toBinary, create } from "@bufbuild/protobuf";
 import fastify, { type FastifyInstance } from "fastify";
 import { collectorRoutes } from "./index.js";
 import { CollectorError } from "./routes/errors.js";
 import { grpcStatusCode } from "./routes/otlp-schemas.js";
+import { ExportTraceServiceRequestSchema } from "./gen/opentelemetry/proto/collector/trace/v1/trace_service_pb.js";
+import { Span_SpanKind } from "./gen/opentelemetry/proto/trace/v1/trace_pb.js";
 import type { datasource } from "@kopai/core";
 
 describe("collectorRoutes", () => {
@@ -559,6 +563,226 @@ describe("collectorRoutes", () => {
       expect(response.json()).toEqual({
         error: "Internal Server Error",
       });
+    });
+
+    it("decompresses gzip-encoded request bodies", async () => {
+      const writeTracesSpy = vi.fn().mockResolvedValue({
+        rejectedSpans: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: writeTracesSpy,
+          writeLogs: vi.fn(),
+        },
+      });
+
+      const tracesPayload: datasource.TracesData = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                { key: "service.name", value: { stringValue: "test-service" } },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: { name: "test-instrumentation" },
+                spans: [
+                  {
+                    traceId: "abc123",
+                    spanId: "def456",
+                    name: "test-span",
+                    kind: 2,
+                    startTimeUnixNano: "1704067200000000000",
+                    endTimeUnixNano: "1704067260000000000",
+                    status: { code: 1 },
+                    attributes: [],
+                    events: [],
+                    links: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const jsonBody = JSON.stringify(tracesPayload);
+      const gzippedBody = gzipSync(Buffer.from(jsonBody));
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        headers: {
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+        },
+        body: gzippedBody,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(writeTracesSpy).toHaveBeenCalledWith(tracesPayload);
+    });
+
+    it("decompresses x-gzip-encoded request bodies", async () => {
+      const writeTracesSpy = vi.fn().mockResolvedValue({
+        rejectedSpans: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: writeTracesSpy,
+          writeLogs: vi.fn(),
+        },
+      });
+
+      const tracesPayload: datasource.TracesData = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                { key: "service.name", value: { stringValue: "test-service" } },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: { name: "test-instrumentation" },
+                spans: [
+                  {
+                    traceId: "abc123",
+                    spanId: "def456",
+                    name: "test-span",
+                    kind: 2,
+                    startTimeUnixNano: "1704067200000000000",
+                    endTimeUnixNano: "1704067260000000000",
+                    status: { code: 1 },
+                    attributes: [],
+                    events: [],
+                    links: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const gzippedBody = gzipSync(Buffer.from(JSON.stringify(tracesPayload)));
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        headers: {
+          "content-type": "application/json",
+          "content-encoding": "x-gzip",
+        },
+        body: gzippedBody,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(writeTracesSpy).toHaveBeenCalledWith(tracesPayload);
+    });
+
+    it("returns an error for corrupted gzip body", async () => {
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: vi.fn(),
+          writeLogs: vi.fn(),
+        },
+      });
+
+      const corruptedGzip = Buffer.from([
+        0x1f, 0x8b, 0x08, 0x00, 0xff, 0xff, 0xff, 0xff, 0xde, 0xad, 0xbe, 0xef,
+      ]);
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        headers: {
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+        },
+        body: corruptedGzip,
+      });
+
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    });
+
+    it("decompresses gzip-encoded protobuf request bodies", async () => {
+      const writeTracesSpy = vi.fn().mockResolvedValue({
+        rejectedSpans: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn(),
+          writeTraces: writeTracesSpy,
+          writeLogs: vi.fn(),
+        },
+      });
+
+      const traceId = new Uint8Array(16);
+      traceId.set([0xab, 0xcd, 0xef, 0x12]);
+      const spanId = new Uint8Array(8);
+      spanId.set([0xde, 0xf4, 0x56]);
+
+      const protobufPayload = toBinary(
+        ExportTraceServiceRequestSchema,
+        create(ExportTraceServiceRequestSchema, {
+          resourceSpans: [
+            {
+              resource: {
+                attributes: [
+                  {
+                    key: "service.name",
+                    value: {
+                      value: { case: "stringValue", value: "test-svc" },
+                    },
+                  },
+                ],
+              },
+              scopeSpans: [
+                {
+                  scope: { name: "test-instrumentation" },
+                  spans: [
+                    {
+                      traceId,
+                      spanId,
+                      name: "test-span",
+                      kind: Span_SpanKind.SERVER,
+                      startTimeUnixNano: 1704067200000000000n,
+                      endTimeUnixNano: 1704067260000000000n,
+                      status: { code: 1 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+      );
+
+      const gzippedBody = gzipSync(Buffer.from(protobufPayload));
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        headers: {
+          "content-type": "application/x-protobuf",
+          "content-encoding": "gzip",
+        },
+        body: gzippedBody,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(writeTracesSpy).toHaveBeenCalledOnce();
     });
   });
 
