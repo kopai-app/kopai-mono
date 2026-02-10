@@ -314,12 +314,13 @@ function LogsTab() {
   }, []);
 
   const handleTraceLinkClick = useCallback(
-    (traceId: string) => {
+    (traceId: string, spanId: string) => {
       const log = filteredLogs.find((l) => l.TraceId === traceId);
       pushURLState({
         tab: "services",
         service: log?.ServiceName ?? undefined,
         trace: traceId,
+        span: spanId,
       });
     },
     [filteredLogs]
