@@ -907,24 +907,7 @@ export default function ObservabilityPage() {
         onNavigateLogs={() => pushURLState({ tab: "logs" })}
         onNavigateMetrics={() => pushURLState({ tab: "metrics" })}
       >
-        <div className="min-h-screen bg-background text-foreground p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold">Observability</h1>
-            <button
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-              onClick={() =>
-                document.dispatchEvent(
-                  new KeyboardEvent("keydown", { key: "?", shiftKey: true })
-                )
-              }
-            >
-              Press{" "}
-              <kbd className="px-1 py-0.5 text-xs border border-zinc-700 rounded bg-zinc-800">
-                ?
-              </kbd>{" "}
-              for shortcuts
-            </button>
-          </div>
+        <div>
           <TabBar
             tabs={TABS}
             active={activeTab}
