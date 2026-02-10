@@ -1,3 +1,5 @@
+import { getServiceColor } from "../utils/colors.js";
+
 export interface ServiceEntry {
   name: string;
 }
@@ -44,7 +46,13 @@ export function ServiceList({
           onClick={() => onSelect(svc.name)}
           className="w-full text-left px-4 py-3 rounded-lg border border-border hover:border-foreground/30 hover:bg-muted/50 transition-colors group"
         >
-          <span className="font-medium text-foreground">{svc.name}</span>
+          <span className="flex items-center gap-2 font-medium text-foreground">
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: getServiceColor(svc.name) }}
+            />
+            {svc.name}
+          </span>
         </button>
       ))}
     </div>

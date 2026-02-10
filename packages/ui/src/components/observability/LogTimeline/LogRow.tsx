@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
 import type { LogEntry } from "../types.js";
+import { getServiceColor } from "../utils/colors.js";
 
 export interface LogRowProps {
   log: LogEntry;
@@ -142,7 +143,10 @@ export const LogRow = memo(function LogRow({
       >
         {log.severityText}
       </div>
-      <div className="flex-shrink-0 w-32 text-xs text-muted-foreground truncate">
+      <div
+        className="flex-shrink-0 w-32 text-xs truncate"
+        style={{ color: getServiceColor(log.serviceName) }}
+      >
         {log.serviceName}
       </div>
       <div className="flex-1 min-w-0 flex items-center gap-2">
