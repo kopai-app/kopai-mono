@@ -14,7 +14,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           className="text-xl font-normal"
           style={{ fontFamily: "ui-monospace, monospace" }}
         >
-          <span>|--k&gt;</span> <span>kopai</span>
+          <span>k&gt;</span>
         </h1>
         <button
           className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
