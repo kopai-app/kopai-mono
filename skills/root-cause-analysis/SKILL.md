@@ -50,6 +50,7 @@ Read `rules/<rule-name>.md` for details.
 3. Start with errors, then trace backwards
 4. Check span Duration to find bottlenecks
 5. Correlate TraceId across traces, logs, metrics
+6. Use `--severity-min 17` instead of `--severity-text ERROR` to catch all error-level logs regardless of text casing. Fall back to `--body "error"` for errors logged at INFO or with no severity.
 
 ## References
 
