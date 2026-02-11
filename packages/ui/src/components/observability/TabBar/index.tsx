@@ -1,12 +1,26 @@
 export interface Tab {
   key: string;
   label: string;
+  shortcutKey?: string;
 }
 
 export interface TabBarProps {
   tabs: Tab[];
   active: string;
   onChange: (key: string) => void;
+}
+
+function renderLabel(label: string, shortcutKey?: string) {
+  if (!shortcutKey) return label;
+  const idx = label.toLowerCase().indexOf(shortcutKey.toLowerCase());
+  if (idx === -1) return label;
+  return (
+    <>
+      {label.slice(0, idx)}
+      <span className="underline underline-offset-4">{label[idx]}</span>
+      {label.slice(idx + 1)}
+    </>
+  );
 }
 
 export function TabBar({ tabs, active, onChange }: TabBarProps) {
@@ -24,7 +38,7 @@ export function TabBar({ tabs, active, onChange }: TabBarProps) {
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          {t.label}
+          {renderLabel(t.label, t.shortcutKey)}
         </button>
       ))}
     </div>

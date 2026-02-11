@@ -415,7 +415,9 @@ export function LogFilter({
         data-testid="log-filter-toggle"
       >
         <span className="flex items-center gap-2">
-          Filters
+          <span>
+            <span className="underline underline-offset-4">F</span>ilters
+          </span>
           {!open && summary && (
             <span
               className="text-xs text-muted-foreground truncate max-w-md"
@@ -471,7 +473,7 @@ export function LogFilter({
               <span className={LABEL_CLS}>Body contains</span>
               <input
                 type="text"
-                placeholder="Search log body..."
+                placeholder="Search log body... (/)"
                 value={bodyContains}
                 onChange={(e) => setBodyContains(e.target.value)}
                 className={INPUT_CLS}

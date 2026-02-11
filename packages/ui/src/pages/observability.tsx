@@ -52,10 +52,10 @@ type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 
 type Tab = "logs" | "services" | "metrics";
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "services", label: "Services" },
-  { key: "logs", label: "Logs" },
-  { key: "metrics", label: "Metrics" },
+const TABS: { key: Tab; label: string; shortcutKey: string }[] = [
+  { key: "services", label: "Services", shortcutKey: "S" },
+  { key: "logs", label: "Logs", shortcutKey: "L" },
+  { key: "metrics", label: "Metrics", shortcutKey: "M" },
 ];
 
 // ---------------------------------------------------------------------------

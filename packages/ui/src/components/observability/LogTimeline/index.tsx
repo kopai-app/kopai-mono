@@ -509,7 +509,7 @@ export function LogTimeline({
                       clipRule="evenodd"
                     />
                   </svg>
-                  Scroll to bottom
+                  (<span className="underline underline-offset-4">G</span>)
                 </span>
               </button>
             )}
