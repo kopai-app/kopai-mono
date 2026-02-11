@@ -68,7 +68,7 @@ export const SpanRow = memo(function SpanRow({
       aria-level={level + 1}
     >
       {/* Left side: Service name + span name with indentation */}
-      <div className="flex items-center min-w-0 flex-shrink-0 w-96 px-2">
+      <div className="flex items-center min-w-0 flex-shrink-0 w-96 px-2 relative z-10">
         {Array.from({ length: level }).map((_, i) => (
           <div
             key={i}
