@@ -1,5 +1,17 @@
 # @kopai/app
 
+## 0.6.0
+
+### Minor Changes
+
+- acd7540: Add ui package
+
+### Patch Changes
+
+- Updated dependencies [acd7540]
+  - @kopai/sqlite-datasource@0.6.0
+  - @kopai/ui@0.1.0
+
 ## 0.5.0
 
 ### Minor Changes

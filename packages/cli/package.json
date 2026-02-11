@@ -1,6 +1,6 @@
 {
   "name": "@kopai/cli",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "CLI for querying OpenTelemetry data from Kopai - traces, logs, and metrics",
   "keywords": [
     "opentelemetry",

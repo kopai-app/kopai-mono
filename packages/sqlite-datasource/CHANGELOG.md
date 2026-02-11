@@ -1,5 +1,11 @@
 # @kopai/sqlite-datasource
 
+## 0.6.0
+
+### Minor Changes
+
+- acd7540: Add ui package
+
 ## 0.5.0
 
 ### Minor Changes
