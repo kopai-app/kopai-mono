@@ -1,26 +1,12 @@
 import { useMemo } from "react";
 import type { LogEntry } from "../../types.js";
+import {
+  formatAttributeValue,
+  isComplexValue,
+} from "../../utils/attributes.js";
 
 export interface AttributesTabProps {
   log: LogEntry;
-}
-
-function formatAttributeValue(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "boolean" || typeof value === "number")
-    return String(value);
-  if (Array.isArray(value) || typeof value === "object")
-    return JSON.stringify(value, null, 2);
-  return String(value);
-}
-
-function isComplexValue(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (Array.isArray(value) || Object.keys(value).length > 0)
-  );
 }
 
 export function AttributesTab({ log }: AttributesTabProps) {

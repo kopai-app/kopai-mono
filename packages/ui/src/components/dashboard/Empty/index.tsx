@@ -3,7 +3,10 @@ import type { CatalogueComponentProps } from "../../../lib/component-catalog.js"
 
 export function Empty({
   element,
-}: CatalogueComponentProps<typeof dashboardCatalog.components.Empty>) {
+  onAction,
+}: CatalogueComponentProps<typeof dashboardCatalog.components.Empty> & {
+  onAction?: (action: string) => void;
+}) {
   const { title, description, action, actionLabel } = element.props;
 
   return (
@@ -24,6 +27,7 @@ export function Empty({
       )}
       {action && actionLabel && (
         <button
+          onClick={() => onAction?.(action)}
           style={{
             padding: "8px 16px",
             borderRadius: "var(--radius)",

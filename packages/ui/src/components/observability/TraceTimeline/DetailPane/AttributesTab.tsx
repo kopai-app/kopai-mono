@@ -1,5 +1,9 @@
 import { useMemo } from "react";
 import type { SpanNode } from "../../types.js";
+import {
+  formatAttributeValue,
+  isComplexValue,
+} from "../../utils/attributes.js";
 
 export interface AttributesTabProps {
   span: SpanNode;
@@ -17,24 +21,6 @@ const HTTP_SEMANTIC_CONVENTIONS = new Set([
   "http.request_content_length",
   "http.response_content_length",
 ]);
-
-function formatAttributeValue(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "boolean" || typeof value === "number")
-    return String(value);
-  if (Array.isArray(value) || typeof value === "object")
-    return JSON.stringify(value, null, 2);
-  return String(value);
-}
-
-function isComplexValue(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (Array.isArray(value) || Object.keys(value).length > 0)
-  );
-}
 
 export function AttributesTab({ span }: AttributesTabProps) {
   const { httpAttributes, otherAttributes, resourceAttributes } =

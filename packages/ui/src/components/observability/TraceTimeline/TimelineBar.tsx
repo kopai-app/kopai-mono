@@ -25,14 +25,16 @@ export function TimelineBar({
   return (
     <div className="relative h-full">
       <Tooltip content={tooltipText}>
-        <div
-          className="absolute top-1/2 -translate-y-1/2 h-2 rounded-sm cursor-pointer hover:opacity-80 transition-opacity"
-          style={{
-            left: `${leftPercent}%`,
-            width: `max(2px, ${widthPercent}%)`,
-            backgroundColor: barColor,
-          }}
-        />
+        <div className="absolute inset-0">
+          <div
+            className="absolute top-1/2 -translate-y-1/2 h-2 rounded-sm cursor-pointer hover:opacity-80 transition-opacity"
+            style={{
+              left: `${leftPercent}%`,
+              width: `max(2px, ${widthPercent}%)`,
+              backgroundColor: barColor,
+            }}
+          />
+        </div>
       </Tooltip>
     </div>
   );

@@ -17,8 +17,11 @@ export function downsampleLTTB(
   data: LTTBPoint[],
   targetPoints: number
 ): LTTBPoint[] {
-  if (targetPoints >= data.length || targetPoints <= 2) {
-    return data.length <= 2 ? data : data.slice();
+  if (data.length <= 2 || targetPoints >= data.length) {
+    return data.slice();
+  }
+  if (targetPoints <= 2) {
+    return [data[0]!, data[data.length - 1]!];
   }
 
   const sampled: LTTBPoint[] = [];

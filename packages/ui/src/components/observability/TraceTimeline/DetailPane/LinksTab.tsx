@@ -1,19 +1,10 @@
 import { useState } from "react";
 import type { SpanNode } from "../../types.js";
+import { formatAttributeValue } from "../../utils/attributes.js";
 
 export interface LinksTabProps {
   span: SpanNode;
   onLinkClick?: (traceId: string, spanId: string) => void;
-}
-
-function formatAttributeValue(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "boolean" || typeof value === "number")
-    return String(value);
-  if (Array.isArray(value) || typeof value === "object")
-    return JSON.stringify(value, null, 2);
-  return String(value);
 }
 
 function truncateId(id: string): string {

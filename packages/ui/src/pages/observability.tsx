@@ -453,15 +453,24 @@ function TraceSearchView({
     const traceIds = [...new Set(data.data.map((r) => r.TraceId))];
     const ac = new AbortController();
 
-    Promise.all(
+    Promise.allSettled(
       traceIds.map((tid) =>
         client
           .getTrace(tid, { signal: ac.signal })
           .then((spans) => [tid, spans] as const)
       )
     )
-      .then((entries) => {
+      .then((results) => {
         if (!ac.signal.aborted) {
+          const entries = results
+            .filter(
+              (
+                r
+              ): r is PromiseFulfilledResult<
+                readonly [string, OtelTracesRow[]]
+              > => r.status === "fulfilled"
+            )
+            .map((r) => r.value);
           setFullTraces(new Map(entries));
         }
       })
@@ -730,7 +739,10 @@ function MetricsTab() {
 // Page
 // ---------------------------------------------------------------------------
 
-const client = new KopaiClient({ baseUrl: "http://localhost:8000/signals" });
+const client = new KopaiClient({
+  baseUrl:
+    import.meta.env.VITE_KOPAI_API_URL ?? "http://localhost:8000/signals",
+});
 
 export default function ObservabilityPage() {
   const {

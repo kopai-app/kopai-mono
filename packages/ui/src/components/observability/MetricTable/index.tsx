@@ -46,7 +46,6 @@ function buildTableRows(rows: OtelMetricsRow[], maxRows: number): TableRow[] {
   const result: TableRow[] = [];
 
   for (const row of rows) {
-    if (result.length >= maxRows) break;
     if (
       row.MetricType === "Histogram" ||
       row.MetricType === "ExponentialHistogram" ||
@@ -54,7 +53,7 @@ function buildTableRows(rows: OtelMetricsRow[], maxRows: number): TableRow[] {
     )
       continue;
 
-    const timestamp = parseInt(row.TimeUnix, 10) / 1e6;
+    const timestamp = Number(BigInt(row.TimeUnix) / 1_000_000n);
     const value = "Value" in row ? row.Value : 0;
     const labels: Record<string, string> = {};
     if (row.Attributes) {
@@ -73,7 +72,7 @@ function buildTableRows(rows: OtelMetricsRow[], maxRows: number): TableRow[] {
     });
   }
 
-  return result.sort((a, b) => b.timestamp - a.timestamp);
+  return result.sort((a, b) => b.timestamp - a.timestamp).slice(0, maxRows);
 }
 
 export function MetricTable({

@@ -468,9 +468,8 @@ export function TraceTimeline({
           <DetailPane
             span={selectedSpan}
             onClose={handleDeselect}
-            onLinkClick={(traceId, spanId) =>
-              console.log("Navigate to trace:", traceId, "span:", spanId)
-            }
+            // TODO: wire up cross-trace navigation
+            onLinkClick={undefined}
           />
         </div>
       )}

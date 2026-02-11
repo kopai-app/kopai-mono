@@ -27,7 +27,6 @@ function formatNumber(value: number): string {
   if (Math.abs(value) >= SCALE_M) return `${(value / SCALE_M).toFixed(2)}M`;
   if (Math.abs(value) >= SCALE_K) return `${(value / SCALE_K).toFixed(2)}K`;
   if (Number.isInteger(value)) return value.toLocaleString();
-  if (value > 0 && value < 1) return `${(value * 100).toFixed(1)}%`;
   return value.toFixed(2);
 }
 

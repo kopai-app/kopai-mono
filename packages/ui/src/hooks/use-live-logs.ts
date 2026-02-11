@@ -58,6 +58,11 @@ export function useLiveLogs({
     queryFn: async ({ signal }) => {
       const fetchParams: LogsDataFilter = { ...params };
 
+      // If params changed since queryFn was scheduled, treat as first fetch
+      if (prevParamsKey.current !== JSON.stringify(params)) {
+        hasFetchedOnce.current = false;
+      }
+
       // After first fetch, only get newer logs
       if (hasFetchedOnce.current) {
         const newest = bufferRef.current.getNewestTimestamp();

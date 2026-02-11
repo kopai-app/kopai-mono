@@ -11,10 +11,12 @@ export interface TabBarProps {
 
 export function TabBar({ tabs, active, onChange }: TabBarProps) {
   return (
-    <div className="flex border-b border-border mb-6">
+    <div role="tablist" className="flex border-b border-border mb-6">
       {tabs.map((t) => (
         <button
           key={t.key}
+          role="tab"
+          aria-selected={active === t.key}
           onClick={() => onChange(t.key)}
           className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
             active === t.key
