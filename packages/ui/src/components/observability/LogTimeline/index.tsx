@@ -133,10 +133,11 @@ export function LogTimeline({
     return boundedLogs.find((log) => log.logId === selectedLogId) ?? null;
   }, [boundedLogs, selectedLogId]);
 
-  const referenceTimeMs = useMemo(
-    () => (boundedLogs.length > 0 ? boundedLogs[0]!.timeUnixMs : 0),
-    [boundedLogs]
-  );
+  const referenceTimeMs = useMemo(() => {
+    if (selectedLog) return selectedLog.timeUnixMs;
+    const first = boundedLogs[0];
+    return first ? first.timeUnixMs : 0;
+  }, [selectedLog, boundedLogs]);
 
   useEffect(() => {
     if (externalSelectedLogId) setIsDetailPaneOpen(true);

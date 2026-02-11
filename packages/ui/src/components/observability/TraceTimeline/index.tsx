@@ -283,10 +283,14 @@ export function TraceTimeline({
 
       switch (e.key) {
         case "ArrowUp":
+        case "k":
+        case "K":
           e.preventDefault();
           handleNavigateUp();
           break;
         case "ArrowDown":
+        case "j":
+        case "J":
           e.preventDefault();
           handleNavigateDown();
           break;
@@ -392,7 +396,7 @@ export function TraceTimeline({
         <TraceHeader trace={parsedTrace} />
         <div
           ref={scrollRef}
-          className="flex-1 overflow-auto focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 overflow-auto outline-none"
           role="tree"
           aria-label="Trace timeline"
           tabIndex={0}

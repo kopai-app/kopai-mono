@@ -50,7 +50,7 @@ export function LogDetailPane({
   return (
     <div
       ref={detailPaneRef}
-      className="w-[500px] flex flex-col h-full bg-background border-l border-border"
+      className="w-[500px] flex flex-col h-full bg-background border-l border-border outline-none"
       onKeyDown={handleKeyDown}
       role="complementary"
       aria-label="Log details"

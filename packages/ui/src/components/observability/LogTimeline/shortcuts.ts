@@ -3,10 +3,8 @@ import type { ShortcutGroup } from "../../KeyboardShortcuts/types.js";
 export const LOG_VIEWER_SHORTCUTS: ShortcutGroup = {
   name: "Log Viewer",
   shortcuts: [
-    { keys: ["↑"], description: "Previous log" },
-    { keys: ["↓"], description: "Next log" },
-    { keys: ["J"], description: "Next log" },
-    { keys: ["K"], description: "Previous log" },
+    { keys: ["↑/K"], description: "Previous log" },
+    { keys: ["↓/J"], description: "Next log" },
     { keys: ["G"], description: "Scroll to bottom" },
     { keys: ["Home"], description: "First log" },
     { keys: ["/"], description: "Focus search" },

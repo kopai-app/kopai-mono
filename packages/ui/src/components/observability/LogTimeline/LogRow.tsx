@@ -24,10 +24,10 @@ function formatRelativeTime(timeMs: number, referenceMs: number): string {
   const diffMs = timeMs - referenceMs;
   const sign = diffMs >= 0 ? "+" : "-";
   const abs = Math.abs(diffMs);
-  if (abs < 1000) return `${sign}${abs}ms`;
-  if (abs < 60_000) return `${sign}${(abs / 1000).toFixed(1)}s`;
+  if (abs < 1000) return `${sign}${abs.toFixed(4)}ms`;
+  if (abs < 60_000) return `${sign}${(abs / 1000).toFixed(4)}s`;
   const mins = Math.floor(abs / 60_000);
-  const secs = ((abs % 60_000) / 1000).toFixed(0);
+  const secs = ((abs % 60_000) / 1000).toFixed(4);
   return `${sign}${mins}m${secs}s`;
 }
 
