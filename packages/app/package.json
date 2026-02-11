@@ -1,6 +1,6 @@
 {
   "name": "@kopai/app",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Local OpenTelemetry backend for testing instrumentation - no Docker, no config, just npx",
   "keywords": [
     "opentelemetry",

@@ -1,5 +1,11 @@
 # @kopai/app
 
+## 0.8.0
+
+### Minor Changes
+
+- 0b8e6e8: Fix dist dir
+
 ## 0.7.0
 
 ### Minor Changes
