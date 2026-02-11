@@ -1,5 +1,7 @@
 # @kopai/ui
 
+![npm](https://img.shields.io/npm/v/@kopai/ui?label=latest)
+
 React component library for rendering LLM-generated UI trees. Define typed component catalogs, create renderers, and generate prompt instructions for AI models.
 
 ## Exports

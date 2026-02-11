@@ -1,5 +1,7 @@
 # @kopai/cli
 
+![npm](https://img.shields.io/npm/v/@kopai/cli?label=latest)
+
 CLI for querying OpenTelemetry data from Kopai - traces, logs, and metrics.
 
 Works with [@kopai/app](https://github.com/kopai-app/kopai-mono/tree/main/packages/app) or any compatible backend.
