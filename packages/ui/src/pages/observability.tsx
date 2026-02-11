@@ -739,10 +739,7 @@ function MetricsTab() {
 // Page
 // ---------------------------------------------------------------------------
 
-const client = new KopaiClient({
-  baseUrl:
-    import.meta.env.VITE_KOPAI_API_URL ?? "http://localhost:8000/signals",
-});
+const client = new KopaiClient({ baseUrl: "/signals" });
 
 export default function ObservabilityPage() {
   const {
