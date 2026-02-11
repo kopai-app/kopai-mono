@@ -1,6 +1,6 @@
 # @kopai/app
 
-![npm](https://img.shields.io/npm/v/@kopai/app?label=latest)
+[![npm](https://img.shields.io/npm/v/@kopai/app?label=latest)](https://www.npmjs.com/package/@kopai/app)
 
 Local OpenTelemetry backend with an http/json Otel collector, Otel data storage and API to query the data.
 

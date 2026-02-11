@@ -1,6 +1,6 @@
 # @kopai/cli
 
-![npm](https://img.shields.io/npm/v/@kopai/cli?label=latest)
+[![npm](https://img.shields.io/npm/v/@kopai/cli?label=latest)](https://www.npmjs.com/package/@kopai/cli)
 
 CLI for querying OpenTelemetry data from Kopai - traces, logs, and metrics.
 
