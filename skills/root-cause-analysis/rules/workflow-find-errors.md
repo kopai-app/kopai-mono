@@ -45,6 +45,18 @@ npx @kopai/cli logs search --body "exception" --limit 20 --json
 npx @kopai/cli logs search --body "failed" --limit 20 --json
 ```
 
+### Handling limit saturation
+
+If a search returns exactly `--limit` results, there are likely more errors hidden beyond the limit.
+Do NOT stop — continue exploring:
+
+1. **Group by service** to see if one noisy service dominates results
+2. **Exclude noisy services** by re-running per-service queries for other services
+3. **Increase the limit** or paginate to ensure you're not missing app-level errors
+4. **Always run the hidden error searches (1c)** even if 1a/1b return results — real app errors are often logged at INFO severity or only appear in the body text
+
+A single noisy service (e.g. otel collector infrastructure errors) can fill the entire result set and hide critical application errors.
+
 ### Filter by Service
 
 ```bash
