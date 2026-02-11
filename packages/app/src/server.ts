@@ -85,6 +85,7 @@ apiServer.after(() => {
   apiServer.register(async (fastify) => {
     await fastify.register(FastifyVite, {
       root: resolve(__dirname, ".."),
+      distDir: "dist",
       dev: false,
       spa: true,
     });
