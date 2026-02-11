@@ -1,5 +1,7 @@
 # @kopai/collector
 
+[![npm](https://img.shields.io/npm/v/@kopai/collector?label=latest)](https://www.npmjs.com/package/@kopai/collector)
+
 OTLP collector as a Fastify plugin. Receives OpenTelemetry traces, metrics, and logs.
 
 ## Supported Protocols
