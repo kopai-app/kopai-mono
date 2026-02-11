@@ -1,5 +1,11 @@
 # @kopai/app
 
+## 0.6.1
+
+### Patch Changes
+
+- d2d8664: Fix vite mount path
+
 ## 0.6.0
 
 ### Minor Changes
