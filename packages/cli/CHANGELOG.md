@@ -1,5 +1,11 @@
 # @kopai/cli
 
+## 0.4.0
+
+### Minor Changes
+
+- acd7540: Add ui package
+
 ## 0.3.3
 
 ### Patch Changes
