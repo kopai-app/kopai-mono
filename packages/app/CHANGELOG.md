@@ -1,5 +1,11 @@
 # @kopai/app
 
+## 0.7.0
+
+### Minor Changes
+
+- 8faf611: Fix vite path
+
 ## 0.6.1
 
 ### Patch Changes
