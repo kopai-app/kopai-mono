@@ -17,6 +17,8 @@ import {
   initializeDatabase,
   createOptimizedDatasource,
 } from "@kopai/sqlite-datasource";
+import { resolve } from "node:path";
+import FastifyVite from "@fastify/vite";
 
 const apiServer = fastify({
   logger: true,
@@ -26,6 +28,7 @@ const apiServer = fastify({
 apiServer.setValidatorCompiler(validatorCompiler);
 apiServer.setSerializerCompiler(serializerCompiler);
 
+const uiRoutes = ["/", "/*"];
 apiServer.register(fastifySwagger, {
   openapi: {
     info: {
@@ -35,7 +38,10 @@ apiServer.register(fastifySwagger, {
     },
     servers: [],
   },
-  transform: jsonSchemaTransform,
+  transform: ({ schema, url, ...rest }) => {
+    if (uiRoutes.includes(url)) return { schema: { hide: true }, url };
+    return jsonSchemaTransform({ schema, url, ...rest });
+  },
   transformObject: jsonSchemaTransformObject,
 });
 
@@ -44,7 +50,7 @@ apiServer.register(fastifySwaggerUI, {
   logo: {
     type: "image/svg+xml",
     content: Buffer.from(
-      "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgNDAiIGZpbGw9Im5vbmUiPjx0ZXh0IHg9IjAiIHk9IjI4IiBmb250LWZhbWlseT0iU3BhY2UgR3JvdGVzaywgc3lzdGVtLXVpLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjI0IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjZmFmYWZhIj5Lb3BhaTwvdGV4dD48L3N2Zz4K",
+      "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgNDAiIGZpbGw9Im5vbmUiPjx0ZXh0IHg9IjAiIHk9IjI4IiBmb250LWZhbWlseT0idWktbW9ub3NwYWNlLCBtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMjAiIGZvbnQtd2VpZ2h0PSI0MDAiIGZpbGw9IiNmYWZhZmEiPnwtLWsmZ3Q7IGtvcGFpPC90ZXh0Pjwvc3ZnPg==",
       "base64"
     ),
     href: "/documentation",
@@ -58,7 +64,7 @@ apiServer.register(fastifySwaggerUI, {
         sizes: "32x32",
         type: "image/svg+xml",
         content: Buffer.from(
-          "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNCIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjQiIHk9IjIzIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE4IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjZmFmYWZhIj5LPC90ZXh0Pjwvc3ZnPgo=",
+          "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNCIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjMiIHk9IjIyIiBmb250LWZhbWlseT0idWktbW9ub3NwYWNlLCBtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMTYiIGZvbnQtd2VpZ2h0PSI0MDAiIGZpbGw9IiNmYWZhZmEiPmsmZ3Q7PC90ZXh0Pjwvc3ZnPg==",
           "base64"
         ),
       },
@@ -72,6 +78,17 @@ const telemetryDatasource = createOptimizedDatasource(sqliteDatabase);
 apiServer.after(() => {
   apiServer.register(apiRoutes, {
     readTelemetryDatasource: telemetryDatasource,
+  });
+  apiServer.register(async (fastify) => {
+    await fastify.register(FastifyVite, {
+      root: resolve(import.meta.dirname, ".."),
+      distDir: resolve(import.meta.dirname, "..", "dist", "client"),
+      dev: false,
+      spa: true,
+    });
+    fastify.get("/", (_req, reply) => reply.html());
+    fastify.get("/*", (_req, reply) => reply.html());
+    await fastify.vite.ready();
   });
 });
 
@@ -89,7 +106,7 @@ collectorServer.after(() => {
 });
 
 async function run() {
-  console.log(`@kopai/app v${version}`);
+  console.log(`|--k> kopai\nv${version}`);
 
   await apiServer.ready();
 

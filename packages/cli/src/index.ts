@@ -12,6 +12,7 @@ program
   .name("@kopai/cli")
   .description("Kopai CLI - Query OpenTelemetry data")
   .version(pkg.version)
+  .addHelpText("beforeAll", "|--k> kopai")
   .addCommand(createTracesCommand())
   .addCommand(createLogsCommand())
   .addCommand(createMetricsCommand());

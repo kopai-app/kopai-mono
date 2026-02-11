@@ -1,5 +1,5 @@
-| title                   | impact | tags                                       |
-| ----------------------- | ------ | ------------------------------------------ |
+| title                   | impact | tags                                            |
+| ----------------------- | ------ | ----------------------------------------------- |
 | Node.js Instrumentation | HIGH   | lang, nodejs, javascript, traces, logs, metrics |
 
 ## Node.js Instrumentation
@@ -67,6 +67,7 @@ Or in package.json:
 ### What Gets Instrumented
 
 The auto-instrumentation automatically captures:
+
 - **Traces**: HTTP requests, Express routes, database queries
 - **Logs**: Console output (with additional config)
 - **Metrics**: HTTP request metrics (with additional config)

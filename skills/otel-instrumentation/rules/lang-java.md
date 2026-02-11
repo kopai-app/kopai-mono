@@ -1,5 +1,5 @@
-| title                | impact | tags                              |
-| -------------------- | ------ | --------------------------------- |
+| title                | impact | tags                                   |
+| -------------------- | ------ | -------------------------------------- |
 | Java Instrumentation | HIGH   | lang, java, jvm, traces, logs, metrics |
 
 ## Java Instrumentation
@@ -49,6 +49,7 @@ java -javaagent:opentelemetry-javaagent.jar -jar myapp.jar
 ### What Gets Instrumented
 
 The Java agent automatically instruments:
+
 - **Traces**: HTTP requests, database calls, messaging systems
 - **Logs**: Bridges `java.util.logging`, Log4j, SLF4J to OTLP
 - **Metrics**: JVM metrics, HTTP request metrics

@@ -1374,7 +1374,8 @@ function parseStringArrayField(value: unknown): string[] | undefined {
 function parseNumberArrayField(value: unknown): number[] | undefined {
   if (typeof value !== "string") return undefined;
   try {
-    return JSON.parse(value);
+    const parsed: unknown[] = JSON.parse(value);
+    return parsed.map(Number);
   } catch {
     return undefined;
   }

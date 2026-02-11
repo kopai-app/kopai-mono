@@ -14,7 +14,8 @@ const command = positionals[0];
 
 function showHelp() {
   console.log(`
-@kopai/app v${version} - OpenTelemetry collector and API server
+|--k> kopai
+v${version} - OpenTelemetry collector and API server
 
 Usage: npx @kopai/app <command>
 

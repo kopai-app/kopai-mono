@@ -1,5 +1,5 @@
-| title                | impact | tags                              |
-| -------------------- | ------ | --------------------------------- |
+| title                | impact | tags                                        |
+| -------------------- | ------ | ------------------------------------------- |
 | .NET Instrumentation | HIGH   | lang, dotnet, csharp, traces, logs, metrics |
 
 ## .NET Instrumentation
