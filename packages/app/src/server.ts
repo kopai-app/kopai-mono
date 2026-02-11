@@ -17,8 +17,11 @@ import {
   initializeDatabase,
   createOptimizedDatasource,
 } from "@kopai/sqlite-datasource";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import FastifyVite from "@fastify/vite";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const apiServer = fastify({
   logger: true,
@@ -81,8 +84,8 @@ apiServer.after(() => {
   });
   apiServer.register(async (fastify) => {
     await fastify.register(FastifyVite, {
-      root: resolve(import.meta.dirname, ".."),
-      distDir: resolve(import.meta.dirname, "..", "dist", "client"),
+      root: resolve(__dirname, ".."),
+      distDir: resolve(__dirname, "..", "dist", "client"),
       dev: false,
       spa: true,
     });
@@ -106,7 +109,7 @@ collectorServer.after(() => {
 });
 
 async function run() {
-  console.log(`|--k> kopai\nv${version}`);
+  console.log(`|--k> @kopai/app v${version}\n\n`);
 
   await apiServer.ready();
 
