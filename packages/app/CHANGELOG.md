@@ -1,5 +1,16 @@
 # @kopai/app
 
+## 0.9.0
+
+### Minor Changes
+
+- 4dc8ee8: fix local cors issue
+
+### Patch Changes
+
+- Updated dependencies [4dc8ee8]
+  - @kopai/ui@0.2.0
+
 ## 0.8.0
 
 ### Minor Changes

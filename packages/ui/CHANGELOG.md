@@ -1,5 +1,11 @@
 # @kopai/ui
 
+## 0.2.0
+
+### Minor Changes
+
+- 4dc8ee8: fix local cors issue
+
 ## 0.1.0
 
 ### Minor Changes
