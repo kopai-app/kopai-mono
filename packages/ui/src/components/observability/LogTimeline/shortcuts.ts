@@ -13,6 +13,6 @@ export const LOG_VIEWER_SHORTCUTS: ShortcutGroup = {
     { keys: ["C"], description: "Copy log body" },
     { keys: ["W"], description: "Toggle word wrap" },
     { keys: ["T"], description: "Toggle timestamps" },
-    { keys: ["Esc"], description: "Close detail pane" },
+    { keys: ["Esc"], description: "Close detail/filter pane" },
   ],
 };

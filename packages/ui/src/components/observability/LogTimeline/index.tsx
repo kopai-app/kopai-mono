@@ -265,12 +265,15 @@ export function LogTimeline({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
+      const isFormField =
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
-        e.target instanceof HTMLSelectElement
-      )
+        e.target instanceof HTMLSelectElement;
+      if (isFormField && e.key === "Escape") {
+        (e.target as HTMLElement).blur();
         return;
+      }
+      if (isFormField) return;
       switch (e.key) {
         case "ArrowUp":
         case "k":
@@ -288,6 +291,15 @@ export function LogTimeline({
           if (isDetailPaneOpen) {
             e.preventDefault();
             handleCloseDetailPane();
+          } else {
+            const panel = document.querySelector('[data-testid="log-filter"]');
+            const toggle = panel?.querySelector<HTMLButtonElement>(
+              '[data-testid="log-filter-toggle"]'
+            );
+            if (toggle && panel?.querySelector(".border-t")) {
+              e.preventDefault();
+              toggle.click();
+            }
           }
           break;
         case "g":
