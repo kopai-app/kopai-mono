@@ -11,13 +11,16 @@ Start investigation from log entries when you don't have a trace ID.
 ### Workflow
 
 ```bash
-# 1. Search error logs
-npx @kopai/cli logs search --severity-text ERROR --limit 20 --json
+# 1. Search error logs (severity number >= 17 catches ERROR/FATAL regardless of text casing)
+npx @kopai/cli logs search --severity-min 17 --limit 20 --json
 
-# 2. Extract TraceId from log output
+# 2. Fallback: search for errors hidden in body/attributes (logged at INFO or no severity)
+npx @kopai/cli logs search --body "error" --limit 20 --json
+
+# 3. Extract TraceId from log output
 # (look for TraceId field in JSON response)
 
-# 3. Analyze full trace
+# 4. Analyze full trace
 npx @kopai/cli traces get <traceId> --json
 ```
 
@@ -25,7 +28,7 @@ npx @kopai/cli traces get <traceId> --json
 
 ```bash
 # By service
-npx @kopai/cli logs search --service payment-api --severity-text ERROR --json
+npx @kopai/cli logs search --service payment-api --severity-min 17 --json
 
 # By body content
 npx @kopai/cli logs search --body "connection refused" --json
