@@ -12,8 +12,8 @@ export function Card({
   };
 
   const paddings: Record<string, string> = {
-    none: "0",
     sm: "12px",
+    md: "16px",
     lg: "24px",
   };
 

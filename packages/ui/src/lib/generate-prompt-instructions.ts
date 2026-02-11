@@ -44,7 +44,7 @@ function formatPropsFromJsonSchema(jsonSchema: object): string {
     };
     const isRequired = required.has(key);
     const typeStr = formatPropType(prop);
-    const reqStr = isRequired ? " (required)" : " | null";
+    const reqStr = isRequired ? " (required)" : " (optional)";
     const descStr = prop.description ? ` - ${prop.description}` : "";
     lines.push(`- ${key}: ${typeStr}${reqStr}${descStr}`);
   }

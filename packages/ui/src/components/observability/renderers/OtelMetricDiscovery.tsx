@@ -32,19 +32,19 @@ export function OtelMetricDiscovery(props: Props) {
   }, [data]);
 
   if (loading && !sorted.length) {
-    return <p className="text-zinc-400 py-4">Loading metrics…</p>;
+    return <p className="text-muted-foreground py-4">Loading metrics…</p>;
   }
   if (error) {
     return <p className="text-red-400 py-4">Error: {error.message}</p>;
   }
   if (!sorted.length) {
-    return <p className="text-zinc-400 py-4">No metrics discovered.</p>;
+    return <p className="text-muted-foreground py-4">No metrics discovered.</p>;
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm text-left text-zinc-100 border-collapse">
-        <thead className="text-xs uppercase text-zinc-400 border-b border-zinc-800">
+      <table className="w-full text-sm text-left text-foreground border-collapse">
+        <thead className="text-xs uppercase text-muted-foreground border-b border-border">
           <tr>
             <th className="px-3 py-2">Name</th>
             <th className="px-3 py-2">Type</th>
@@ -56,14 +56,16 @@ export function OtelMetricDiscovery(props: Props) {
           {sorted.map((m) => (
             <tr
               key={`${m.name}-${m.type}`}
-              className="border-b border-zinc-800/50 hover:bg-zinc-800/40"
+              className="border-b border-border/50 hover:bg-muted/40"
             >
               <td className="px-3 py-2 font-mono whitespace-nowrap">
                 {m.name}
               </td>
-              <td className="px-3 py-2 text-zinc-400">{m.type}</td>
-              <td className="px-3 py-2 text-zinc-400">{m.unit || "–"}</td>
-              <td className="px-3 py-2 text-zinc-400">
+              <td className="px-3 py-2 text-muted-foreground">{m.type}</td>
+              <td className="px-3 py-2 text-muted-foreground">
+                {m.unit || "–"}
+              </td>
+              <td className="px-3 py-2 text-muted-foreground">
                 {m.description || "–"}
               </td>
             </tr>

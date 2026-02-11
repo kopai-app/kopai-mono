@@ -20,7 +20,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
           onClick={() =>
             document.dispatchEvent(
-              new KeyboardEvent("keydown", { key: "?", shiftKey: true })
+              new KeyboardEvent("keydown", {
+                key: "?",
+                shiftKey: true,
+                bubbles: true,
+              })
             )
           }
         >

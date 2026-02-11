@@ -14,6 +14,7 @@ export { Table } from "./Table/index.js";
 export { Text } from "./Text/index.js";
 
 import { Badge } from "./Badge/index.js";
+import { Button } from "./Button/index.js";
 import { Card } from "./Card/index.js";
 import { Chart } from "./Chart/index.js";
 import { DatePicker } from "./DatePicker/index.js";
@@ -29,6 +30,7 @@ import { Text } from "./Text/index.js";
 
 export const componentRegistry = {
   Badge,
+  Button,
   Card,
   Chart,
   DatePicker,

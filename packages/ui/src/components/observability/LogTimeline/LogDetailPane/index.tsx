@@ -20,7 +20,10 @@ export function LogDetailPane({
   initialTab = "message",
   wordWrap = true,
 }: LogDetailPaneProps) {
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const hasContext = !!log.traceId;
+  const [activeTab, setActiveTab] = useState<TabType>(
+    initialTab === "context" && !hasContext ? "message" : initialTab
+  );
   const [copiedId, setCopiedId] = useState(false);
   const detailPaneRef = useRef<HTMLDivElement>(null);
 

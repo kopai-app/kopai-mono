@@ -127,11 +127,13 @@ function AttributeRow({ attrKey, value, highlighted }: AttributeRowProps) {
   return (
     <div
       className={`grid grid-cols-[minmax(150px,1fr)_2fr] gap-4 p-2 rounded text-sm ${
-        highlighted ? "bg-blue-50 border-l-2 border-blue-500" : "bg-muted"
+        highlighted
+          ? "bg-blue-50 dark:bg-blue-950 border-l-2 border-blue-500"
+          : "bg-muted"
       }`}
     >
       <div
-        className={`font-mono font-medium break-words ${highlighted ? "text-blue-700" : "text-foreground"}`}
+        className={`font-mono font-medium break-words ${highlighted ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}
         title={attrKey}
       >
         {attrKey}

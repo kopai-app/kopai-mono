@@ -25,7 +25,8 @@ export function Table({
       }).format(value);
     }
     if (format === "date" && typeof value === "string") {
-      return new Date(value).toLocaleDateString();
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? String(value) : d.toLocaleDateString();
     }
     if (format === "badge") {
       return (

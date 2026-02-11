@@ -15,7 +15,7 @@ export function Metric({
         {label}
       </span>
       <span style={{ fontSize: 32, fontWeight: 600 }}>{displayValue}</span>
-      {(trend || trendValue) && (
+      {trendValue && (
         <span
           style={{
             fontSize: 14,

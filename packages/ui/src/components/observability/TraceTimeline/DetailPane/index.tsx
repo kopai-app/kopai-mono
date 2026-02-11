@@ -47,6 +47,7 @@ export function DetailPane({
     <div
       className="flex flex-col h-full bg-background border-l border-border"
       onKeyDown={handleKeyDown}
+      tabIndex={-1}
       role="complementary"
       aria-label="Span details"
     >

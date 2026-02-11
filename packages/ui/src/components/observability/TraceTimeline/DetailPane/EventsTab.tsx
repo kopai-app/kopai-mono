@@ -9,7 +9,8 @@ export interface EventsTabProps {
 
 function formatRelativeTime(eventTimeMs: number, spanStartMs: number): string {
   const relativeMs = eventTimeMs - spanStartMs;
-  return `+${formatDuration(relativeMs)}`;
+  const prefix = relativeMs < 0 ? "-" : "+";
+  return `${prefix}${formatDuration(Math.abs(relativeMs))}`;
 }
 
 export function EventsTab({ span }: EventsTabProps) {

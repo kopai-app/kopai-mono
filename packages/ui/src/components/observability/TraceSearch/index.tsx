@@ -159,7 +159,12 @@ export function TraceSearch({
                     min={1}
                     max={1000}
                     value={limit}
-                    onChange={(e) => setLimit(Number(e.target.value) || 20)}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      setLimit(
+                        Number.isNaN(n) ? 20 : Math.max(1, Math.min(1000, n))
+                      );
+                    }}
                     className="w-full bg-muted/50 border border-border rounded px-2 py-1.5 text-sm text-foreground"
                   />
                 </label>

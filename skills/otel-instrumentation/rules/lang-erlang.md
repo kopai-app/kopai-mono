@@ -9,11 +9,12 @@
 Set up OpenTelemetry for Erlang/Elixir applications with traces, logs, and metrics.
 
 **SDK Status:**
-| Signal | Support | Notes |
-|---------|---------|-------|
-| Traces | SDK | Mature, use opentelemetry_cowboy for auto-instrumentation |
-| Logs | Direct HTTP | No official OTLP log exporter available |
-| Metrics | Direct HTTP | No official OTLP metric exporter available |
+
+| Signal  | Support     | Notes                                                     |
+| ------- | ----------- | --------------------------------------------------------- |
+| Traces  | SDK         | Mature, use opentelemetry_cowboy for auto-instrumentation |
+| Logs    | Direct HTTP | No official OTLP log exporter available                   |
+| Metrics | Direct HTTP | No official OTLP metric exporter available                |
 
 ### Elixir (mix.exs)
 

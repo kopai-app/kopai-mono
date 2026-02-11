@@ -4,16 +4,19 @@ import type { CatalogueComponentProps } from "../../../lib/component-catalog.js"
 export function DatePicker({
   element,
 }: CatalogueComponentProps<typeof dashboardCatalog.components.DatePicker>) {
-  const { label, bindPath, placeholder } = element.props;
+  const { label, bindPath } = element.props;
+  const inputId = `datepicker-${bindPath}`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {label && (
-        <label style={{ fontSize: 14, fontWeight: 500 }}>{label}</label>
+        <label htmlFor={inputId} style={{ fontSize: 14, fontWeight: 500 }}>
+          {label}
+        </label>
       )}
       <input
+        id={inputId}
         type="date"
-        placeholder={placeholder || undefined}
         style={{
           padding: "8px 12px",
           borderRadius: "var(--radius)",

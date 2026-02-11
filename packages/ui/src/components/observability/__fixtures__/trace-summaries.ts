@@ -34,7 +34,7 @@ export const mockTraceSummaries: TraceSummary[] = [
     errorCount: 2,
   },
   {
-    traceId: "2cf9873138ef65ff0660gd433ea2531e",
+    traceId: "2cf9873138ef65ff0660ad433ea2531e",
     rootSpanName: "GET /api/products",
     serviceName: "api-gateway",
     durationMs: 450,
@@ -50,7 +50,7 @@ export const mockTraceSummaries: TraceSummary[] = [
     errorCount: 0,
   },
   {
-    traceId: "3dg0984249fg76gg1771he544fb3642f",
+    traceId: "3da0984249fa76aa1771be544fb3642f",
     rootSpanName: "PUT /api/users/42",
     serviceName: "api-gateway",
     durationMs: 180,
@@ -65,7 +65,7 @@ export const mockTraceSummaries: TraceSummary[] = [
     errorCount: 0,
   },
   {
-    traceId: "4eh1a9535agh87hh2882if655gc4753g",
+    traceId: "4eb1a9535aab87bb2882cf655ac4753a",
     rootSpanName: "DELETE /api/sessions",
     serviceName: "api-gateway",
     durationMs: 45,

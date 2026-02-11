@@ -54,7 +54,7 @@ export function ShortcutsHelpDialog({
               <ul className="space-y-2">
                 {group.shortcuts.map((shortcut) => (
                   <li
-                    key={shortcut.description}
+                    key={shortcut.keys.join("+")}
                     className="flex items-center justify-between text-sm"
                   >
                     <span className="text-zinc-300">

@@ -112,7 +112,13 @@ function buildMetrics(rows: OtelMetricsRow[]): ParsedMetricGroup[] {
       });
 
     const seriesKey = row.Attributes
-      ? JSON.stringify(row.Attributes)
+      ? JSON.stringify(
+          Object.fromEntries(
+            Object.entries(row.Attributes).sort(([a], [b]) =>
+              a.localeCompare(b)
+            )
+          )
+        )
       : "__default__";
     const seriesMap = metricMap.get(name)!;
 
@@ -129,7 +135,8 @@ function buildMetrics(rows: OtelMetricsRow[]): ParsedMetricGroup[] {
       });
     }
 
-    const value = "Value" in row ? row.Value : 0;
+    if (!("Value" in row)) continue;
+    const value = row.Value;
     const timestamp = parseInt(row.TimeUnix, 10) / 1e6;
     seriesMap.get(seriesKey)!.dataPoints.push({ timestamp, value });
   }

@@ -24,10 +24,10 @@ export function LinksTab({ span, onLinkClick }: LinksTabProps) {
     });
   };
 
-  const copyToClipboard = async (text: string, type: string) => {
+  const copyToClipboard = async (text: string, type: string, index: number) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedId(`${type}-${text}`);
+      setCopiedId(`${type}-${index}-${text}`);
       setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
       console.error("Failed to copy:", err);
@@ -67,17 +67,19 @@ export function LinksTab({ span, onLinkClick }: LinksTabProps) {
                     {truncateId(link.traceId)}
                   </code>
                   <button
-                    onClick={() => copyToClipboard(link.traceId, "trace")}
+                    onClick={() =>
+                      copyToClipboard(link.traceId, "trace", index)
+                    }
                     className="p-1 hover:bg-muted/80 rounded transition-colors"
                     aria-label="Copy trace ID"
                   >
                     <svg
-                      className={`w-4 h-4 ${copiedId === `trace-${link.traceId}` ? "text-green-600" : "text-muted-foreground"}`}
+                      className={`w-4 h-4 ${copiedId === `trace-${index}-${link.traceId}` ? "text-green-600" : "text-muted-foreground"}`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      {copiedId === `trace-${link.traceId}` ? (
+                      {copiedId === `trace-${index}-${link.traceId}` ? (
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -109,17 +111,17 @@ export function LinksTab({ span, onLinkClick }: LinksTabProps) {
                     {truncateId(link.spanId)}
                   </code>
                   <button
-                    onClick={() => copyToClipboard(link.spanId, "span")}
+                    onClick={() => copyToClipboard(link.spanId, "span", index)}
                     className="p-1 hover:bg-muted/80 rounded transition-colors"
                     aria-label="Copy span ID"
                   >
                     <svg
-                      className={`w-4 h-4 ${copiedId === `span-${link.spanId}` ? "text-green-600" : "text-muted-foreground"}`}
+                      className={`w-4 h-4 ${copiedId === `span-${index}-${link.spanId}` ? "text-green-600" : "text-muted-foreground"}`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      {copiedId === `span-${link.spanId}` ? (
+                      {copiedId === `span-${index}-${link.spanId}` ? (
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"

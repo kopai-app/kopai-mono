@@ -38,8 +38,8 @@ export function Button({
     lg: { padding: "12px 24px", fontSize: 16 },
   };
 
-  const v = variants[variant || "primary"]!;
-  const s = sizes[size || "md"]!;
+  const v = variants[variant || "primary"] ?? variants["primary"]!;
+  const s = sizes[size || "md"] ?? sizes["md"]!;
 
   return (
     <button
