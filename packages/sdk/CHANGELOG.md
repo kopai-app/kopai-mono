@@ -1,5 +1,11 @@
 # @kopai/sdk
 
+## 0.3.0
+
+### Minor Changes
+
+- 21ad97d: Dependency updates
+
 ## 0.2.3
 
 ### Patch Changes

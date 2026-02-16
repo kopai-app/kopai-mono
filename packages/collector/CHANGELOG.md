@@ -1,5 +1,11 @@
 # @kopai/collector
 
+## 0.5.0
+
+### Minor Changes
+
+- 21ad97d: Dependency updates
+
 ## 0.4.0
 
 ### Minor Changes
