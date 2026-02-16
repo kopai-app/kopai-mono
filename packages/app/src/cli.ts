@@ -1,4 +1,16 @@
 #!/usr/bin/env node
+const originalEmit = process.emit;
+// @ts-expect-error - monkey-patch to suppress ExperimentalWarning for SQLite
+process.emit = function (event, ...args) {
+  if (
+    event === "warning" &&
+    args[0]?.name === "ExperimentalWarning" &&
+    args[0]?.message?.includes("SQLite")
+  )
+    return false;
+  return originalEmit.apply(this, [event, ...args]);
+};
+
 import { parseArgs } from "node:util";
 import { version } from "./version.js";
 

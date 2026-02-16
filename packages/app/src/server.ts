@@ -20,11 +20,12 @@ import {
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import FastifyVite from "@fastify/vite";
+import { printStartupBanner } from "./startup-banner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const apiServer = fastify({
-  logger: true,
+  logger: { level: "warn" },
 });
 
 // Add schema validator and serializer
@@ -96,7 +97,7 @@ apiServer.after(() => {
 });
 
 const collectorServer = fastify({
-  logger: true,
+  logger: { level: "warn" },
 });
 
 collectorServer.setValidatorCompiler(validatorCompiler);
@@ -109,53 +110,26 @@ collectorServer.after(() => {
 });
 
 async function run() {
-  console.log(`|--k> @kopai/app v${version}\n\n`);
-
   await apiServer.ready();
+  await collectorServer.ready();
 
   const host = env.HOST || "localhost";
   const port = env.PORT;
-  const STANDARD_OTEL_HTTP_COLLECTOR_PORT = 4318;
+  const collectorPort = 4318;
 
-  apiServer.listen(
-    {
-      port,
-      host,
-      listenTextResolver(address) {
-        return `API server listening at ${address}`;
-      },
-    },
-    (err, address) => {
-      if (err) {
-        console.error(err);
-        process.exit(1);
-      }
-      apiServer.log.info(
-        `API server documentation available at ${address}/documentation`
-      );
-    }
-  );
+  await apiServer.listen({ port, host });
+  await collectorServer.listen({ port: collectorPort, host });
 
-  await collectorServer.ready();
+  printStartupBanner({ host, port, collectorPort, version });
 
-  collectorServer.listen(
-    {
-      port: STANDARD_OTEL_HTTP_COLLECTOR_PORT,
-      host,
-      listenTextResolver(address) {
-        return `OTEL collector server listening at ${address}:${STANDARD_OTEL_HTTP_COLLECTOR_PORT}`;
-      },
-    },
-    (err) => {
-      if (err) {
-        console.error(err);
-        process.exit(1);
-      }
-    }
-  );
+  apiServer.log.level = "info";
+  collectorServer.log.level = "info";
 }
 
-run();
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 
 closeWithGrace(async ({ signal, err }) => {
   if (err) {
