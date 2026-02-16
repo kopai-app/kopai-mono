@@ -189,8 +189,9 @@ export class ClickHouseReadDatasource
   async discoverMetrics(options?: {
     requestContext?: unknown;
   }): Promise<datasource.MetricsDiscoveryResult> {
-    assertClickHouseRequestContext(options?.requestContext);
-    const { database, username, password } = options.requestContext;
+    const ctx = options?.requestContext;
+    assertClickHouseRequestContext(ctx);
+    const { database, username, password } = ctx;
 
     const client = createClient({
       url: this.baseUrl,

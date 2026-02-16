@@ -17,7 +17,7 @@ export function buildTracesQuery(filter: dataFilterSchemas.TracesDataFilter): {
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
   const limit = filter.limit ?? 100;
-  const sortOrder = filter.sortOrder ?? "DESC";
+  const sortOrder = filter.sortOrder === "ASC" ? "ASC" : "DESC";
 
   // Exact match filters
   if (filter.traceId) {

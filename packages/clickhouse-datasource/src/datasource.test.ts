@@ -236,6 +236,7 @@ beforeAll(async () => {
   await seedLogs(dbClient);
   await seedMetrics(dbClient);
   await seedTruncationMetric(dbClient);
+  await seedMultiAttrMetric(dbClient);
 
   await dbClient.close();
 }, CONTAINER_STARTUP_TIMEOUT);
@@ -631,6 +632,44 @@ async function seedTruncationMetric(client: ClickHouseClient) {
   await client.insert({
     table: "otel_metrics_gauge",
     values,
+    format: "JSONEachRow",
+  });
+}
+
+/**
+ * Seed a gauge metric with multiple attributes on a single row.
+ * This exposes the double-arrayJoin cross-product bug in discovery queries:
+ * if the query calls arrayJoin(mapKeys(Attributes)) twice in the same SELECT,
+ * a row with N attribute keys produces N*N rows instead of N.
+ */
+async function seedMultiAttrMetric(client: ClickHouseClient) {
+  await client.insert({
+    table: "otel_metrics_gauge",
+    values: [
+      {
+        ResourceAttributes: { "cloud.provider": "aws" },
+        ResourceSchemaUrl: "",
+        ScopeName: "",
+        ScopeVersion: "",
+        ScopeAttributes: {},
+        ScopeDroppedAttrCount: 0,
+        ScopeSchemaUrl: "",
+        ServiceName: "multi-attr-service",
+        MetricName: "test.multi.attr",
+        MetricDescription: "Metric with multiple attributes per row",
+        MetricUnit: "1",
+        Attributes: { region: "us-east", env: "prod", tier: "premium" },
+        StartTimeUnix: "2024-01-01 00:00:00.000000000",
+        TimeUnix: "2024-01-01 00:00:01.000000000",
+        Value: 1,
+        Flags: 0,
+        "Exemplars.FilteredAttributes": [],
+        "Exemplars.TimeUnix": [],
+        "Exemplars.Value": [],
+        "Exemplars.SpanId": [],
+        "Exemplars.TraceId": [],
+      },
+    ],
     format: "JSONEachRow",
   });
 }
@@ -1097,8 +1136,8 @@ describe("ClickHouseReadDatasource", () => {
         requestContext: requestContext(),
       });
 
-      // 5 original metrics + 1 truncation test metric
-      expect(result.metrics.length).toBe(6);
+      // 5 original metrics + 1 truncation test metric + 1 multi-attr metric
+      expect(result.metrics.length).toBe(7);
 
       const names = result.metrics.map((m) => m.name).sort();
       expect(names).toEqual([
@@ -1107,6 +1146,7 @@ describe("ClickHouseReadDatasource", () => {
         "http.server.request.duration.exp",
         "rpc.server.duration.summary",
         "system.cpu.utilization",
+        "test.multi.attr",
         "test.truncation.metric",
       ]);
     });
@@ -1166,6 +1206,34 @@ describe("ClickHouseReadDatasource", () => {
       expect(metric.attributes._truncated).toBe(true);
       const idxValues = defined(metric.attributes.values["idx"], "idx values");
       expect(idxValues.length).toBeLessThanOrEqual(100);
+    });
+
+    it("returns correct attribute keys for metrics with multiple attributes per row", async () => {
+      const ds = new ClickHouseReadDatasource(baseUrl);
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const metric = defined(
+        result.metrics.find((m) => m.name === "test.multi.attr"),
+        "multi-attr metric"
+      );
+
+      // The row has 3 attribute keys: region, env, tier
+      // A correct query returns exactly 3 keys, each with 1 value.
+      // The double-arrayJoin bug would produce 3*3=9 rows, inflating values.
+      const attrKeys = Object.keys(metric.attributes.values).sort();
+      expect(attrKeys).toEqual(["env", "region", "tier"]);
+      expect(metric.attributes.values["region"]).toEqual(["us-east"]);
+      expect(metric.attributes.values["env"]).toEqual(["prod"]);
+      expect(metric.attributes.values["tier"]).toEqual(["premium"]);
+
+      // Resource attribute should also be correct: 1 key with 1 value
+      const resKeys = Object.keys(metric.resourceAttributes.values);
+      expect(resKeys).toEqual(["cloud.provider"]);
+      expect(metric.resourceAttributes.values["cloud.provider"]).toEqual([
+        "aws",
+      ]);
     });
 
     it("does not set _truncated when attribute values are within limit", async () => {
