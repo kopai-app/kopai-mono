@@ -173,8 +173,8 @@ export function MetricHistogram({
             tick={
               labelStyle === "staggered"
                 ? (props: {
-                    x?: number;
-                    y?: number;
+                    x?: string | number;
+                    y?: string | number;
                     payload?: { value: string; index: number };
                   }) => {
                     if (!props.payload) return <g />;
