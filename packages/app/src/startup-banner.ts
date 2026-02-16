@@ -1,10 +1,11 @@
 import { networkInterfaces } from "node:os";
 
-const bold = "\x1b[1m";
-const dim = "\x1b[2m";
-const green = "\x1b[32m";
-const cyan = "\x1b[36m";
-const reset = "\x1b[0m";
+const isTTY = process.stdout.isTTY;
+const bold = isTTY ? "\x1b[1m" : "";
+const dim = isTTY ? "\x1b[2m" : "";
+const green = isTTY ? "\x1b[32m" : "";
+const cyan = isTTY ? "\x1b[36m" : "";
+const reset = isTTY ? "\x1b[0m" : "";
 
 function getNetworkAddress(): string | undefined {
   const nets = networkInterfaces();
