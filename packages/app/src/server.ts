@@ -1,4 +1,5 @@
 import fastify from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import {
   jsonSchemaTransformObject,
   jsonSchemaTransform,
@@ -23,16 +24,13 @@ import FastifyVite from "@fastify/vite";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const apiServer = fastify({
+const baseApiServer = fastify({
   logger: true,
 });
 
-// Add schema validator and serializer
-apiServer.setValidatorCompiler(validatorCompiler);
-apiServer.setSerializerCompiler(serializerCompiler);
-
+// Register swagger on base instance (its types augment FastifyTypeProviderDefault)
 const uiRoutes = ["/", "/*"];
-apiServer.register(fastifySwagger, {
+baseApiServer.register(fastifySwagger, {
   openapi: {
     info: {
       title: "Kopai App",
@@ -48,7 +46,7 @@ apiServer.register(fastifySwagger, {
   transformObject: jsonSchemaTransformObject,
 });
 
-apiServer.register(fastifySwaggerUI, {
+baseApiServer.register(fastifySwaggerUI, {
   routePrefix: "/documentation",
   logo: {
     type: "image/svg+xml",
@@ -75,6 +73,11 @@ apiServer.register(fastifySwaggerUI, {
   },
 });
 
+// Narrow to ZodTypeProvider for route registration
+const apiServer = baseApiServer.withTypeProvider<ZodTypeProvider>();
+apiServer.setValidatorCompiler(validatorCompiler);
+apiServer.setSerializerCompiler(serializerCompiler);
+
 const sqliteDatabase = initializeDatabase(env.SQLITE_DB_FILE_PATH);
 const telemetryDatasource = createOptimizedDatasource(sqliteDatabase);
 
@@ -97,7 +100,7 @@ apiServer.after(() => {
 
 const collectorServer = fastify({
   logger: true,
-});
+}).withTypeProvider<ZodTypeProvider>();
 
 collectorServer.setValidatorCompiler(validatorCompiler);
 collectorServer.setSerializerCompiler(serializerCompiler);
