@@ -1,5 +1,11 @@
 # @kopai/app
 
+## 0.10.0
+
+### Minor Changes
+
+- 20dcacc: Cosmetic improvements for CLI startup
+
 ## 0.9.0
 
 ### Minor Changes
