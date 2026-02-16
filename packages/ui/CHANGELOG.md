@@ -1,5 +1,16 @@
 # @kopai/ui
 
+## 0.3.0
+
+### Minor Changes
+
+- 21ad97d: Dependency updates
+
+### Patch Changes
+
+- Updated dependencies [21ad97d]
+  - @kopai/sdk@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
