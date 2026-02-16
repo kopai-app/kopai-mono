@@ -28,7 +28,10 @@ export const logsRoutes: FastifyPluginAsyncZod<{
       },
     },
     handler: async (req, res) => {
-      const result = await opts.readLogsDatasource.getLogs(req.body);
+      const result = await opts.readLogsDatasource.getLogs({
+        ...req.body,
+        requestContext: req.requestContext,
+      });
       res.send(result);
     },
   });

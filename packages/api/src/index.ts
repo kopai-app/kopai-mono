@@ -1,5 +1,11 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { type datasource } from "@kopai/core";
+
+declare module "fastify" {
+  interface FastifyRequest {
+    requestContext?: unknown;
+  }
+}
 import {
   serializerCompiler,
   validatorCompiler,

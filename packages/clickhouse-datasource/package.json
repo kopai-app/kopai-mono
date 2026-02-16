@@ -1,0 +1,45 @@
+{
+  "name": "@kopai/clickhouse-datasource",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Vladimir Adamic",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kopai-app/kopai-mono.git",
+    "directory": "packages/clickhouse-datasource"
+  },
+  "homepage": "https://github.com/kopai-app/kopai-mono/tree/main/packages/clickhouse-datasource#readme",
+  "bugs": {
+    "url": "https://github.com/kopai-app/kopai-mono/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "lint": "eslint src",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kopai/core": "workspace:*",
+    "@clickhouse/client": "^1.14.0"
+  },
+  "devDependencies": {
+    "@kopai/tsconfig": "workspace:*",
+    "testcontainers": "^10.0.0",
+    "tsdown": "^0.20.1"
+  }
+}
