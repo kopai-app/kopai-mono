@@ -32,17 +32,27 @@ function expectAscending(values: bigint[]): void {
 
 const CLICKHOUSE_HTTP_PORT = 8123;
 const TEST_DATABASE = "test_db";
+const TENANT_B_DATABASE = "tenant_b_db";
 const CONTAINER_STARTUP_TIMEOUT = 60_000;
 
 let container: StartedTestContainer;
 let adminClient: ClickHouseClient;
 let baseUrl: string;
+let ds: ClickHouseReadDatasource;
 
 const dirname = new URL(".", import.meta.url).pathname;
 
 function requestContext() {
   return {
     database: TEST_DATABASE,
+    username: "default",
+    password: "",
+  };
+}
+
+function tenantBRequestContext() {
+  return {
+    database: TENANT_B_DATABASE,
     username: "default",
     password: "",
   };
@@ -86,8 +96,69 @@ beforeAll(async () => {
     password: "",
   });
 
-  // Create traces table
-  await dbClient.command({
+  await createOtelTables(dbClient);
+
+  // Seed test data
+  await seedTraces(dbClient);
+  await seedLogs(dbClient);
+  await seedMetrics(dbClient);
+  await seedTruncationMetric(dbClient);
+  await seedMultiAttrMetric(dbClient);
+
+  await dbClient.close();
+
+  // Create tenant_b database with distinct data for isolation tests
+  await adminClient.command({
+    query: `CREATE DATABASE IF NOT EXISTS ${TENANT_B_DATABASE}`,
+  });
+
+  const tenantBClient = createClient({
+    url: baseUrl,
+    database: TENANT_B_DATABASE,
+    username: "default",
+    password: "",
+  });
+
+  await createOtelTables(tenantBClient);
+  await seedTenantBData(tenantBClient);
+  await tenantBClient.close();
+
+  ds = new ClickHouseReadDatasource(baseUrl);
+}, CONTAINER_STARTUP_TIMEOUT);
+
+afterAll(async () => {
+  await ds?.close();
+  await adminClient?.close();
+  await container?.stop();
+});
+
+async function createOtelTables(client: ClickHouseClient) {
+  const metricsCommonCols = `
+    ResourceAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+    ResourceSchemaUrl String CODEC(ZSTD(1)),
+    ScopeName String CODEC(ZSTD(1)),
+    ScopeVersion String CODEC(ZSTD(1)),
+    ScopeAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+    ScopeDroppedAttrCount UInt32 CODEC(ZSTD(1)),
+    ScopeSchemaUrl String CODEC(ZSTD(1)),
+    ServiceName LowCardinality(String) CODEC(ZSTD(1)),
+    MetricName String CODEC(ZSTD(1)),
+    MetricDescription String CODEC(ZSTD(1)),
+    MetricUnit String CODEC(ZSTD(1)),
+    Attributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+    StartTimeUnix DateTime64(9) CODEC(Delta(8), ZSTD(1)),
+    TimeUnix DateTime64(9) CODEC(Delta(8), ZSTD(1))
+  `;
+
+  const exemplarCols = `
+    \`Exemplars.FilteredAttributes\` Array(Map(LowCardinality(String), String)) CODEC(ZSTD(1)),
+    \`Exemplars.TimeUnix\` Array(DateTime64(9)) CODEC(ZSTD(1)),
+    \`Exemplars.Value\` Array(Float64) CODEC(ZSTD(1)),
+    \`Exemplars.SpanId\` Array(String) CODEC(ZSTD(1)),
+    \`Exemplars.TraceId\` Array(String) CODEC(ZSTD(1))
+  `;
+
+  await client.command({
     query: `
       CREATE TABLE IF NOT EXISTS otel_traces (
         Timestamp DateTime64(9) CODEC(Delta(8), ZSTD(1)),
@@ -117,8 +188,7 @@ beforeAll(async () => {
     `,
   });
 
-  // Create logs table
-  await dbClient.command({
+  await client.command({
     query: `
       CREATE TABLE IF NOT EXISTS otel_logs (
         Timestamp DateTime64(9) CODEC(Delta(8), ZSTD(1)),
@@ -142,33 +212,7 @@ beforeAll(async () => {
     `,
   });
 
-  // Create metrics tables
-  const metricsCommonCols = `
-    ResourceAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-    ResourceSchemaUrl String CODEC(ZSTD(1)),
-    ScopeName String CODEC(ZSTD(1)),
-    ScopeVersion String CODEC(ZSTD(1)),
-    ScopeAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-    ScopeDroppedAttrCount UInt32 CODEC(ZSTD(1)),
-    ScopeSchemaUrl String CODEC(ZSTD(1)),
-    ServiceName LowCardinality(String) CODEC(ZSTD(1)),
-    MetricName String CODEC(ZSTD(1)),
-    MetricDescription String CODEC(ZSTD(1)),
-    MetricUnit String CODEC(ZSTD(1)),
-    Attributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-    StartTimeUnix DateTime64(9) CODEC(Delta(8), ZSTD(1)),
-    TimeUnix DateTime64(9) CODEC(Delta(8), ZSTD(1))
-  `;
-
-  const exemplarCols = `
-    \`Exemplars.FilteredAttributes\` Array(Map(LowCardinality(String), String)) CODEC(ZSTD(1)),
-    \`Exemplars.TimeUnix\` Array(DateTime64(9)) CODEC(ZSTD(1)),
-    \`Exemplars.Value\` Array(Float64) CODEC(ZSTD(1)),
-    \`Exemplars.SpanId\` Array(String) CODEC(ZSTD(1)),
-    \`Exemplars.TraceId\` Array(String) CODEC(ZSTD(1))
-  `;
-
-  await dbClient.command({
+  await client.command({
     query: `CREATE TABLE IF NOT EXISTS otel_metrics_gauge (
       ${metricsCommonCols},
       Value Float64 CODEC(ZSTD(1)),
@@ -177,7 +221,7 @@ beforeAll(async () => {
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
 
-  await dbClient.command({
+  await client.command({
     query: `CREATE TABLE IF NOT EXISTS otel_metrics_sum (
       ${metricsCommonCols},
       Value Float64 CODEC(ZSTD(1)),
@@ -188,7 +232,7 @@ beforeAll(async () => {
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
 
-  await dbClient.command({
+  await client.command({
     query: `CREATE TABLE IF NOT EXISTS otel_metrics_histogram (
       ${metricsCommonCols},
       Count UInt64 CODEC(ZSTD(1)),
@@ -202,7 +246,7 @@ beforeAll(async () => {
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
 
-  await dbClient.command({
+  await client.command({
     query: `CREATE TABLE IF NOT EXISTS otel_metrics_exponential_histogram (
       ${metricsCommonCols},
       Count UInt64 CODEC(ZSTD(1)),
@@ -221,7 +265,7 @@ beforeAll(async () => {
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
 
-  await dbClient.command({
+  await client.command({
     query: `CREATE TABLE IF NOT EXISTS otel_metrics_summary (
       ${metricsCommonCols},
       Count UInt64 CODEC(ZSTD(1)),
@@ -230,21 +274,94 @@ beforeAll(async () => {
       \`ValueAtQuantiles.Value\` Array(Float64) CODEC(ZSTD(1))
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
+}
 
-  // Seed test data
-  await seedTraces(dbClient);
-  await seedLogs(dbClient);
-  await seedMetrics(dbClient);
-  await seedTruncationMetric(dbClient);
-  await seedMultiAttrMetric(dbClient);
+async function seedTenantBData(client: ClickHouseClient) {
+  await client.insert({
+    table: "otel_traces",
+    values: [
+      {
+        Timestamp: "2024-06-01 00:00:01.000000000",
+        TraceId: "trace-b-001",
+        SpanId: "span-b-001",
+        ParentSpanId: "",
+        TraceState: "",
+        SpanName: "GET /api/tenant-b",
+        SpanKind: "SERVER",
+        ServiceName: "tenant-b-service",
+        ResourceAttributes: { "tenant.id": "b" },
+        ScopeName: "otel-sdk",
+        ScopeVersion: "1.0.0",
+        SpanAttributes: { "http.method": "GET" },
+        Duration: 3000000,
+        StatusCode: "OK",
+        StatusMessage: "",
+        "Events.Timestamp": [],
+        "Events.Name": [],
+        "Events.Attributes": [],
+        "Links.TraceId": [],
+        "Links.SpanId": [],
+        "Links.TraceState": [],
+        "Links.Attributes": [],
+      },
+    ],
+    format: "JSONEachRow",
+  });
 
-  await dbClient.close();
-}, CONTAINER_STARTUP_TIMEOUT);
+  await client.insert({
+    table: "otel_logs",
+    values: [
+      {
+        Timestamp: "2024-06-01 00:00:01.000000000",
+        TraceId: "",
+        SpanId: "",
+        TraceFlags: 0,
+        SeverityText: "INFO",
+        SeverityNumber: 9,
+        ServiceName: "tenant-b-service",
+        Body: "Tenant B log message",
+        ResourceSchemaUrl: "",
+        ResourceAttributes: { "tenant.id": "b" },
+        ScopeSchemaUrl: "",
+        ScopeName: "",
+        ScopeVersion: "",
+        ScopeAttributes: {},
+        LogAttributes: {},
+      },
+    ],
+    format: "JSONEachRow",
+  });
 
-afterAll(async () => {
-  await adminClient?.close();
-  await container?.stop();
-});
+  await client.insert({
+    table: "otel_metrics_gauge",
+    values: [
+      {
+        ResourceAttributes: { "tenant.id": "b" },
+        ResourceSchemaUrl: "",
+        ScopeName: "",
+        ScopeVersion: "",
+        ScopeAttributes: {},
+        ScopeDroppedAttrCount: 0,
+        ScopeSchemaUrl: "",
+        ServiceName: "tenant-b-service",
+        MetricName: "tenant.b.gauge",
+        MetricDescription: "Tenant B gauge",
+        MetricUnit: "1",
+        Attributes: { region: "eu-west" },
+        StartTimeUnix: "2024-06-01 00:00:00.000000000",
+        TimeUnix: "2024-06-01 00:00:01.000000000",
+        Value: 99,
+        Flags: 0,
+        "Exemplars.FilteredAttributes": [],
+        "Exemplars.TimeUnix": [],
+        "Exemplars.Value": [],
+        "Exemplars.SpanId": [],
+        "Exemplars.TraceId": [],
+      },
+    ],
+    format: "JSONEachRow",
+  });
+}
 
 async function seedTraces(client: ClickHouseClient) {
   await client.insert({
@@ -677,7 +794,6 @@ async function seedMultiAttrMetric(client: ClickHouseClient) {
 describe("ClickHouseReadDatasource", () => {
   describe("getTraces", () => {
     it("returns all traces with no filters", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({ requestContext: requestContext() });
 
       expect(result.data.length).toBe(3);
@@ -685,7 +801,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("filters by traceId", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         traceId: "trace-001",
         requestContext: requestContext(),
@@ -698,7 +813,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("filters by serviceName", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         serviceName: "order-service",
         requestContext: requestContext(),
@@ -709,7 +823,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("returns timestamps as nanosecond strings", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         traceId: "trace-001",
         spanId: "span-001",
@@ -722,7 +835,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("coerces attribute values", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         spanId: "span-001",
         requestContext: requestContext(),
@@ -735,7 +847,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("filters by spanAttributes", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         spanAttributes: { "http.method": "POST" },
         requestContext: requestContext(),
@@ -746,7 +857,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("returns Duration as string", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         spanId: "span-001",
         requestContext: requestContext(),
@@ -756,7 +866,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("maps Events correctly", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         spanId: "span-002",
         requestContext: requestContext(),
@@ -768,7 +877,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("maps Links correctly", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         spanId: "span-003",
         requestContext: requestContext(),
@@ -780,7 +888,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("supports cursor pagination", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const page1 = await ds.getTraces({
         limit: 2,
         sortOrder: "DESC",
@@ -802,7 +909,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("supports ASC sort order", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         sortOrder: "ASC",
         requestContext: requestContext(),
@@ -812,7 +918,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("returns empty result for no matches", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         traceId: "nonexistent",
         requestContext: requestContext(),
@@ -823,21 +928,18 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("throws without requestContext", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       await expect(ds.getTraces({})).rejects.toThrow(
         "requestContext must provide { database, username, password }"
       );
     });
 
     it("throws for partial requestContext (missing password)", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       await expect(
         ds.getTraces({ requestContext: { database: "db", username: "user" } })
       ).rejects.toThrow("requestContext must provide");
     });
 
     it("throws for non-string fields in requestContext", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       await expect(
         ds.getTraces({
           requestContext: { database: "db", username: "user", password: 123 },
@@ -846,14 +948,12 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("throws for null requestContext", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       await expect(ds.getTraces({ requestContext: null })).rejects.toThrow(
         "requestContext must provide"
       );
     });
 
     it("throws on malformed cursor", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       await expect(
         ds.getTraces({
           cursor: "malformed-no-colon",
@@ -863,7 +963,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("filters by spanAttributes AND resourceAttributes combined", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getTraces({
         spanAttributes: { "http.method": "GET" },
         resourceAttributes: { "service.version": "1.0" },
@@ -875,7 +974,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("rejects invalid attribute keys", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       await expect(
         ds.getTraces({
           spanAttributes: { "key with spaces": "value" },
@@ -885,7 +983,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("rejects SQL injection in attribute keys", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       await expect(
         ds.getTraces({
           spanAttributes: { "'] OR 1=1 --": "value" },
@@ -897,14 +994,12 @@ describe("ClickHouseReadDatasource", () => {
 
   describe("getLogs", () => {
     it("returns all logs with no filters", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getLogs({ requestContext: requestContext() });
 
       expect(result.data.length).toBe(3);
     });
 
     it("filters by serviceName", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getLogs({
         serviceName: "order-service",
         requestContext: requestContext(),
@@ -915,7 +1010,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("filters by bodyContains (case-insensitive)", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getLogs({
         bodyContains: "database",
         requestContext: requestContext(),
@@ -926,7 +1020,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("filters by severity range", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getLogs({
         severityNumberMin: 13,
         requestContext: requestContext(),
@@ -939,7 +1032,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("coerces log attributes", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getLogs({
         serviceName: "user-service",
         severityText: "INFO",
@@ -952,7 +1044,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("supports cursor pagination", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const page1 = await ds.getLogs({
         limit: 2,
         sortOrder: "DESC",
@@ -974,7 +1065,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("supports ASC sort order", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getLogs({
         sortOrder: "ASC",
         requestContext: requestContext(),
@@ -984,7 +1074,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("escapes ILIKE special characters in bodyContains", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       // "%" should not match everything — none of our seed log bodies contain literal "%"
       const result = await ds.getLogs({
         bodyContains: "%",
@@ -997,7 +1086,6 @@ describe("ClickHouseReadDatasource", () => {
 
   describe("getMetrics", () => {
     it("queries Gauge metrics", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getMetrics({
         metricType: "Gauge",
         metricName: "system.cpu.utilization",
@@ -1009,7 +1097,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("queries Sum metrics", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getMetrics({
         metricType: "Sum",
         requestContext: requestContext(),
@@ -1025,7 +1112,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("queries Histogram metrics", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getMetrics({
         metricType: "Histogram",
         requestContext: requestContext(),
@@ -1042,7 +1128,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("queries ExponentialHistogram with ZeroThreshold", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getMetrics({
         metricType: "ExponentialHistogram",
         requestContext: requestContext(),
@@ -1059,7 +1144,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("queries Summary metrics", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getMetrics({
         metricType: "Summary",
         requestContext: requestContext(),
@@ -1076,7 +1160,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("converts metric timestamps to nanos", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getMetrics({
         metricType: "Gauge",
         metricName: "system.cpu.utilization",
@@ -1091,7 +1174,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("supports cursor pagination for Gauge", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const page1 = await ds.getMetrics({
         metricType: "Gauge",
         metricName: "system.cpu.utilization",
@@ -1117,7 +1199,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("supports ASC sort order for Gauge", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.getMetrics({
         metricType: "Gauge",
         metricName: "system.cpu.utilization",
@@ -1131,7 +1212,6 @@ describe("ClickHouseReadDatasource", () => {
 
   describe("discoverMetrics", () => {
     it("discovers all metric names and types", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1152,7 +1232,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("returns metric type correctly", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1166,7 +1245,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("returns attribute keys and values", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1179,7 +1257,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("returns resource attributes", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1193,7 +1270,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("sets _truncated when attribute values exceed 100", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1209,7 +1285,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("returns correct attribute keys for metrics with multiple attributes per row", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1237,7 +1312,6 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("does not set _truncated when attribute values are within limit", async () => {
-      const ds = new ClickHouseReadDatasource(baseUrl);
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1248,6 +1322,90 @@ describe("ClickHouseReadDatasource", () => {
       );
       // 3 distinct cpu values ("0", "1", "2") — well under 100
       expect(gauge.attributes._truncated).toBeUndefined();
+    });
+  });
+
+  describe("multi-tenant isolation", () => {
+    it("routes traces to the correct database", async () => {
+      const tenantA = await ds.getTraces({
+        requestContext: requestContext(),
+      });
+      const tenantB = await ds.getTraces({
+        requestContext: tenantBRequestContext(),
+      });
+
+      // Tenant A has 3 traces, tenant B has 1
+      expect(tenantA.data.length).toBe(3);
+      expect(tenantB.data.length).toBe(1);
+
+      // No cross-contamination
+      expect(tenantA.data.every((r) => r.TraceId !== "trace-b-001")).toBe(true);
+      expect(firstRow(tenantB.data).TraceId).toBe("trace-b-001");
+      expect(firstRow(tenantB.data).ServiceName).toBe("tenant-b-service");
+    });
+
+    it("routes logs to the correct database", async () => {
+      const tenantA = await ds.getLogs({
+        requestContext: requestContext(),
+      });
+      const tenantB = await ds.getLogs({
+        requestContext: tenantBRequestContext(),
+      });
+
+      // Tenant A has 3 logs, tenant B has 1
+      expect(tenantA.data.length).toBe(3);
+      expect(tenantB.data.length).toBe(1);
+
+      // No cross-contamination
+      expect(tenantA.data.every((r) => r.Body !== "Tenant B log message")).toBe(
+        true
+      );
+      expect(firstRow(tenantB.data).Body).toBe("Tenant B log message");
+      expect(firstRow(tenantB.data).ServiceName).toBe("tenant-b-service");
+    });
+
+    it("routes metrics to the correct database", async () => {
+      const tenantA = await ds.getMetrics({
+        metricType: "Gauge",
+        metricName: "system.cpu.utilization",
+        requestContext: requestContext(),
+      });
+      const tenantB = await ds.getMetrics({
+        metricType: "Gauge",
+        metricName: "tenant.b.gauge",
+        requestContext: tenantBRequestContext(),
+      });
+
+      expect(tenantA.data.length).toBe(3);
+      expect(tenantB.data.length).toBe(1);
+
+      // Tenant B metric doesn't exist in tenant A
+      const tenantACross = await ds.getMetrics({
+        metricType: "Gauge",
+        metricName: "tenant.b.gauge",
+        requestContext: requestContext(),
+      });
+      expect(tenantACross.data.length).toBe(0);
+    });
+
+    it("routes discoverMetrics to the correct database", async () => {
+      const tenantA = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+      const tenantB = await ds.discoverMetrics({
+        requestContext: tenantBRequestContext(),
+      });
+
+      const tenantANames = tenantA.metrics.map((m) => m.name).sort();
+      const tenantBNames = tenantB.metrics.map((m) => m.name).sort();
+
+      // Tenant A has 7 metrics, tenant B has 1
+      expect(tenantANames.length).toBe(7);
+      expect(tenantBNames).toEqual(["tenant.b.gauge"]);
+
+      // No cross-contamination
+      expect(tenantANames).not.toContain("tenant.b.gauge");
+      expect(tenantBNames).not.toContain("system.cpu.utilization");
     });
   });
 });

@@ -1,4 +1,4 @@
-import { createClient } from "@clickhouse/client";
+import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import type {
   dataFilterSchemas,
   denormalizedSignals,
@@ -52,7 +52,26 @@ interface DiscoverAttrRow {
 export class ClickHouseReadDatasource
   implements datasource.ReadTelemetryDatasource
 {
-  constructor(private readonly baseUrl: string) {}
+  private readonly client: ClickHouseClient;
+
+  constructor(
+    baseUrl: string,
+    options?: {
+      maxOpenConnections?: number;
+      requestTimeout?: number;
+    }
+  ) {
+    this.client = createClient({
+      url: baseUrl,
+      application: "kopai",
+      max_open_connections: options?.maxOpenConnections ?? 10,
+      request_timeout: options?.requestTimeout ?? 30_000,
+    });
+  }
+
+  async close(): Promise<void> {
+    await this.client.close();
+  }
 
   async getTraces(
     filter: dataFilterSchemas.TracesDataFilter & {
@@ -65,38 +84,29 @@ export class ClickHouseReadDatasource
     assertClickHouseRequestContext(filter.requestContext);
     const { database, username, password } = filter.requestContext;
 
-    const client = createClient({
-      url: this.baseUrl,
-      database,
-      username,
-      password,
+    const { query, params } = buildTracesQuery(filter);
+    const limit = filter.limit ?? 100;
+
+    const resultSet = await this.client.query({
+      query,
+      query_params: params,
+      format: "JSONEachRow",
+      auth: { username, password },
+      http_headers: { "X-ClickHouse-Database": database },
     });
+    const rows = await resultSet.json<Record<string, unknown>>();
 
-    try {
-      const { query, params } = buildTracesQuery(filter);
-      const limit = filter.limit ?? 100;
+    const hasMore = rows.length > limit;
+    const data = hasMore ? rows.slice(0, limit) : rows;
+    const mappedData = data.map(mapTracesRow);
 
-      const resultSet = await client.query({
-        query,
-        query_params: params,
-        format: "JSONEachRow",
-      });
-      const rows = await resultSet.json<Record<string, unknown>>();
+    const lastRow = data[data.length - 1] as TracesCursorRow | undefined;
+    const nextCursor =
+      hasMore && lastRow
+        ? `${dateTime64ToNanos(lastRow.Timestamp)}:${lastRow.SpanId}`
+        : null;
 
-      const hasMore = rows.length > limit;
-      const data = hasMore ? rows.slice(0, limit) : rows;
-      const mappedData = data.map(mapTracesRow);
-
-      const lastRow = data[data.length - 1] as TracesCursorRow | undefined;
-      const nextCursor =
-        hasMore && lastRow
-          ? `${dateTime64ToNanos(lastRow.Timestamp)}:${lastRow.SpanId}`
-          : null;
-
-      return { data: mappedData, nextCursor };
-    } finally {
-      await client.close();
-    }
+    return { data: mappedData, nextCursor };
   }
 
   async getLogs(
@@ -110,36 +120,27 @@ export class ClickHouseReadDatasource
     assertClickHouseRequestContext(filter.requestContext);
     const { database, username, password } = filter.requestContext;
 
-    const client = createClient({
-      url: this.baseUrl,
-      database,
-      username,
-      password,
+    const { query, params } = buildLogsQuery(filter);
+    const limit = filter.limit ?? 100;
+
+    const resultSet = await this.client.query({
+      query,
+      query_params: params,
+      format: "JSONEachRow",
+      auth: { username, password },
+      http_headers: { "X-ClickHouse-Database": database },
     });
+    const rows = await resultSet.json<Record<string, unknown>>();
 
-    try {
-      const { query, params } = buildLogsQuery(filter);
-      const limit = filter.limit ?? 100;
+    const hasMore = rows.length > limit;
+    const data = hasMore ? rows.slice(0, limit) : rows;
+    const mappedData = data.map(mapLogsRow);
 
-      const resultSet = await client.query({
-        query,
-        query_params: params,
-        format: "JSONEachRow",
-      });
-      const rows = await resultSet.json<Record<string, unknown>>();
+    const lastRow = data[data.length - 1] as LogsCursorRow | undefined;
+    const nextCursor =
+      hasMore && lastRow ? `${dateTime64ToNanos(lastRow.Timestamp)}:0` : null;
 
-      const hasMore = rows.length > limit;
-      const data = hasMore ? rows.slice(0, limit) : rows;
-      const mappedData = data.map(mapLogsRow);
-
-      const lastRow = data[data.length - 1] as LogsCursorRow | undefined;
-      const nextCursor =
-        hasMore && lastRow ? `${dateTime64ToNanos(lastRow.Timestamp)}:0` : null;
-
-      return { data: mappedData, nextCursor };
-    } finally {
-      await client.close();
-    }
+    return { data: mappedData, nextCursor };
   }
 
   async getMetrics(
@@ -153,37 +154,28 @@ export class ClickHouseReadDatasource
     assertClickHouseRequestContext(filter.requestContext);
     const { database, username, password } = filter.requestContext;
 
-    const client = createClient({
-      url: this.baseUrl,
-      database,
-      username,
-      password,
+    const { query, params } = buildMetricsQuery(filter);
+    const limit = filter.limit ?? 100;
+    const metricType = filter.metricType;
+
+    const resultSet = await this.client.query({
+      query,
+      query_params: params,
+      format: "JSONEachRow",
+      auth: { username, password },
+      http_headers: { "X-ClickHouse-Database": database },
     });
+    const rows = await resultSet.json<Record<string, unknown>>();
 
-    try {
-      const { query, params } = buildMetricsQuery(filter);
-      const limit = filter.limit ?? 100;
-      const metricType = filter.metricType;
+    const hasMore = rows.length > limit;
+    const data = hasMore ? rows.slice(0, limit) : rows;
+    const mappedData = data.map((row) => mapMetricsRow(row, metricType));
 
-      const resultSet = await client.query({
-        query,
-        query_params: params,
-        format: "JSONEachRow",
-      });
-      const rows = await resultSet.json<Record<string, unknown>>();
+    const lastRow = data[data.length - 1] as MetricsCursorRow | undefined;
+    const nextCursor =
+      hasMore && lastRow ? `${dateTime64ToNanos(lastRow.TimeUnix)}:0` : null;
 
-      const hasMore = rows.length > limit;
-      const data = hasMore ? rows.slice(0, limit) : rows;
-      const mappedData = data.map((row) => mapMetricsRow(row, metricType));
-
-      const lastRow = data[data.length - 1] as MetricsCursorRow | undefined;
-      const nextCursor =
-        hasMore && lastRow ? `${dateTime64ToNanos(lastRow.TimeUnix)}:0` : null;
-
-      return { data: mappedData, nextCursor };
-    } finally {
-      await client.close();
-    }
+    return { data: mappedData, nextCursor };
   }
 
   async discoverMetrics(options?: {
@@ -193,93 +185,84 @@ export class ClickHouseReadDatasource
     assertClickHouseRequestContext(ctx);
     const { database, username, password } = ctx;
 
-    const client = createClient({
-      url: this.baseUrl,
-      database,
-      username,
-      password,
+    const { namesQuery, attributesQuery } = buildDiscoverMetricsQueries();
+    const auth = { username, password };
+    const http_headers = { "X-ClickHouse-Database": database };
+
+    const [nameRows, attrRows] = await Promise.all([
+      this.client
+        .query({ query: namesQuery, format: "JSONEachRow", auth, http_headers })
+        .then((r) => r.json<DiscoverNameRow>()),
+      this.client
+        .query({
+          query: attributesQuery,
+          format: "JSONEachRow",
+          auth,
+          http_headers,
+        })
+        .then((r) => r.json<DiscoverAttrRow>()),
+    ]);
+
+    // Build lookup map for attributes
+    const attrMap = new Map<
+      string,
+      {
+        attributes: Record<string, string[]>;
+        resourceAttributes: Record<string, string[]>;
+        attrsTruncated: boolean;
+        resAttrsTruncated: boolean;
+      }
+    >();
+
+    for (const row of attrRows) {
+      const key = `${row.MetricName}:${row.MetricType}`;
+      if (!attrMap.has(key)) {
+        attrMap.set(key, {
+          attributes: {},
+          resourceAttributes: {},
+          attrsTruncated: false,
+          resAttrsTruncated: false,
+        });
+      }
+      // Safe: we just ensured the key exists above
+      const entry = attrMap.get(key);
+      if (!entry) continue;
+
+      const isTruncated = row.attr_values.length > MAX_ATTR_VALUES;
+      const values = isTruncated
+        ? row.attr_values.slice(0, MAX_ATTR_VALUES)
+        : row.attr_values;
+
+      if (row.source === "attr") {
+        entry.attributes[row.attr_key] = values;
+        if (isTruncated) entry.attrsTruncated = true;
+      } else {
+        entry.resourceAttributes[row.attr_key] = values;
+        if (isTruncated) entry.resAttrsTruncated = true;
+      }
+    }
+
+    // Assemble result
+    const metrics: datasource.DiscoveredMetric[] = nameRows.map((row) => {
+      const key = `${row.MetricName}:${row.MetricType}`;
+      const attrs = attrMap.get(key);
+
+      return {
+        name: row.MetricName,
+        type: row.MetricType,
+        unit: row.MetricUnit || undefined,
+        description: row.MetricDescription || undefined,
+        attributes: {
+          values: attrs?.attributes ?? {},
+          ...(attrs?.attrsTruncated && { _truncated: true }),
+        },
+        resourceAttributes: {
+          values: attrs?.resourceAttributes ?? {},
+          ...(attrs?.resAttrsTruncated && { _truncated: true }),
+        },
+      };
     });
 
-    try {
-      const { namesQuery, attributesQuery } = buildDiscoverMetricsQueries();
-
-      // Query 1: Get metric names
-      const namesResult = await client.query({
-        query: namesQuery,
-        format: "JSONEachRow",
-      });
-      const nameRows = await namesResult.json<DiscoverNameRow>();
-
-      // Query 2: Get attribute keys and values
-      const attrsResult = await client.query({
-        query: attributesQuery,
-        format: "JSONEachRow",
-      });
-      const attrRows = await attrsResult.json<DiscoverAttrRow>();
-
-      // Build lookup map for attributes
-      const attrMap = new Map<
-        string,
-        {
-          attributes: Record<string, string[]>;
-          resourceAttributes: Record<string, string[]>;
-          attrsTruncated: boolean;
-          resAttrsTruncated: boolean;
-        }
-      >();
-
-      for (const row of attrRows) {
-        const key = `${row.MetricName}:${row.MetricType}`;
-        if (!attrMap.has(key)) {
-          attrMap.set(key, {
-            attributes: {},
-            resourceAttributes: {},
-            attrsTruncated: false,
-            resAttrsTruncated: false,
-          });
-        }
-        // Safe: we just ensured the key exists above
-        const entry = attrMap.get(key);
-        if (!entry) continue;
-
-        const isTruncated = row.attr_values.length > MAX_ATTR_VALUES;
-        const values = isTruncated
-          ? row.attr_values.slice(0, MAX_ATTR_VALUES)
-          : row.attr_values;
-
-        if (row.source === "attr") {
-          entry.attributes[row.attr_key] = values;
-          if (isTruncated) entry.attrsTruncated = true;
-        } else {
-          entry.resourceAttributes[row.attr_key] = values;
-          if (isTruncated) entry.resAttrsTruncated = true;
-        }
-      }
-
-      // Assemble result
-      const metrics: datasource.DiscoveredMetric[] = nameRows.map((row) => {
-        const key = `${row.MetricName}:${row.MetricType}`;
-        const attrs = attrMap.get(key);
-
-        return {
-          name: row.MetricName,
-          type: row.MetricType,
-          unit: row.MetricUnit || undefined,
-          description: row.MetricDescription || undefined,
-          attributes: {
-            values: attrs?.attributes ?? {},
-            ...(attrs?.attrsTruncated && { _truncated: true }),
-          },
-          resourceAttributes: {
-            values: attrs?.resourceAttributes ?? {},
-            ...(attrs?.resAttrsTruncated && { _truncated: true }),
-          },
-        };
-      });
-
-      return { metrics };
-    } finally {
-      await client.close();
-    }
+    return { metrics };
   }
 }
