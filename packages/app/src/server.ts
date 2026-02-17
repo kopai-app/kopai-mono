@@ -1,5 +1,4 @@
 import fastify from "fastify";
-import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import {
   jsonSchemaTransformObject,
   jsonSchemaTransform,
@@ -21,16 +20,20 @@ import {
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import FastifyVite from "@fastify/vite";
+import { printStartupBanner } from "./startup-banner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const baseApiServer = fastify({
-  logger: true,
+const apiServer = fastify({
+  logger: { level: "warn" },
 });
 
-// Register swagger on base instance (its types augment FastifyTypeProviderDefault)
+// Add schema validator and serializer
+apiServer.setValidatorCompiler(validatorCompiler);
+apiServer.setSerializerCompiler(serializerCompiler);
+
 const uiRoutes = ["/", "/*"];
-baseApiServer.register(fastifySwagger, {
+apiServer.register(fastifySwagger, {
   openapi: {
     info: {
       title: "Kopai App",
@@ -46,7 +49,7 @@ baseApiServer.register(fastifySwagger, {
   transformObject: jsonSchemaTransformObject,
 });
 
-baseApiServer.register(fastifySwaggerUI, {
+apiServer.register(fastifySwaggerUI, {
   routePrefix: "/documentation",
   logo: {
     type: "image/svg+xml",
@@ -73,11 +76,6 @@ baseApiServer.register(fastifySwaggerUI, {
   },
 });
 
-// Narrow to ZodTypeProvider for route registration
-const apiServer = baseApiServer.withTypeProvider<ZodTypeProvider>();
-apiServer.setValidatorCompiler(validatorCompiler);
-apiServer.setSerializerCompiler(serializerCompiler);
-
 const sqliteDatabase = initializeDatabase(env.SQLITE_DB_FILE_PATH);
 const telemetryDatasource = createOptimizedDatasource(sqliteDatabase);
 
@@ -99,8 +97,8 @@ apiServer.after(() => {
 });
 
 const collectorServer = fastify({
-  logger: true,
-}).withTypeProvider<ZodTypeProvider>();
+  logger: { level: "warn" },
+});
 
 collectorServer.setValidatorCompiler(validatorCompiler);
 collectorServer.setSerializerCompiler(serializerCompiler);
@@ -112,53 +110,26 @@ collectorServer.after(() => {
 });
 
 async function run() {
-  console.log(`|--k> @kopai/app v${version}\n\n`);
-
   await apiServer.ready();
+  await collectorServer.ready();
 
   const host = env.HOST || "localhost";
   const port = env.PORT;
-  const STANDARD_OTEL_HTTP_COLLECTOR_PORT = 4318;
+  const collectorPort = 4318;
 
-  apiServer.listen(
-    {
-      port,
-      host,
-      listenTextResolver(address) {
-        return `API server listening at ${address}`;
-      },
-    },
-    (err, address) => {
-      if (err) {
-        console.error(err);
-        process.exit(1);
-      }
-      apiServer.log.info(
-        `API server documentation available at ${address}/documentation`
-      );
-    }
-  );
+  await apiServer.listen({ port, host });
+  await collectorServer.listen({ port: collectorPort, host });
 
-  await collectorServer.ready();
+  printStartupBanner({ host, port, collectorPort, version });
 
-  collectorServer.listen(
-    {
-      port: STANDARD_OTEL_HTTP_COLLECTOR_PORT,
-      host,
-      listenTextResolver(address) {
-        return `OTEL collector server listening at ${address}:${STANDARD_OTEL_HTTP_COLLECTOR_PORT}`;
-      },
-    },
-    (err) => {
-      if (err) {
-        console.error(err);
-        process.exit(1);
-      }
-    }
-  );
+  apiServer.log.level = "info";
+  collectorServer.log.level = "info";
 }
 
-run();
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 
 closeWithGrace(async ({ signal, err }) => {
   if (err) {

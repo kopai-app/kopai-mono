@@ -1,5 +1,23 @@
 # @kopai/app
 
+## 0.11.0
+
+### Minor Changes
+
+- 21ad97d: Dependency updates
+
+### Patch Changes
+
+- Updated dependencies [21ad97d]
+  - @kopai/collector@0.5.0
+  - @kopai/ui@0.3.0
+
+## 0.10.0
+
+### Minor Changes
+
+- 20dcacc: Cosmetic improvements for CLI startup
+
 ## 0.9.0
 
 ### Minor Changes

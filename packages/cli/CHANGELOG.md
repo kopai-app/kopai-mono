@@ -1,5 +1,18 @@
 # @kopai/cli
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [21ad97d]
+  - @kopai/sdk@0.3.0
+
+## 0.5.0
+
+### Minor Changes
+
+- 20dcacc: Cosmetic improvements for CLI startup
+
 ## 0.4.0
 
 ### Minor Changes
