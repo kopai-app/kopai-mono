@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import {
@@ -40,7 +41,7 @@ let adminClient: ClickHouseClient;
 let baseUrl: string;
 let ds: ClickHouseReadDatasource;
 
-const dirname = new URL(".", import.meta.url).pathname;
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function requestContext() {
   return {

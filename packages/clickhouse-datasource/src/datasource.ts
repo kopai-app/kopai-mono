@@ -16,12 +16,6 @@ import { dateTime64ToNanos } from "./timestamp.js";
 
 const MAX_ATTR_VALUES = 100;
 
-/** Cursor row shape for traces: Timestamp + SpanId. */
-interface TracesCursorRow {
-  Timestamp: string;
-  SpanId: string;
-}
-
 /** Cursor row shape for logs: Timestamp only. */
 interface LogsCursorRow {
   Timestamp: string;
@@ -100,9 +94,12 @@ export class ClickHouseReadDatasource
     const data = hasMore ? rows.slice(0, limit) : rows;
     const mappedData = data.map(mapTracesRow);
 
-    const lastRow = data[data.length - 1] as TracesCursorRow | undefined;
+    const lastRow = data[data.length - 1];
     const nextCursor =
-      hasMore && lastRow
+      hasMore &&
+      lastRow &&
+      typeof lastRow.Timestamp === "string" &&
+      typeof lastRow.SpanId === "string"
         ? `${dateTime64ToNanos(lastRow.Timestamp)}:${lastRow.SpanId}`
         : null;
 
@@ -224,7 +221,6 @@ export class ClickHouseReadDatasource
           resAttrsTruncated: false,
         });
       }
-      // Safe: we just ensured the key exists above
       const entry = attrMap.get(key);
       if (!entry) continue;
 
