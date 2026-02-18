@@ -138,6 +138,7 @@ describe("chGaugeRowSchema", () => {
     expect(result.Flags).toBe(0);
     expect(result.MetricDescription).toBeUndefined();
     expect(result.MetricUnit).toBe("%");
+    expect(result.MetricType).toBe("Gauge");
   });
 });
 
@@ -340,6 +341,11 @@ describe("toNumber", () => {
 
   it("returns undefined for non-numeric string", () => {
     expect(toNumber("abc")).toBeUndefined();
+  });
+
+  it("returns undefined for Infinity", () => {
+    expect(toNumber("Infinity")).toBeUndefined();
+    expect(toNumber("-Infinity")).toBeUndefined();
   });
 });
 

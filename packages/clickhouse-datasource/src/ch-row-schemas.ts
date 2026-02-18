@@ -30,7 +30,7 @@ export function toNumber(
   if (typeof value === "number") return value;
   if (value === "") return undefined;
   const n = Number(value);
-  if (!isNaN(n)) return n;
+  if (isFinite(n)) return n;
   return undefined;
 }
 
@@ -158,10 +158,7 @@ const chMetricsBase = z.object({
   "Exemplars.SpanId": chOptionalStringArray.optional(),
   "Exemplars.TimeUnix": chOptionalTimestampArray.optional(),
   "Exemplars.TraceId": chOptionalStringArray.optional(),
-  "Exemplars.Value": z
-    .array(z.number())
-    .transform((a) => (a.length === 0 ? undefined : a))
-    .optional(),
+  "Exemplars.Value": chNumberArray.optional(),
 });
 
 export const chGaugeRowSchema = chMetricsBase.extend({
@@ -185,7 +182,7 @@ export const chHistogramRowSchema = chMetricsBase.extend({
   Min: z.number().nullable().optional(),
   Max: z.number().nullable().optional(),
   BucketCounts: chNumberArray,
-  ExplicitBounds: z.array(z.number()).optional(),
+  ExplicitBounds: chNumberArray.optional(),
   AggTemporality: chOptionalString,
 });
 
@@ -209,8 +206,8 @@ export const chSummaryRowSchema = chMetricsBase.extend({
   MetricType: z.literal("Summary").default("Summary"),
   Count: chNumber,
   Sum: z.number().optional(),
-  "ValueAtQuantiles.Quantile": z.array(z.number()).optional(),
-  "ValueAtQuantiles.Value": z.array(z.number()).optional(),
+  "ValueAtQuantiles.Quantile": chNumberArray.optional(),
+  "ValueAtQuantiles.Value": chNumberArray.optional(),
 });
 
 // ---------------------------------------------------------------------------

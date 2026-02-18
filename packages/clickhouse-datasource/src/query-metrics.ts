@@ -159,6 +159,11 @@ export function buildMetricsQuery(
       throw new Error("Invalid cursor format: expected '{timestamp}:{id}'");
     }
     const cursorTs = filter.cursor.slice(0, colonIdx);
+    if (!/^\d+$/.test(cursorTs)) {
+      throw new Error(
+        `Invalid cursor timestamp: expected numeric string, got '${cursorTs}'`
+      );
+    }
     params.cursorTs = nanosToDateTime64(cursorTs);
 
     if (sortOrder === "DESC") {
