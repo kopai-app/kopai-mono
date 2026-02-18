@@ -269,18 +269,23 @@ function emptyArrayToUndefined<T>(arr: T[] | undefined): T[] | undefined {
   return arr;
 }
 
-function toNumber(value: unknown): number | undefined {
+/** @internal */
+export function toNumber(value: unknown): number | undefined {
   if (value == null) return undefined;
   if (typeof value === "number") return value;
   if (typeof value === "string") {
+    if (value === "") return undefined;
     const n = Number(value);
     if (!isNaN(n)) return n;
   }
   return undefined;
 }
 
-/** Convert Array(UInt64) which may come as string[] to number[] */
-function toNumberArray(value: unknown): number[] | undefined {
+/** @internal Convert Array(UInt64) which may come as string[] to number[] */
+export function toNumberArray(value: unknown): number[] | undefined {
   if (!Array.isArray(value) || value.length === 0) return undefined;
-  return value.map((v) => Number(v));
+  const nums = value
+    .map((v) => toNumber(v))
+    .filter((n): n is number => n !== undefined);
+  return nums.length > 0 ? nums : undefined;
 }

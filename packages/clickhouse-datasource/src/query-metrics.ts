@@ -225,16 +225,16 @@ ORDER BY MetricName, MetricType`;
   for (const { type, table } of metricTypes) {
     attrUnions.push(
       `SELECT MetricName, '${type}' AS MetricType, 'attr' AS source,
-        arrayJoin(mapKeys(Attributes)) AS attr_key,
-        Attributes[arrayJoin(mapKeys(Attributes))] AS attr_value
+        attr_key, Attributes[attr_key] AS attr_value
     FROM ${table}
+    ARRAY JOIN mapKeys(Attributes) AS attr_key
     WHERE notEmpty(Attributes)`
     );
     attrUnions.push(
       `SELECT MetricName, '${type}', 'res_attr',
-        arrayJoin(mapKeys(ResourceAttributes)) AS attr_key,
-        ResourceAttributes[arrayJoin(mapKeys(ResourceAttributes))] AS attr_value
+        attr_key, ResourceAttributes[attr_key] AS attr_value
     FROM ${table}
+    ARRAY JOIN mapKeys(ResourceAttributes) AS attr_key
     WHERE notEmpty(ResourceAttributes)`
     );
   }
