@@ -5,6 +5,20 @@ import { coerceAttributes, coerceAttributesArray } from "./attributes.js";
 import { ClickHouseDatasourceParseError } from "./clickhouse-datasource-error.js";
 
 // ---------------------------------------------------------------------------
+// ClickHouse-specific row schemas.
+//
+// These parse ClickHouse's wire format and transform it into the canonical
+// @kopai/core types. They can't reuse the core zod schemas because the raw
+// shapes differ:
+//   - Timestamps arrive as DateTime64 strings, not nanos
+//   - Attributes are flat Record<string, string>, not rich AttributeValue maps
+//   - UInt64/Int64 values arrive as strings, not numbers
+//
+// The _Check* type assertions at the bottom ensure these schemas' output types
+// stay in sync with the core types at compile time.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Number coercion helpers (CH returns UInt64/Int64 as strings)
 // ---------------------------------------------------------------------------
 
@@ -237,11 +251,8 @@ export const metricSchemaMap = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Compile-time: verify schema outputs match core types.
-// These are intentionally unused at runtime — they exist solely so tsc errors
-// if a zod schema drifts out of sync with the canonical @kopai/core types.
-// Assert<Expect<A,B>> errors when A and B aren't mutually assignable because
-// Expect resolves to `never`, which doesn't satisfy `extends true`.
+// Compile-time: assert schema outputs match core types.
+// Assert<Expect<A,B>> errors when A and B aren't mutually assignable.
 // ---------------------------------------------------------------------------
 
 type Expect<A, B> = A extends B ? (B extends A ? true : never) : never;
