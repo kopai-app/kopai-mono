@@ -179,7 +179,7 @@ ${whereClause}
 ORDER BY TimeUnix ${sortOrder}
 LIMIT {limit:UInt32}`;
 
-  params.limit = limit + 1;
+  params.limit = limit > 0 ? limit + 1 : 0;
 
   return { query, params };
 }
@@ -191,16 +191,10 @@ export function buildDiscoverMetricsQueries(): {
   namesQuery: string;
   attributesQuery: string;
 } {
-  const metricTypes: Array<{ type: string; table: string }> = [
-    { type: "Gauge", table: "otel_metrics_gauge" },
-    { type: "Sum", table: "otel_metrics_sum" },
-    { type: "Histogram", table: "otel_metrics_histogram" },
-    {
-      type: "ExponentialHistogram",
-      table: "otel_metrics_exponential_histogram",
-    },
-    { type: "Summary", table: "otel_metrics_summary" },
-  ];
+  const metricTypes = Object.entries(TABLE_MAP).map(([type, table]) => ({
+    type,
+    table,
+  }));
 
   // Query 1: Discover metric names
   const nameUnions = metricTypes
