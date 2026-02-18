@@ -1,9 +1,11 @@
 import { createClient, type ClickHouseClient } from "@clickhouse/client";
+import type { ResultSet } from "@clickhouse/client";
 import type {
   dataFilterSchemas,
   denormalizedSignals,
   datasource,
 } from "@kopai/core";
+import type z from "zod";
 import { assertClickHouseRequestContext } from "./types.js";
 import { buildTracesQuery } from "./query-traces.js";
 import { buildLogsQuery } from "./query-logs.js";
@@ -11,36 +13,29 @@ import {
   buildMetricsQuery,
   buildDiscoverMetricsQueries,
 } from "./query-metrics.js";
-import { mapTracesRow, mapLogsRow, mapMetricsRow } from "./row-mappers.js";
-import { dateTime64ToNanos } from "./timestamp.js";
+import {
+  parseChRow,
+  chTracesRowSchema,
+  chLogsRowSchema,
+  chDiscoverNameRowSchema,
+  chDiscoverAttrRowSchema,
+  metricSchemaMap,
+} from "./ch-row-schemas.js";
 
 const MAX_ATTR_VALUES = 100;
 
-/** Cursor row shape for logs: Timestamp only. */
-interface LogsCursorRow {
-  Timestamp: string;
-}
-
-/** Cursor row shape for metrics: TimeUnix only. */
-interface MetricsCursorRow {
-  TimeUnix: string;
-}
-
-/** ClickHouse row from the metric names discovery query. */
-interface DiscoverNameRow {
-  MetricName: string;
-  MetricType: datasource.MetricType;
-  MetricDescription: string;
-  MetricUnit: string;
-}
-
-/** ClickHouse row from the metric attributes discovery query. */
-interface DiscoverAttrRow {
-  MetricName: string;
-  MetricType: string;
-  source: string;
-  attr_key: string;
-  attr_values: string[];
+/** Collect all rows from a ResultSet stream, parsing each with the given schema. */
+async function streamParse<S extends z.ZodType>(
+  resultSet: ResultSet<"JSONEachRow">,
+  schema: S
+): Promise<z.output<S>[]> {
+  const rows: z.output<S>[] = [];
+  for await (const batch of resultSet.stream()) {
+    for (const row of batch) {
+      rows.push(parseChRow(schema, row.json()));
+    }
+  }
+  return rows;
 }
 
 export class ClickHouseReadDatasource
@@ -88,22 +83,17 @@ export class ClickHouseReadDatasource
       auth: { username, password },
       http_headers: { "X-ClickHouse-Database": database },
     });
-    const rows = await resultSet.json<Record<string, unknown>>();
+
+    const rows = await streamParse(resultSet, chTracesRowSchema);
 
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
-    const mappedData = data.map(mapTracesRow);
 
     const lastRow = data[data.length - 1];
     const nextCursor =
-      hasMore &&
-      lastRow &&
-      typeof lastRow.Timestamp === "string" &&
-      typeof lastRow.SpanId === "string"
-        ? `${dateTime64ToNanos(lastRow.Timestamp)}:${lastRow.SpanId}`
-        : null;
+      hasMore && lastRow ? `${lastRow.Timestamp}:${lastRow.SpanId}` : null;
 
-    return { data: mappedData, nextCursor };
+    return { data, nextCursor };
   }
 
   async getLogs(
@@ -127,17 +117,16 @@ export class ClickHouseReadDatasource
       auth: { username, password },
       http_headers: { "X-ClickHouse-Database": database },
     });
-    const rows = await resultSet.json<Record<string, unknown>>();
+
+    const rows = await streamParse(resultSet, chLogsRowSchema);
 
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
-    const mappedData = data.map(mapLogsRow);
 
-    const lastRow = data[data.length - 1] as LogsCursorRow | undefined;
-    const nextCursor =
-      hasMore && lastRow ? `${dateTime64ToNanos(lastRow.Timestamp)}:0` : null;
+    const lastRow = data[data.length - 1];
+    const nextCursor = hasMore && lastRow ? `${lastRow.Timestamp}:0` : null;
 
-    return { data: mappedData, nextCursor };
+    return { data, nextCursor };
   }
 
   async getMetrics(
@@ -154,6 +143,7 @@ export class ClickHouseReadDatasource
     const { query, params } = buildMetricsQuery(filter);
     const limit = filter.limit ?? 100;
     const metricType = filter.metricType;
+    const schema = metricSchemaMap[metricType];
 
     const resultSet = await this.client.query({
       query,
@@ -162,17 +152,16 @@ export class ClickHouseReadDatasource
       auth: { username, password },
       http_headers: { "X-ClickHouse-Database": database },
     });
-    const rows = await resultSet.json<Record<string, unknown>>();
+
+    const rows = await streamParse(resultSet, schema);
 
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
-    const mappedData = data.map((row) => mapMetricsRow(row, metricType));
 
-    const lastRow = data[data.length - 1] as MetricsCursorRow | undefined;
-    const nextCursor =
-      hasMore && lastRow ? `${dateTime64ToNanos(lastRow.TimeUnix)}:0` : null;
+    const lastRow = data[data.length - 1];
+    const nextCursor = hasMore && lastRow ? `${lastRow.TimeUnix}:0` : null;
 
-    return { data: mappedData, nextCursor };
+    return { data, nextCursor };
   }
 
   async discoverMetrics(options?: {
@@ -189,7 +178,7 @@ export class ClickHouseReadDatasource
     const [nameRows, attrRows] = await Promise.all([
       this.client
         .query({ query: namesQuery, format: "JSONEachRow", auth, http_headers })
-        .then((r) => r.json<DiscoverNameRow>()),
+        .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
       this.client
         .query({
           query: attributesQuery,
@@ -197,7 +186,7 @@ export class ClickHouseReadDatasource
           auth,
           http_headers,
         })
-        .then((r) => r.json<DiscoverAttrRow>()),
+        .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
     ]);
 
     // Build lookup map for attributes
