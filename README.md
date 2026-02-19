@@ -22,7 +22,7 @@ A public Docker image is available on GitHub Container Registry:
 docker run --rm -p 8000:8000 -p 4318:4318 ghcr.io/kopai-app/kopai:latest
 ```
 
-The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-images) (`dhi.io/node:24`) and published automatically on each release.
+The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-images) (`dhi.io/node:24-debian13`) and published automatically on each release.
 
 ## Packages
 
