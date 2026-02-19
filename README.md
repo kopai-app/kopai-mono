@@ -14,6 +14,16 @@ npx @kopai/app start
 
 See: [OpenTelemetry Demo App running with @kopai/app](https://github.com/kopai-app/opentelemetry-demo/tree/main/kopai).
 
+## Docker
+
+A public Docker image is available on GitHub Container Registry:
+
+```
+docker run --rm -p 8000:8000 -p 4318:4318 ghcr.io/kopai-app/kopai:latest
+```
+
+The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-images) (`dhi.io/node:24`) and published automatically on each release.
+
 ## Packages
 
 | Package                                                  | Description                | Version                                                                                                                              |

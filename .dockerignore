@@ -1,0 +1,8 @@
+node_modules
+.git
+.github
+.changeset
+.storybook
+**/node_modules
+**/.turbo
+**/coverage
