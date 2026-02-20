@@ -14,6 +14,14 @@ program
   .version(pkg.version)
   .addCommand(createTracesCommand())
   .addCommand(createLogsCommand())
-  .addCommand(createMetricsCommand());
+  .addCommand(createMetricsCommand())
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ kopai traces search                                          # localhost:8000 (default, for @kopai/app running locally)
+  $ kopai traces search --url https://example.com/signals        # remote instance
+  $ kopai logs search --url https://example.com/signals --token kpi_…  # with auth`
+  );
 
 program.parse();

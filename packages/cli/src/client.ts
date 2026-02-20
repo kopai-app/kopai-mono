@@ -1,5 +1,14 @@
+import type { Command } from "commander";
 import { KopaiClient } from "@kopai/sdk";
 import { loadConfig } from "./config.js";
+
+export function withConnectionOptions<T extends Command>(cmd: T): T {
+  return cmd
+    .option("--url <url>", "API base URL")
+    .option("--token <token>", "Auth token")
+    .option("-c, --config <path>", "Config file path")
+    .option("--timeout <ms>", "Request timeout") as T;
+}
 
 export interface ClientOptions {
   config?: string;
