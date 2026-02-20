@@ -2,4 +2,4 @@
 "@kopai/cli": patch
 ---
 
-Improve --help
+Promote --url, --token, --config, --timeout to top-level and all subcommands; add usage examples to --help
