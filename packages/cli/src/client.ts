@@ -25,10 +25,13 @@ export function createClient(opts: ClientOptions): KopaiClient {
   const url = opts.url ?? fileConfig.url ?? DEFAULT_URL;
   const token = opts.token ?? fileConfig.token;
 
+  const timeout =
+    opts.timeout != null ? parseInt(String(opts.timeout), 10) : undefined;
+
   return new KopaiClient({
     baseUrl: url,
     token,
-    timeout: opts.timeout,
+    timeout: Number.isNaN(timeout) ? undefined : timeout,
   });
 }
 
