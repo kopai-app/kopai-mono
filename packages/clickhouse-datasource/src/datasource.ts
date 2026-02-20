@@ -169,13 +169,29 @@ export class ClickHouseReadDatasource
       http_headers: { "X-ClickHouse-Database": database },
     });
 
-    const rows = await streamParse(resultSet, schema);
+    const rows: {
+      parsed: z.output<typeof schema>;
+      _rowHash: string;
+    }[] = [];
+    for await (const batch of resultSet.stream()) {
+      for (const row of batch) {
+        const json = row.json() as Record<string, unknown>;
+        rows.push({
+          parsed: parseChRow(schema, json),
+          _rowHash: String(json._rowHash),
+        });
+      }
+    }
 
     const hasMore = rows.length > limit;
-    const data = hasMore ? rows.slice(0, limit) : rows;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const data = items.map((r) => r.parsed);
 
-    const lastRow = data[data.length - 1];
-    const nextCursor = hasMore && lastRow ? `${lastRow.TimeUnix}:0` : null;
+    const lastItem = items[items.length - 1];
+    const nextCursor =
+      hasMore && lastItem
+        ? `${lastItem.parsed.TimeUnix}:${lastItem._rowHash}`
+        : null;
 
     return { data, nextCursor };
   }

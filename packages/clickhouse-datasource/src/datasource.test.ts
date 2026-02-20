@@ -104,6 +104,7 @@ beforeAll(async () => {
   await seedLogs(dbClient);
   await seedDuplicateTimestampLogs(dbClient);
   await seedMetrics(dbClient);
+  await seedDuplicateTimestampMetrics(dbClient);
   await seedTruncationMetric(dbClient);
   await seedMultiAttrMetric(dbClient);
 
@@ -815,6 +816,40 @@ async function seedTruncationMetric(client: ClickHouseClient) {
   });
 }
 
+async function seedDuplicateTimestampMetrics(client: ClickHouseClient) {
+  const base = {
+    ResourceAttributes: {},
+    ResourceSchemaUrl: "",
+    ScopeName: "",
+    ScopeVersion: "",
+    ScopeAttributes: {},
+    ScopeDroppedAttrCount: 0,
+    ScopeSchemaUrl: "",
+    ServiceName: "dup-metric-service",
+    MetricName: "dup.ts.gauge",
+    MetricDescription: "",
+    MetricUnit: "1",
+    StartTimeUnix: "2024-01-01 00:00:00.000000000",
+    TimeUnix: "2024-01-01 00:00:10.000000000",
+    Value: 1,
+    Flags: 0,
+    "Exemplars.FilteredAttributes": [],
+    "Exemplars.TimeUnix": [],
+    "Exemplars.Value": [],
+    "Exemplars.SpanId": [],
+    "Exemplars.TraceId": [],
+  };
+  await client.insert({
+    table: "otel_metrics_gauge",
+    values: [
+      { ...base, Attributes: { idx: "0" } },
+      { ...base, Attributes: { idx: "1" } },
+      { ...base, Attributes: { idx: "2" } },
+    ],
+    format: "JSONEachRow",
+  });
+}
+
 /**
  * Seed a gauge metric with multiple attributes on a single row.
  * This exposes the double-arrayJoin cross-product bug in discovery queries:
@@ -1318,6 +1353,45 @@ describe("ClickHouseReadDatasource", () => {
         })
       ).resolves.toEqual({ data: [], nextCursor: null });
     });
+
+    it("cursor pagination does not skip rows with identical timestamps", async () => {
+      const page1 = await ds.getMetrics({
+        metricType: "Gauge",
+        metricName: "dup.ts.gauge",
+        limit: 1,
+        sortOrder: "ASC",
+        requestContext: requestContext(),
+      });
+      expect(page1.data.length).toBe(1);
+      expect(page1.nextCursor).not.toBeNull();
+
+      const page2 = await ds.getMetrics({
+        metricType: "Gauge",
+        metricName: "dup.ts.gauge",
+        limit: 1,
+        sortOrder: "ASC",
+        cursor: page1.nextCursor!,
+        requestContext: requestContext(),
+      });
+      expect(page2.data.length).toBe(1);
+      expect(page2.nextCursor).not.toBeNull();
+
+      const page3 = await ds.getMetrics({
+        metricType: "Gauge",
+        metricName: "dup.ts.gauge",
+        limit: 1,
+        sortOrder: "ASC",
+        cursor: page2.nextCursor!,
+        requestContext: requestContext(),
+      });
+      expect(page3.data.length).toBe(1);
+      expect(page3.nextCursor).toBeNull();
+
+      const allAttrs = [page1.data[0]!, page2.data[0]!, page3.data[0]!].map(
+        (r) => JSON.stringify(r.Attributes)
+      );
+      expect(new Set(allAttrs).size).toBe(3);
+    });
   });
 
   describe("discoverMetrics", () => {
@@ -1326,11 +1400,12 @@ describe("ClickHouseReadDatasource", () => {
         requestContext: requestContext(),
       });
 
-      // 5 original metrics + 1 truncation test metric + 1 multi-attr metric
-      expect(result.metrics.length).toBe(7);
+      // 5 original metrics + 1 dup-timestamp metric + 1 truncation test metric + 1 multi-attr metric
+      expect(result.metrics.length).toBe(8);
 
       const names = result.metrics.map((m) => m.name).sort();
       expect(names).toEqual([
+        "dup.ts.gauge",
         "http.server.request.count",
         "http.server.request.duration",
         "http.server.request.duration.exp",
@@ -1509,8 +1584,8 @@ describe("ClickHouseReadDatasource", () => {
       const tenantANames = tenantA.metrics.map((m) => m.name).sort();
       const tenantBNames = tenantB.metrics.map((m) => m.name).sort();
 
-      // Tenant A has 7 metrics, tenant B has 1
-      expect(tenantANames.length).toBe(7);
+      // Tenant A has 8 metrics, tenant B has 1
+      expect(tenantANames.length).toBe(8);
       expect(tenantBNames).toEqual(["tenant.b.gauge"]);
 
       // No cross-contamination

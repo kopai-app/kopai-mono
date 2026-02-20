@@ -144,25 +144,31 @@ export function buildMetricsQuery(
     }
   }
 
-  // Cursor pagination
-  // Cursor format: "{nanosTimestamp}:0" — metrics use timestamp-only cursor
+  // Cursor pagination with sipHash64 tiebreaker
+  // Cursor format: "{nanosTimestamp}:{hash}"
   if (filter.cursor) {
     const colonIdx = filter.cursor.indexOf(":");
     if (colonIdx === -1) {
-      throw new Error("Invalid cursor format: expected '{timestamp}:{id}'");
+      throw new Error("Invalid cursor format: expected '{timestamp}:{hash}'");
     }
     const cursorTs = filter.cursor.slice(0, colonIdx);
+    const cursorHash = filter.cursor.slice(colonIdx + 1);
     if (!/^\d+$/.test(cursorTs)) {
       throw new Error(
         `Invalid cursor timestamp: expected numeric string, got '${cursorTs}'`
       );
     }
     params.cursorTs = nanosToDateTime64(cursorTs);
+    params.cursorHash = cursorHash;
 
     if (sortOrder === "DESC") {
-      conditions.push("TimeUnix < {cursorTs:DateTime64(9)}");
+      conditions.push(
+        `(TimeUnix < {cursorTs:DateTime64(9)} OR (TimeUnix = {cursorTs:DateTime64(9)} AND sipHash64(TimeUnix, ServiceName, MetricName, toString(Attributes)) < {cursorHash:UInt64}))`
+      );
     } else {
-      conditions.push("TimeUnix > {cursorTs:DateTime64(9)}");
+      conditions.push(
+        `(TimeUnix > {cursorTs:DateTime64(9)} OR (TimeUnix = {cursorTs:DateTime64(9)} AND sipHash64(TimeUnix, ServiceName, MetricName, toString(Attributes)) > {cursorHash:UInt64}))`
+      );
     }
   }
 
@@ -171,10 +177,11 @@ export function buildMetricsQuery(
 
   const query = `
 SELECT
-  ${columns.join(",\n  ")}
+  ${columns.join(",\n  ")},
+  sipHash64(TimeUnix, ServiceName, MetricName, toString(Attributes)) AS _rowHash
 FROM ${table}
 ${whereClause}
-ORDER BY TimeUnix ${sortOrder}
+ORDER BY TimeUnix ${sortOrder}, _rowHash ${sortOrder}
 LIMIT {limit:UInt32}`;
 
   params.limit = limit + 1;
