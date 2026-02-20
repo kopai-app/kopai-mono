@@ -1,5 +1,11 @@
 # @kopai/app
 
+## 0.12.0
+
+### Minor Changes
+
+- 560e15c: Fix ugly warning displayed at /documentation
+
 ## 0.11.0
 
 ### Minor Changes
