@@ -1,5 +1,11 @@
 # @kopai/cli
 
+## 0.5.2
+
+### Patch Changes
+
+- 94f2112: Promote --url, --token, --config, --timeout to top-level and all subcommands; add usage examples to --help
+
 ## 0.5.1
 
 ### Patch Changes
