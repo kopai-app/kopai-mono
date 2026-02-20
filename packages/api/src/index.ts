@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { type datasource } from "@kopai/core";
+
 import {
   serializerCompiler,
   validatorCompiler,
@@ -28,3 +29,9 @@ export const signalsRoutes: FastifyPluginAsyncZod<{
     readMetricsDatasource: opts.readTelemetryDatasource,
   });
 };
+
+declare module "fastify" {
+  interface FastifyRequest {
+    requestContext?: unknown;
+  }
+}

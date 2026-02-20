@@ -28,7 +28,10 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
       },
     },
     handler: async (req, res) => {
-      const result = await opts.readMetricsDatasource.getMetrics(req.body);
+      const result = await opts.readMetricsDatasource.getMetrics({
+        ...req.body,
+        requestContext: req.requestContext,
+      });
       res.send(result);
     },
   });
@@ -44,8 +47,10 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
         "5xx": problemDetailsSchema,
       },
     },
-    handler: async (_req, res) => {
-      const result = await opts.readMetricsDatasource.discoverMetrics();
+    handler: async (req, res) => {
+      const result = await opts.readMetricsDatasource.discoverMetrics({
+        requestContext: req.requestContext,
+      });
       res.send(result);
     },
   });

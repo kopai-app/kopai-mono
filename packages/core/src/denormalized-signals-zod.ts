@@ -370,6 +370,12 @@ export const otelExponentialHistogramSchema = metricsBaseSchema.extend({
     .number()
     .optional()
     .describe("Offset for negative bucket indices."),
+  ZeroThreshold: z
+    .number()
+    .optional()
+    .describe(
+      "Width of the zero region. Values within [-ZeroThreshold, ZeroThreshold] go to the zero count bucket."
+    ),
   AggTemporality: z
     .string()
     .optional()

@@ -2,7 +2,9 @@ packages:
   - packages/*
 
 ignoredBuiltDependencies:
+  - cpu-features
   - protobufjs
+  - ssh2
 
 minimumReleaseAge: 4320
 
