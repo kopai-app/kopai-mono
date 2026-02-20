@@ -1,15 +1,6 @@
 import type { dataFilterSchemas, datasource } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
-/** Regex for validating attribute keys */
-const ATTRIBUTE_KEY_PATTERN = /^[a-zA-Z0-9._\-/]+$/;
-
-function validateAttributeKey(key: string): void {
-  if (!ATTRIBUTE_KEY_PATTERN.test(key)) {
-    throw new Error(`Invalid attribute key: ${key}`);
-  }
-}
-
 const TABLE_MAP: Record<datasource.MetricType, string> = {
   Gauge: "otel_metrics_gauge",
   Sum: "otel_metrics_sum",
@@ -122,8 +113,10 @@ export function buildMetricsQuery(
   if (filter.attributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.attributes)) {
-      validateAttributeKey(key);
-      conditions.push(`Attributes['${key}'] = {attrVal${String(i)}:String}`);
+      conditions.push(
+        `Attributes[{attrKey${String(i)}:String}] = {attrVal${String(i)}:String}`
+      );
+      params[`attrKey${String(i)}`] = key;
       params[`attrVal${String(i)}`] = value;
       i++;
     }
@@ -131,10 +124,10 @@ export function buildMetricsQuery(
   if (filter.resourceAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.resourceAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `ResourceAttributes['${key}'] = {resAttrVal${String(i)}:String}`
+        `ResourceAttributes[{resAttrKey${String(i)}:String}] = {resAttrVal${String(i)}:String}`
       );
+      params[`resAttrKey${String(i)}`] = key;
       params[`resAttrVal${String(i)}`] = value;
       i++;
     }
@@ -142,10 +135,10 @@ export function buildMetricsQuery(
   if (filter.scopeAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.scopeAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `ScopeAttributes['${key}'] = {scopeAttrVal${String(i)}:String}`
+        `ScopeAttributes[{scopeAttrKey${String(i)}:String}] = {scopeAttrVal${String(i)}:String}`
       );
+      params[`scopeAttrKey${String(i)}`] = key;
       params[`scopeAttrVal${String(i)}`] = value;
       i++;
     }
@@ -184,7 +177,7 @@ ${whereClause}
 ORDER BY TimeUnix ${sortOrder}
 LIMIT {limit:UInt32}`;
 
-  params.limit = limit > 0 ? limit + 1 : 0;
+  params.limit = limit + 1;
 
   return { query, params };
 }

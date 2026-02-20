@@ -102,6 +102,7 @@ beforeAll(async () => {
   // Seed test data
   await seedTraces(dbClient);
   await seedLogs(dbClient);
+  await seedDuplicateTimestampLogs(dbClient);
   await seedMetrics(dbClient);
   await seedTruncationMetric(dbClient);
   await seedMultiAttrMetric(dbClient);
@@ -492,6 +493,66 @@ async function seedLogs(client: ClickHouseClient) {
         SeverityNumber: 13,
         ServiceName: "order-service",
         Body: "Slow query detected",
+        ResourceSchemaUrl: "",
+        ResourceAttributes: {},
+        ScopeSchemaUrl: "",
+        ScopeName: "",
+        ScopeVersion: "",
+        ScopeAttributes: {},
+        LogAttributes: {},
+      },
+    ],
+    format: "JSONEachRow",
+  });
+}
+
+async function seedDuplicateTimestampLogs(client: ClickHouseClient) {
+  await client.insert({
+    table: "otel_logs",
+    values: [
+      {
+        Timestamp: "2024-01-01 00:00:05.000000000",
+        TraceId: "",
+        SpanId: "",
+        TraceFlags: 0,
+        SeverityText: "INFO",
+        SeverityNumber: 9,
+        ServiceName: "dup-service",
+        Body: "same-ts-log-A",
+        ResourceSchemaUrl: "",
+        ResourceAttributes: {},
+        ScopeSchemaUrl: "",
+        ScopeName: "",
+        ScopeVersion: "",
+        ScopeAttributes: {},
+        LogAttributes: {},
+      },
+      {
+        Timestamp: "2024-01-01 00:00:05.000000000",
+        TraceId: "",
+        SpanId: "",
+        TraceFlags: 0,
+        SeverityText: "INFO",
+        SeverityNumber: 9,
+        ServiceName: "dup-service",
+        Body: "same-ts-log-B",
+        ResourceSchemaUrl: "",
+        ResourceAttributes: {},
+        ScopeSchemaUrl: "",
+        ScopeName: "",
+        ScopeVersion: "",
+        ScopeAttributes: {},
+        LogAttributes: {},
+      },
+      {
+        Timestamp: "2024-01-01 00:00:05.000000000",
+        TraceId: "",
+        SpanId: "",
+        TraceFlags: 0,
+        SeverityText: "INFO",
+        SeverityNumber: 9,
+        ServiceName: "dup-service",
+        Body: "same-ts-log-C",
         ResourceSchemaUrl: "",
         ResourceAttributes: {},
         ScopeSchemaUrl: "",
@@ -974,22 +1035,13 @@ describe("ClickHouseReadDatasource", () => {
       expect(firstRow(result.data).SpanId).toBe("span-001");
     });
 
-    it("rejects invalid attribute keys", async () => {
+    it("accepts attribute keys with colons (valid OTel semconv)", async () => {
       await expect(
         ds.getTraces({
-          spanAttributes: { "key with spaces": "value" },
+          spanAttributes: { "k8s.pod:name": "foo" },
           requestContext: requestContext(),
         })
-      ).rejects.toThrow("Invalid attribute key");
-    });
-
-    it("rejects SQL injection in attribute keys", async () => {
-      await expect(
-        ds.getTraces({
-          spanAttributes: { "'] OR 1=1 --": "value" },
-          requestContext: requestContext(),
-        })
-      ).rejects.toThrow("Invalid attribute key");
+      ).resolves.toEqual({ data: [], nextCursor: null });
     });
   });
 
@@ -997,7 +1049,7 @@ describe("ClickHouseReadDatasource", () => {
     it("returns all logs with no filters", async () => {
       const result = await ds.getLogs({ requestContext: requestContext() });
 
-      expect(result.data.length).toBe(3);
+      expect(result.data.length).toBe(6);
     });
 
     it("filters by serviceName", async () => {
@@ -1046,16 +1098,18 @@ describe("ClickHouseReadDatasource", () => {
 
     it("supports cursor pagination", async () => {
       const page1 = await ds.getLogs({
-        limit: 2,
+        serviceName: "user-service",
+        limit: 1,
         sortOrder: "DESC",
         requestContext: requestContext(),
       });
 
-      expect(page1.data.length).toBe(2);
+      expect(page1.data.length).toBe(1);
       const cursor = defined(page1.nextCursor, "nextCursor");
 
       const page2 = await ds.getLogs({
-        limit: 2,
+        serviceName: "user-service",
+        limit: 1,
         sortOrder: "DESC",
         cursor,
         requestContext: requestContext(),
@@ -1074,6 +1128,42 @@ describe("ClickHouseReadDatasource", () => {
       expectAscending(result.data.map((row) => BigInt(row.Timestamp)));
     });
 
+    it("cursor pagination does not skip rows with identical timestamps", async () => {
+      const page1 = await ds.getLogs({
+        serviceName: "dup-service",
+        limit: 1,
+        sortOrder: "ASC",
+        requestContext: requestContext(),
+      });
+      expect(page1.data.length).toBe(1);
+      expect(page1.nextCursor).not.toBeNull();
+
+      const page2 = await ds.getLogs({
+        serviceName: "dup-service",
+        limit: 1,
+        sortOrder: "ASC",
+        cursor: page1.nextCursor!,
+        requestContext: requestContext(),
+      });
+      expect(page2.data.length).toBe(1);
+      expect(page2.nextCursor).not.toBeNull();
+
+      const page3 = await ds.getLogs({
+        serviceName: "dup-service",
+        limit: 1,
+        sortOrder: "ASC",
+        cursor: page2.nextCursor!,
+        requestContext: requestContext(),
+      });
+      expect(page3.data.length).toBe(1);
+      expect(page3.nextCursor).toBeNull();
+
+      const allBodies = [page1.data[0]!, page2.data[0]!, page3.data[0]!].map(
+        (r) => r.Body
+      );
+      expect(new Set(allBodies).size).toBe(3);
+    });
+
     it("escapes ILIKE special characters in bodyContains", async () => {
       // "%" should not match everything — none of our seed log bodies contain literal "%"
       const result = await ds.getLogs({
@@ -1082,6 +1172,15 @@ describe("ClickHouseReadDatasource", () => {
       });
 
       expect(result.data.length).toBe(0);
+    });
+
+    it("accepts attribute keys with colons (valid OTel semconv)", async () => {
+      await expect(
+        ds.getLogs({
+          logAttributes: { "k8s.pod:name": "foo" },
+          requestContext: requestContext(),
+        })
+      ).resolves.toEqual({ data: [], nextCursor: null });
     });
   });
 
@@ -1208,6 +1307,16 @@ describe("ClickHouseReadDatasource", () => {
       });
 
       expectAscending(result.data.map((row) => BigInt(row.TimeUnix)));
+    });
+
+    it("accepts attribute keys with colons (valid OTel semconv)", async () => {
+      await expect(
+        ds.getMetrics({
+          metricType: "Gauge",
+          attributes: { "k8s.pod:name": "foo" },
+          requestContext: requestContext(),
+        })
+      ).resolves.toEqual({ data: [], nextCursor: null });
     });
   });
 
@@ -1353,8 +1462,8 @@ describe("ClickHouseReadDatasource", () => {
         requestContext: tenantBRequestContext(),
       });
 
-      // Tenant A has 3 logs, tenant B has 1
-      expect(tenantA.data.length).toBe(3);
+      // Tenant A has 6 logs (3 original + 3 dup-timestamp), tenant B has 1
+      expect(tenantA.data.length).toBe(6);
       expect(tenantB.data.length).toBe(1);
 
       // No cross-contamination

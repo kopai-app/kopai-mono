@@ -1,15 +1,6 @@
 import type { dataFilterSchemas } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
-/** Regex for validating attribute keys */
-const ATTRIBUTE_KEY_PATTERN = /^[a-zA-Z0-9._\-/]+$/;
-
-function validateAttributeKey(key: string): void {
-  if (!ATTRIBUTE_KEY_PATTERN.test(key)) {
-    throw new Error(`Invalid attribute key: ${key}`);
-  }
-}
-
 /**
  * Escape special ILIKE pattern characters to prevent injection.
  * ClickHouse ILIKE interprets: % (any chars), _ (single char), \ (escape)
@@ -79,10 +70,10 @@ export function buildLogsQuery(filter: dataFilterSchemas.LogsDataFilter): {
   if (filter.logAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.logAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `LogAttributes['${key}'] = {logAttrVal${String(i)}:String}`
+        `LogAttributes[{logAttrKey${String(i)}:String}] = {logAttrVal${String(i)}:String}`
       );
+      params[`logAttrKey${String(i)}`] = key;
       params[`logAttrVal${String(i)}`] = value;
       i++;
     }
@@ -90,10 +81,10 @@ export function buildLogsQuery(filter: dataFilterSchemas.LogsDataFilter): {
   if (filter.resourceAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.resourceAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `ResourceAttributes['${key}'] = {resAttrVal${String(i)}:String}`
+        `ResourceAttributes[{resAttrKey${String(i)}:String}] = {resAttrVal${String(i)}:String}`
       );
+      params[`resAttrKey${String(i)}`] = key;
       params[`resAttrVal${String(i)}`] = value;
       i++;
     }
@@ -101,30 +92,39 @@ export function buildLogsQuery(filter: dataFilterSchemas.LogsDataFilter): {
   if (filter.scopeAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.scopeAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `ScopeAttributes['${key}'] = {scopeAttrVal${String(i)}:String}`
+        `ScopeAttributes[{scopeAttrKey${String(i)}:String}] = {scopeAttrVal${String(i)}:String}`
       );
+      params[`scopeAttrKey${String(i)}`] = key;
       params[`scopeAttrVal${String(i)}`] = value;
       i++;
     }
   }
 
-  // Cursor pagination
-  // Cursor format: "{nanosTimestamp}:0" — logs use timestamp-only cursor (no stable tiebreaker)
+  // Cursor pagination with sipHash64 tiebreaker
   if (filter.cursor) {
     const colonIdx = filter.cursor.indexOf(":");
     if (colonIdx === -1) {
-      throw new Error("Invalid cursor format: expected '{timestamp}:{id}'");
+      throw new Error("Invalid cursor format: expected '{timestamp}:{hash}'");
     }
     const cursorTs = filter.cursor.slice(0, colonIdx);
+    const cursorHash = filter.cursor.slice(colonIdx + 1);
+    if (!/^\d+$/.test(cursorTs)) {
+      throw new Error(
+        `Invalid cursor timestamp: expected numeric string, got '${cursorTs}'`
+      );
+    }
     params.cursorTs = nanosToDateTime64(cursorTs);
+    params.cursorHash = cursorHash;
 
-    // For logs, cursor only uses timestamp (no stable tiebreaker)
     if (sortOrder === "DESC") {
-      conditions.push("Timestamp < {cursorTs:DateTime64(9)}");
+      conditions.push(
+        `(Timestamp < {cursorTs:DateTime64(9)} OR (Timestamp = {cursorTs:DateTime64(9)} AND sipHash64(Timestamp, Body, ServiceName, TraceId, SpanId) < {cursorHash:UInt64}))`
+      );
     } else {
-      conditions.push("Timestamp > {cursorTs:DateTime64(9)}");
+      conditions.push(
+        `(Timestamp > {cursorTs:DateTime64(9)} OR (Timestamp = {cursorTs:DateTime64(9)} AND sipHash64(Timestamp, Body, ServiceName, TraceId, SpanId) > {cursorHash:UInt64}))`
+      );
     }
   }
 
@@ -147,10 +147,11 @@ SELECT
   ScopeName,
   ScopeVersion,
   ScopeAttributes,
-  LogAttributes
+  LogAttributes,
+  sipHash64(Timestamp, Body, ServiceName, TraceId, SpanId) AS _rowHash
 FROM otel_logs
 ${whereClause}
-ORDER BY Timestamp ${sortOrder}
+ORDER BY Timestamp ${sortOrder}, _rowHash ${sortOrder}
 LIMIT {limit:UInt32}`;
 
   params.limit = limit + 1;

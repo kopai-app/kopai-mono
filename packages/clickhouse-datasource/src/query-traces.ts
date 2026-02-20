@@ -1,15 +1,6 @@
 import type { dataFilterSchemas } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
-/** Regex for validating attribute keys (no SQL injection via key names) */
-const ATTRIBUTE_KEY_PATTERN = /^[a-zA-Z0-9._\-/]+$/;
-
-function validateAttributeKey(key: string): void {
-  if (!ATTRIBUTE_KEY_PATTERN.test(key)) {
-    throw new Error(`Invalid attribute key: ${key}`);
-  }
-}
-
 export function buildTracesQuery(filter: dataFilterSchemas.TracesDataFilter): {
   query: string;
   params: Record<string, unknown>;
@@ -77,10 +68,10 @@ export function buildTracesQuery(filter: dataFilterSchemas.TracesDataFilter): {
   if (filter.spanAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.spanAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `SpanAttributes['${key}'] = {spanAttrVal${String(i)}:String}`
+        `SpanAttributes[{spanAttrKey${String(i)}:String}] = {spanAttrVal${String(i)}:String}`
       );
+      params[`spanAttrKey${String(i)}`] = key;
       params[`spanAttrVal${String(i)}`] = value;
       i++;
     }
@@ -88,10 +79,10 @@ export function buildTracesQuery(filter: dataFilterSchemas.TracesDataFilter): {
   if (filter.resourceAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.resourceAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `ResourceAttributes['${key}'] = {resAttrVal${String(i)}:String}`
+        `ResourceAttributes[{resAttrKey${String(i)}:String}] = {resAttrVal${String(i)}:String}`
       );
+      params[`resAttrKey${String(i)}`] = key;
       params[`resAttrVal${String(i)}`] = value;
       i++;
     }
@@ -99,10 +90,10 @@ export function buildTracesQuery(filter: dataFilterSchemas.TracesDataFilter): {
   if (filter.eventsAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.eventsAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `arrayExists(x -> x['${key}'] = {evtAttrVal${String(i)}:String}, \`Events.Attributes\`)`
+        `arrayExists(x -> x[{evtAttrKey${String(i)}:String}] = {evtAttrVal${String(i)}:String}, \`Events.Attributes\`)`
       );
+      params[`evtAttrKey${String(i)}`] = key;
       params[`evtAttrVal${String(i)}`] = value;
       i++;
     }
@@ -110,10 +101,10 @@ export function buildTracesQuery(filter: dataFilterSchemas.TracesDataFilter): {
   if (filter.linksAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.linksAttributes)) {
-      validateAttributeKey(key);
       conditions.push(
-        `arrayExists(x -> x['${key}'] = {lnkAttrVal${String(i)}:String}, \`Links.Attributes\`)`
+        `arrayExists(x -> x[{lnkAttrKey${String(i)}:String}] = {lnkAttrVal${String(i)}:String}, \`Links.Attributes\`)`
       );
+      params[`lnkAttrKey${String(i)}`] = key;
       params[`lnkAttrVal${String(i)}`] = value;
       i++;
     }
@@ -127,6 +118,11 @@ export function buildTracesQuery(filter: dataFilterSchemas.TracesDataFilter): {
     }
     const cursorTs = filter.cursor.slice(0, colonIdx);
     const cursorSpanId = filter.cursor.slice(colonIdx + 1);
+    if (!/^\d+$/.test(cursorTs)) {
+      throw new Error(
+        `Invalid cursor timestamp: expected numeric string, got '${cursorTs}'`
+      );
+    }
 
     params.cursorTs = nanosToDateTime64(cursorTs);
     params.cursorSpanId = cursorSpanId;
