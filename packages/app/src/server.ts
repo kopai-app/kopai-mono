@@ -24,6 +24,21 @@ import { printStartupBanner } from "./startup-banner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+function hasComponentSchemas(
+  doc: unknown
+): doc is { components: { schemas: Record<string, object> } } {
+  return (
+    typeof doc === "object" &&
+    doc !== null &&
+    "components" in doc &&
+    typeof doc.components === "object" &&
+    doc.components !== null &&
+    "schemas" in doc.components &&
+    typeof doc.components.schemas === "object" &&
+    doc.components.schemas !== null
+  );
+}
+
 const apiServer = fastify({
   logger: { level: "warn" },
 });
@@ -46,7 +61,41 @@ apiServer.register(fastifySwagger, {
     if (uiRoutes.includes(url)) return { schema: { hide: true }, url };
     return jsonSchemaTransform({ schema, url, ...rest });
   },
-  transformObject: jsonSchemaTransformObject,
+  transformObject: (input) => {
+    const result = jsonSchemaTransformObject(input);
+    // Fix: z.lazy() recursive schemas generate $ref to schema0
+    // but fastify-type-provider-zod doesn't define it in components.
+    // Inject the missing schema definition and rename schema0 → AttributeValue.
+    const raw = JSON.stringify(result);
+    const renamed = raw.replaceAll(
+      "#/components/schemas/schema0",
+      "#/components/schemas/AttributeValue"
+    );
+    const patched: unknown = JSON.parse(renamed);
+    if (
+      hasComponentSchemas(patched) &&
+      !patched.components.schemas.AttributeValue
+    ) {
+      patched.components.schemas.AttributeValue = {
+        anyOf: [
+          { type: "string" },
+          { type: "number" },
+          { type: "boolean" },
+          {
+            type: "array",
+            items: { $ref: "#/components/schemas/AttributeValue" },
+          },
+          {
+            type: "object",
+            additionalProperties: {
+              $ref: "#/components/schemas/AttributeValue",
+            },
+          },
+        ],
+      };
+    }
+    return patched as ReturnType<typeof jsonSchemaTransformObject>;
+  },
 });
 
 apiServer.register(fastifySwaggerUI, {
