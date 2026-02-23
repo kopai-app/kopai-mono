@@ -36,7 +36,7 @@ const EXEMPLAR_COLUMNS = [
 
 const TYPE_SPECIFIC_COLUMNS: Record<datasource.MetricType, string[]> = {
   Gauge: ["Value", "Flags"],
-  Sum: ["Value", "Flags", "AggTemporality", "IsMonotonic"],
+  Sum: ["Value", "Flags", "AggregationTemporality", "IsMonotonic"],
   Histogram: [
     "Count",
     "Sum",
@@ -44,7 +44,7 @@ const TYPE_SPECIFIC_COLUMNS: Record<datasource.MetricType, string[]> = {
     "ExplicitBounds",
     "Min",
     "Max",
-    "AggTemporality",
+    "AggregationTemporality",
   ],
   ExponentialHistogram: [
     "Count",
@@ -57,8 +57,7 @@ const TYPE_SPECIFIC_COLUMNS: Record<datasource.MetricType, string[]> = {
     "NegativeBucketCounts",
     "Min",
     "Max",
-    "ZeroThreshold",
-    "AggTemporality",
+    "AggregationTemporality",
   ],
   Summary: [
     "Count",

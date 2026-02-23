@@ -24,9 +24,10 @@ import { ClickHouseDatasourceParseError } from "./clickhouse-datasource-error.js
 
 /** @internal */
 export function toNumber(
-  value: string | number | null | undefined
+  value: string | number | boolean | null | undefined
 ): number | undefined {
   if (value == null) return undefined;
+  if (typeof value === "boolean") return value ? 1 : 0;
   if (typeof value === "number") return value;
   if (value === "") return undefined;
   const n = Number(value);
@@ -74,12 +75,22 @@ const chOptionalStringArray = z
   .transform((arr) => (arr.length === 0 ? undefined : arr));
 
 const chNumber = z
-  .union([z.string(), z.number(), z.null(), z.undefined()])
+  .union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()])
   .transform(toNumber);
 
 const chNumberArray = z
   .array(z.union([z.string(), z.number()]))
   .transform(toNumberArray);
+
+const AGG_TEMPORALITY_MAP: Record<number, string> = {
+  0: "AGGREGATION_TEMPORALITY_UNSPECIFIED",
+  1: "AGGREGATION_TEMPORALITY_DELTA",
+  2: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+};
+
+const chAggTemporality = z
+  .union([z.number(), z.null(), z.undefined()])
+  .transform((v) => (v != null ? AGG_TEMPORALITY_MAP[v] : undefined));
 
 // ---------------------------------------------------------------------------
 // Traces
@@ -167,40 +178,57 @@ export const chGaugeRowSchema = chMetricsBase.extend({
   Flags: chNumber,
 });
 
-export const chSumRowSchema = chMetricsBase.extend({
-  MetricType: z.literal("Sum").default("Sum"),
-  Value: z.number(),
-  Flags: chNumber,
-  AggTemporality: chOptionalString,
-  IsMonotonic: chNumber,
-});
+export const chSumRowSchema = chMetricsBase
+  .extend({
+    MetricType: z.literal("Sum").default("Sum"),
+    Value: z.number(),
+    Flags: chNumber,
+    AggregationTemporality: chAggTemporality,
+    IsMonotonic: chNumber,
+  })
+  .transform(({ AggregationTemporality, ...rest }) => ({
+    ...rest,
+    AggTemporality: AggregationTemporality,
+  }));
 
-export const chHistogramRowSchema = chMetricsBase.extend({
-  MetricType: z.literal("Histogram").default("Histogram"),
-  Count: chNumber,
-  Sum: z.number().optional(),
-  Min: z.number().nullable().optional(),
-  Max: z.number().nullable().optional(),
-  BucketCounts: chNumberArray,
-  ExplicitBounds: chNumberArray.optional(),
-  AggTemporality: chOptionalString,
-});
+export const chHistogramRowSchema = chMetricsBase
+  .extend({
+    MetricType: z.literal("Histogram").default("Histogram"),
+    Count: chNumber,
+    Sum: z.number().optional(),
+    Min: z.number().nullable().optional(),
+    Max: z.number().nullable().optional(),
+    BucketCounts: chNumberArray,
+    ExplicitBounds: chNumberArray.optional(),
+    AggregationTemporality: chAggTemporality,
+  })
+  .transform(({ AggregationTemporality, ...rest }) => ({
+    ...rest,
+    AggTemporality: AggregationTemporality,
+  }));
 
-export const chExpHistogramRowSchema = chMetricsBase.extend({
-  MetricType: z.literal("ExponentialHistogram").default("ExponentialHistogram"),
-  Count: chNumber,
-  Sum: z.number().optional(),
-  Min: z.number().nullable().optional(),
-  Max: z.number().nullable().optional(),
-  Scale: chNumber,
-  ZeroCount: chNumber,
-  ZeroThreshold: z.number().optional(),
-  PositiveOffset: chNumber,
-  PositiveBucketCounts: chNumberArray,
-  NegativeOffset: chNumber,
-  NegativeBucketCounts: chNumberArray,
-  AggTemporality: chOptionalString,
-});
+export const chExpHistogramRowSchema = chMetricsBase
+  .extend({
+    MetricType: z
+      .literal("ExponentialHistogram")
+      .default("ExponentialHistogram"),
+    Count: chNumber,
+    Sum: z.number().optional(),
+    Min: z.number().nullable().optional(),
+    Max: z.number().nullable().optional(),
+    Scale: chNumber,
+    ZeroCount: chNumber,
+    PositiveOffset: chNumber,
+    PositiveBucketCounts: chNumberArray,
+    NegativeOffset: chNumber,
+    NegativeBucketCounts: chNumberArray,
+    AggregationTemporality: chAggTemporality,
+  })
+  .transform(({ AggregationTemporality, ...rest }) => ({
+    ...rest,
+    ZeroThreshold: undefined as number | undefined,
+    AggTemporality: AggregationTemporality,
+  }));
 
 export const chSummaryRowSchema = chMetricsBase.extend({
   MetricType: z.literal("Summary").default("Summary"),

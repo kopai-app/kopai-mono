@@ -1,0 +1,41 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.6-alpine
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./src/test-users.xml:/etc/clickhouse-server/users.d/test-users.xml
+      - ./src/test/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.136.0
+    ports:
+      - "4318:4318"
+    volumes:
+      - ./src/test/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    command: ["--config=/etc/otel/config.yaml"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ../..
+      dockerfile: packages/clickhouse-datasource/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      CH_BASE_URL: http://clickhouse:8123
+      CH_DATABASE: otel_default
+      CH_USERNAME: default
+      CH_PASSWORD: ""
+      PORT: "8000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy

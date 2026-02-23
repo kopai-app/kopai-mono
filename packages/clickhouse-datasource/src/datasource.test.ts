@@ -230,8 +230,8 @@ async function createOtelTables(client: ClickHouseClient) {
       Value Float64 CODEC(ZSTD(1)),
       Flags UInt32 CODEC(ZSTD(1)),
       ${exemplarCols},
-      AggTemporality LowCardinality(String) CODEC(ZSTD(1)),
-      IsMonotonic UInt8 CODEC(ZSTD(1))
+      AggregationTemporality Int32 CODEC(ZSTD(1)),
+      IsMonotonic Bool CODEC(ZSTD(1))
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
 
@@ -245,7 +245,7 @@ async function createOtelTables(client: ClickHouseClient) {
       ${exemplarCols},
       Min Float64 CODEC(ZSTD(1)),
       Max Float64 CODEC(ZSTD(1)),
-      AggTemporality LowCardinality(String) CODEC(ZSTD(1))
+      AggregationTemporality Int32 CODEC(ZSTD(1))
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
 
@@ -263,8 +263,7 @@ async function createOtelTables(client: ClickHouseClient) {
       ${exemplarCols},
       Min Float64 CODEC(ZSTD(1)),
       Max Float64 CODEC(ZSTD(1)),
-      ZeroThreshold Float64 CODEC(ZSTD(1)),
-      AggTemporality LowCardinality(String) CODEC(ZSTD(1))
+      AggregationTemporality Int32 CODEC(ZSTD(1))
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
 
@@ -669,8 +668,8 @@ async function seedMetrics(client: ClickHouseClient) {
         "Exemplars.Value": [],
         "Exemplars.SpanId": [],
         "Exemplars.TraceId": [],
-        AggTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
-        IsMonotonic: 1,
+        AggregationTemporality: 2,
+        IsMonotonic: true,
       },
     ],
     format: "JSONEachRow",
@@ -705,7 +704,7 @@ async function seedMetrics(client: ClickHouseClient) {
         "Exemplars.TraceId": [],
         Min: 5.0,
         Max: 95.0,
-        AggTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+        AggregationTemporality: 2,
       },
     ],
     format: "JSONEachRow",
@@ -744,8 +743,7 @@ async function seedMetrics(client: ClickHouseClient) {
         "Exemplars.TraceId": [],
         Min: 5.0,
         Max: 95.0,
-        ZeroThreshold: 0.001,
-        AggTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+        AggregationTemporality: 2,
       },
     ],
     format: "JSONEachRow",
@@ -1262,7 +1260,7 @@ describe("ClickHouseReadDatasource", () => {
       }
     });
 
-    it("queries ExponentialHistogram with ZeroThreshold", async () => {
+    it("queries ExponentialHistogram", async () => {
       const result = await ds.getMetrics({
         metricType: "ExponentialHistogram",
         requestContext: requestContext(),
@@ -1272,7 +1270,7 @@ describe("ClickHouseReadDatasource", () => {
       const metric = firstRow(result.data);
       expect(metric.MetricType).toBe("ExponentialHistogram");
       if (metric.MetricType === "ExponentialHistogram") {
-        expect(metric.ZeroThreshold).toBe(0.001);
+        expect(metric.ZeroThreshold).toBeUndefined();
         expect(metric.Scale).toBe(3);
         expect(metric.PositiveBucketCounts).toEqual([2, 3, 5]);
       }
