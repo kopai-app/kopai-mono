@@ -1,11 +1,56 @@
-# ClickHouse Datasource — Docker Compose E2E
+# ClickHouse Observability Backend
 
-Runs the full OTEL → ClickHouse → API pipeline locally.
+Runs the full OTEL → ClickHouse → API pipeline locally via Docker Compose.
 
 ## Architecture
 
+### Data Ingestion
+
+```mermaid
+flowchart LR
+    A["OTEL SDK / curl"] -->|"OTLP HTTP"| B["OTEL Collector\n:4318"]
+    B -->|"ClickHouse\nexporter"| C[("ClickHouse\n:8123 / :9000")]
+
+    style A fill:#e8f5e9,stroke:#388e3c
+    style B fill:#fff3e0,stroke:#f57c00
+    style C fill:#e3f2fd,stroke:#1976d2
 ```
-OTEL SDK / curl → OTEL Collector (:4318) → ClickHouse → API Server (:8000)
+
+### Data Query
+
+```mermaid
+flowchart LR
+    D["@kopai/cli\nor curl"] -->|"REST API"| E["API Server\n:8000\n─────────\nFastify +\n@kopai/api"]
+    E -->|"HTTP queries"| F[("ClickHouse\n:8123")]
+    E --- G["ClickHouseRead-\nDatasource"]
+
+    style D fill:#f3e5f5,stroke:#7b1fa2
+    style E fill:#fce4ec,stroke:#c62828
+    style F fill:#e3f2fd,stroke:#1976d2
+    style G fill:#fce4ec,stroke:#c62828
+```
+
+### Docker Compose Services
+
+```mermaid
+graph TB
+    subgraph compose["docker compose"]
+        CH[("clickhouse\n25.6-alpine")]
+        OC["otel-collector\n0.136.0"]
+        API["api\nNode 24 + Fastify"]
+    end
+
+    OC -->|"depends_on\nhealthy"| CH
+    API -->|"depends_on\nhealthy"| CH
+
+    EXT_OTEL["OTLP clients\n:4318"] -.-> OC
+    EXT_API["API clients\n:8000"] -.-> API
+
+    style CH fill:#e3f2fd,stroke:#1976d2
+    style OC fill:#fff3e0,stroke:#f57c00
+    style API fill:#fce4ec,stroke:#c62828
+    style EXT_OTEL fill:#f5f5f5,stroke:#9e9e9e
+    style EXT_API fill:#f5f5f5,stroke:#9e9e9e
 ```
 
 ## Start
