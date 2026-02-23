@@ -4,4 +4,5 @@ export default defineConfig({
   entry: ["server.ts"],
   format: ["esm"],
   noExternal: [/.*/],
+  inlineOnly: false,
 });
