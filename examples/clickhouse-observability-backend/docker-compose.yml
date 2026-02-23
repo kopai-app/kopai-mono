@@ -5,7 +5,7 @@ services:
       - "8123:8123"
       - "9000:9000"
     volumes:
-      - ../../src/test-users.xml:/etc/clickhouse-server/users.d/test-users.xml
+      - ../../packages/clickhouse-datasource/src/test-users.xml:/etc/clickhouse-server/users.d/test-users.xml
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
@@ -26,8 +26,8 @@ services:
 
   api:
     build:
-      context: ../../../..
-      dockerfile: packages/clickhouse-datasource/examples/clickhouse-observability-backend/Dockerfile
+      context: ../..
+      dockerfile: examples/clickhouse-observability-backend/Dockerfile
     ports:
       - "8000:8000"
     environment:

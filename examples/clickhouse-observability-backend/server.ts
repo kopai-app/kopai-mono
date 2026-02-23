@@ -4,8 +4,10 @@ import {
   validatorCompiler,
 } from "fastify-type-provider-zod";
 import { signalsRoutes } from "@kopai/api";
-import { ClickHouseReadDatasource } from "../../src/datasource.js";
-import type { ClickHouseRequestContext } from "../../src/types.js";
+import {
+  ClickHouseReadDatasource,
+  type ClickHouseRequestContext,
+} from "@kopai/clickhouse-datasource";
 
 const CH_BASE_URL = process.env["CH_BASE_URL"] ?? "http://localhost:8123";
 const CH_DATABASE = process.env["CH_DATABASE"] ?? "otel_default";

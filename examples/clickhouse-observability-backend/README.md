@@ -54,7 +54,7 @@ graph TB
 ## Start
 
 ```bash
-cd packages/clickhouse-datasource/examples/clickhouse-observability-backend
+cd examples/clickhouse-observability-backend
 docker compose up --build
 ```
 

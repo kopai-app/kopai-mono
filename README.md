@@ -28,6 +28,12 @@ See: [OpenTelemetry Demo App running with @kopai/app](https://github.com/kopai-a
 | [@kopai/sqlite-datasource](./packages/sqlite-datasource) | SQLite datasource          | [![npm](https://img.shields.io/npm/v/@kopai/sqlite-datasource?label=latest)](https://www.npmjs.com/package/@kopai/sqlite-datasource) |
 | [@kopai/tsconfig](./packages/tsconfig)                   | Shared TypeScript config   |                                                                                                                                      |
 
+## Examples
+
+| Example                                                                         | Description                                              |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| [clickhouse-observability-backend](./examples/clickhouse-observability-backend) | Docker Compose: OTEL Collector → ClickHouse → @kopai/api |
+
 ### Dependency Graph
 
 ```

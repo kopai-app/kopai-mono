@@ -10,13 +10,14 @@ RUN corepack enable && corepack prepare pnpm@10.14.0 --activate
 WORKDIR /src
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
 COPY packages/ packages/
+COPY examples/ examples/
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm turbo build --filter=@kopai/clickhouse-datasource...
-RUN pnpm deploy --filter=@kopai/clickhouse-datasource --prod --legacy /app
+RUN pnpm turbo build --filter=@kopai/example-clickhouse-observability-backend...
+RUN pnpm deploy --filter=@kopai/example-clickhouse-observability-backend --prod --legacy /app
 
 # Copy built dist artifacts into the deployed directory
-RUN cp -r packages/clickhouse-datasource/dist /app/dist
+RUN cp -r examples/clickhouse-observability-backend/dist /app/dist
 
 # Stage 2: Runtime
 FROM node:24-slim
@@ -29,4 +30,4 @@ ENV NODE_ENV=production
 
 EXPOSE 8000
 
-CMD ["node", "dist/test/server.mjs"]
+CMD ["node", "dist/server.mjs"]
