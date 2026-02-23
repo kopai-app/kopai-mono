@@ -8,7 +8,9 @@ export default defineConfig([
     clean: true,
   },
   {
-    entry: { "test/server": "src/test/server.ts" },
+    entry: {
+      "test/server": "examples/clickhouse-observability-backend/server.ts",
+    },
     format: ["esm"],
     dts: false,
     clean: false,

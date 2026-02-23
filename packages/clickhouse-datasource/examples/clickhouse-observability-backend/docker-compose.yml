@@ -5,8 +5,8 @@ services:
       - "8123:8123"
       - "9000:9000"
     volumes:
-      - ./src/test-users.xml:/etc/clickhouse-server/users.d/test-users.xml
-      - ./src/test/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ../../src/test-users.xml:/etc/clickhouse-server/users.d/test-users.xml
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 2s
@@ -18,7 +18,7 @@ services:
     ports:
       - "4318:4318"
     volumes:
-      - ./src/test/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
     command: ["--config=/etc/otel/config.yaml"]
     depends_on:
       clickhouse:
@@ -26,8 +26,8 @@ services:
 
   api:
     build:
-      context: ../..
-      dockerfile: packages/clickhouse-datasource/Dockerfile
+      context: ../../../..
+      dockerfile: packages/clickhouse-datasource/examples/clickhouse-observability-backend/Dockerfile
     ports:
       - "8000:8000"
     environment:

@@ -11,7 +11,7 @@ OTEL SDK / curl → OTEL Collector (:4318) → ClickHouse → API Server (:8000)
 ## Start
 
 ```bash
-cd packages/clickhouse-datasource
+cd packages/clickhouse-datasource/examples/clickhouse-observability-backend
 docker compose up --build
 ```
 
@@ -96,10 +96,10 @@ NOW=$(date +%s) && curl -X POST http://localhost:4318/v1/metrics \
 ### Via @kopai/cli
 
 ```bash
-kopai traces search --base-url http://localhost:8000/signals
-kopai logs search --base-url http://localhost:8000/signals
-kopai metrics search --base-url http://localhost:8000/signals -t Gauge
-kopai metrics discover --base-url http://localhost:8000/signals
+kopai traces search --url http://localhost:8000/signals
+kopai logs search --url http://localhost:8000/signals
+kopai metrics search --url http://localhost:8000/signals --type Gauge
+kopai metrics discover --url http://localhost:8000/signals
 ```
 
 ### Via curl
@@ -130,4 +130,4 @@ curl http://localhost:8000/signals/metrics/discover
 | -------------- | ---------------------------------------------- |
 | ClickHouse     | `clickhouse/clickhouse-server:25.6-alpine`     |
 | OTEL Collector | `otel/opentelemetry-collector-contrib:0.136.0` |
-| Node.js        | `node:24-alpine`                               |
+| Node.js        | `node:24-slim`                                 |
