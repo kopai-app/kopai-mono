@@ -178,57 +178,43 @@ export const chGaugeRowSchema = chMetricsBase.extend({
   Flags: chNumber,
 });
 
-export const chSumRowSchema = chMetricsBase
-  .extend({
-    MetricType: z.literal("Sum").default("Sum"),
-    Value: z.number(),
-    Flags: chNumber,
-    AggregationTemporality: chAggTemporality,
-    IsMonotonic: chNumber,
-  })
-  .transform(({ AggregationTemporality, ...rest }) => ({
-    ...rest,
-    AggTemporality: AggregationTemporality,
-  }));
+export const chSumRowSchema = chMetricsBase.extend({
+  MetricType: z.literal("Sum").default("Sum"),
+  Value: z.number(),
+  Flags: chNumber,
+  AggregationTemporality: chAggTemporality,
+  IsMonotonic: chNumber,
+});
 
-export const chHistogramRowSchema = chMetricsBase
-  .extend({
-    MetricType: z.literal("Histogram").default("Histogram"),
-    Count: chNumber,
-    Sum: z.number().optional(),
-    Min: z.number().nullable().optional(),
-    Max: z.number().nullable().optional(),
-    BucketCounts: chNumberArray,
-    ExplicitBounds: chNumberArray.optional(),
-    AggregationTemporality: chAggTemporality,
-  })
-  .transform(({ AggregationTemporality, ...rest }) => ({
-    ...rest,
-    AggTemporality: AggregationTemporality,
-  }));
+export const chHistogramRowSchema = chMetricsBase.extend({
+  MetricType: z.literal("Histogram").default("Histogram"),
+  Count: chNumber,
+  Sum: z.number().optional(),
+  Min: z.number().nullable().optional(),
+  Max: z.number().nullable().optional(),
+  BucketCounts: chNumberArray,
+  ExplicitBounds: chNumberArray.optional(),
+  AggregationTemporality: chAggTemporality,
+});
 
-export const chExpHistogramRowSchema = chMetricsBase
-  .extend({
-    MetricType: z
-      .literal("ExponentialHistogram")
-      .default("ExponentialHistogram"),
-    Count: chNumber,
-    Sum: z.number().optional(),
-    Min: z.number().nullable().optional(),
-    Max: z.number().nullable().optional(),
-    Scale: chNumber,
-    ZeroCount: chNumber,
-    PositiveOffset: chNumber,
-    PositiveBucketCounts: chNumberArray,
-    NegativeOffset: chNumber,
-    NegativeBucketCounts: chNumberArray,
-    AggregationTemporality: chAggTemporality,
-  })
-  .transform(({ AggregationTemporality, ...rest }) => ({
-    ...rest,
-    ZeroThreshold: undefined as number | undefined,
-    AggTemporality: AggregationTemporality,
-  }));
+export const chExpHistogramRowSchema = chMetricsBase.extend({
+  MetricType: z.literal("ExponentialHistogram").default("ExponentialHistogram"),
+  Count: chNumber,
+  Sum: z.number().optional(),
+  Min: z.number().nullable().optional(),
+  Max: z.number().nullable().optional(),
+  Scale: chNumber,
+  ZeroCount: chNumber,
+  PositiveOffset: chNumber,
+  PositiveBucketCounts: chNumberArray,
+  NegativeOffset: chNumber,
+  NegativeBucketCounts: chNumberArray,
+  ZeroThreshold: z
+    .number()
+    .optional()
+    .transform((v) => v ?? undefined),
+  AggregationTemporality: chAggTemporality,
+});
 
 export const chSummaryRowSchema = chMetricsBase.extend({
   MetricType: z.literal("Summary").default("Summary"),

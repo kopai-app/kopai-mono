@@ -1257,7 +1257,9 @@ describe("OptimizedDatasource", () => {
       if (row.MetricType === "Sum") {
         expect(row.Value).toBe(100);
         expect(row.IsMonotonic).toBe(1);
-        expect(row.AggTemporality).toBe("AGGREGATION_TEMPORALITY_CUMULATIVE");
+        expect(row.AggregationTemporality).toBe(
+          "AGGREGATION_TEMPORALITY_CUMULATIVE"
+        );
       }
     });
 

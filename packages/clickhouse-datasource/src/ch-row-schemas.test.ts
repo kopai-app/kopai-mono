@@ -167,7 +167,9 @@ describe("chSumRowSchema", () => {
     const result = parseChRow(chSumRowSchema, row);
 
     expect(result.Value).toBe(100);
-    expect(result.AggTemporality).toBe("AGGREGATION_TEMPORALITY_CUMULATIVE");
+    expect(result.AggregationTemporality).toBe(
+      "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    );
     expect(result.IsMonotonic).toBe(1);
   });
 });

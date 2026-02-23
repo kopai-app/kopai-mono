@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_sum (
     "Exemplars.Value" TEXT NOT NULL DEFAULT '[]',
     "Exemplars.SpanId" TEXT NOT NULL DEFAULT '[]',
     "Exemplars.TraceId" TEXT NOT NULL DEFAULT '[]',
-    AggTemporality TEXT NOT NULL DEFAULT '',
+    AggregationTemporality TEXT NOT NULL DEFAULT '',
     IsMonotonic INTEGER NOT NULL DEFAULT 0
 );
 
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_histogram (
     "Exemplars.TraceId" TEXT NOT NULL DEFAULT '[]',
     Min REAL,
     Max REAL,
-    AggTemporality TEXT NOT NULL DEFAULT ''
+    AggregationTemporality TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_otel_metrics_histogram_service_metric_time ON otel_metrics_histogram (ServiceName, MetricName, TimeUnix);
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_exponential_histogram (
     Min REAL,
     Max REAL,
     ZeroThreshold REAL NOT NULL DEFAULT 0,
-    AggTemporality TEXT NOT NULL DEFAULT ''
+    AggregationTemporality TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_otel_metrics_exp_histogram_service_metric_time ON otel_metrics_exponential_histogram (ServiceName, MetricName, TimeUnix);
