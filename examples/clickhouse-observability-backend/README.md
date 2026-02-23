@@ -20,7 +20,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    D["@kopai/cli<br/>or curl"] -->|REST API| E["API Server :8000<br/>Fastify + @kopai/api<br/>+ ClickHouseReadDatasource"]
+    D["@kopai/cli<br/>or curl"] -->|REST API| E["API Server :8000<br/>Fastify + @kopai/api<br/>+ @kopai/clickhouse-datasource"]
     E -->|HTTP queries| F[("ClickHouse<br/>:8123")]
 
     style D fill:#f3e5f5,stroke:#7b1fa2
@@ -35,7 +35,7 @@ graph TB
     subgraph compose["docker compose"]
         CH[("clickhouse<br/>25.6-alpine")]
         OC["otel-collector<br/>0.136.0"]
-        API["api<br/>Node 24 + Fastify"]
+        API["api<br/>@kopai/api on Node.js"]
     end
 
     OC -->|depends_on<br/>healthy| CH
