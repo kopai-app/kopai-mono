@@ -8,8 +8,8 @@ Runs the full OTEL → ClickHouse → API pipeline locally via Docker Compose.
 
 ```mermaid
 flowchart LR
-    A["OTEL SDK / curl"] -->|"OTLP HTTP"| B["OTEL Collector\n:4318"]
-    B -->|"ClickHouse\nexporter"| C[("ClickHouse\n:8123 / :9000")]
+    A["OTEL SDK / curl"] -->|OTLP HTTP| B["OTEL Collector<br/>:4318"]
+    B -->|ClickHouse<br/>exporter| C[("ClickHouse<br/>:8123 / :9000")]
 
     style A fill:#e8f5e9,stroke:#388e3c
     style B fill:#fff3e0,stroke:#f57c00
@@ -20,14 +20,12 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    D["@kopai/cli\nor curl"] -->|"REST API"| E["API Server\n:8000\n─────────\nFastify +\n@kopai/api"]
-    E -->|"HTTP queries"| F[("ClickHouse\n:8123")]
-    E --- G["ClickHouseRead-\nDatasource"]
+    D["@kopai/cli<br/>or curl"] -->|REST API| E["API Server :8000<br/>Fastify + @kopai/api<br/>+ ClickHouseReadDatasource"]
+    E -->|HTTP queries| F[("ClickHouse<br/>:8123")]
 
     style D fill:#f3e5f5,stroke:#7b1fa2
     style E fill:#fce4ec,stroke:#c62828
     style F fill:#e3f2fd,stroke:#1976d2
-    style G fill:#fce4ec,stroke:#c62828
 ```
 
 ### Docker Compose Services
@@ -35,16 +33,16 @@ flowchart LR
 ```mermaid
 graph TB
     subgraph compose["docker compose"]
-        CH[("clickhouse\n25.6-alpine")]
-        OC["otel-collector\n0.136.0"]
-        API["api\nNode 24 + Fastify"]
+        CH[("clickhouse<br/>25.6-alpine")]
+        OC["otel-collector<br/>0.136.0"]
+        API["api<br/>Node 24 + Fastify"]
     end
 
-    OC -->|"depends_on\nhealthy"| CH
-    API -->|"depends_on\nhealthy"| CH
+    OC -->|depends_on<br/>healthy| CH
+    API -->|depends_on<br/>healthy| CH
 
-    EXT_OTEL["OTLP clients\n:4318"] -.-> OC
-    EXT_API["API clients\n:8000"] -.-> API
+    EXT_OTEL["OTLP clients :4318"] -.-> OC
+    EXT_API["API clients :8000"] -.-> API
 
     style CH fill:#e3f2fd,stroke:#1976d2
     style OC fill:#fff3e0,stroke:#f57c00
