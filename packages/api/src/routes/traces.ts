@@ -27,6 +27,7 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
     handler: async (req, res) => {
       const result = await opts.readTracesDatasource.getTraces({
         traceId: req.params.traceId,
+        requestContext: req.requestContext,
       });
       res.send(result.data);
     },
@@ -50,7 +51,10 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
       },
     },
     handler: async (req, res) => {
-      const result = await opts.readTracesDatasource.getTraces(req.body);
+      const result = await opts.readTracesDatasource.getTraces({
+        ...req.body,
+        requestContext: req.requestContext,
+      });
       res.send(result);
     },
   });

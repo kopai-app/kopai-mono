@@ -72,7 +72,7 @@ function sumPoint(
     StartTimeUnix: ts(0),
     Value: value,
     IsMonotonic: 1,
-    AggTemporality: "CUMULATIVE",
+    AggregationTemporality: "CUMULATIVE",
     ServiceName: "api-gateway",
     Attributes: { "http.method": method },
     ResourceAttributes: {
@@ -126,7 +126,7 @@ export const mockHistogramRows: OtelMetricsRow[] = [
     Max: 1850,
     ExplicitBounds: HISTOGRAM_BOUNDS,
     BucketCounts: [120, 280, 350, 310, 180, 120, 85, 35, 15, 5],
-    AggTemporality: "CUMULATIVE",
+    AggregationTemporality: "CUMULATIVE",
     Attributes: { "http.method": "GET" },
     ResourceAttributes: {
       "service.name": "api-gateway",
@@ -150,7 +150,7 @@ export const mockHistogramRows: OtelMetricsRow[] = [
     Max: 2100,
     ExplicitBounds: HISTOGRAM_BOUNDS,
     BucketCounts: [250, 580, 720, 640, 380, 280, 190, 95, 45, 20],
-    AggTemporality: "CUMULATIVE",
+    AggregationTemporality: "CUMULATIVE",
     Attributes: { "http.method": "GET" },
     ResourceAttributes: {
       "service.name": "api-gateway",
@@ -174,7 +174,7 @@ export const mockHistogramRows: OtelMetricsRow[] = [
     Max: 1950,
     ExplicitBounds: HISTOGRAM_BOUNDS,
     BucketCounts: [380, 850, 1100, 950, 560, 420, 310, 140, 65, 25],
-    AggTemporality: "CUMULATIVE",
+    AggregationTemporality: "CUMULATIVE",
     Attributes: { "http.method": "GET" },
     ResourceAttributes: {
       "service.name": "api-gateway",

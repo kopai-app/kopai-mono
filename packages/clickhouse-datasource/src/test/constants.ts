@@ -1,0 +1,10 @@
+export const OTEL_COLLECTOR_VERSION = "0.136.0";
+export const CLICKHOUSE_IMAGE = "clickhouse/clickhouse-server:25.6-alpine";
+export const OTEL_COLLECTOR_IMAGE = `otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION}`;
+export const CH_DATABASE = "otel_default";
+export const CH_USERNAME = "default";
+export const CH_PASSWORD = "";
+export const CH_HTTP_PORT = 8123;
+export const CH_NATIVE_PORT = 9000;
+export const OTEL_HTTP_PORT = 4318;
+export const OTEL_HEALTH_PORT = 13133;

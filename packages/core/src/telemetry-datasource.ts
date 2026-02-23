@@ -43,14 +43,22 @@ export interface WriteTracesDatasource {
 }
 
 export interface ReadTracesDatasource {
-  getTraces(filter: z.infer<typeof tracesDataFilterSchema>): Promise<{
+  getTraces(
+    filter: z.infer<typeof tracesDataFilterSchema> & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
     data: z.infer<typeof otelTracesSchema>[];
     nextCursor: string | null;
   }>;
 }
 
 export interface ReadLogsDatasource {
-  getLogs(filter: z.infer<typeof logsDataFilterSchema>): Promise<{
+  getLogs(
+    filter: z.infer<typeof logsDataFilterSchema> & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
     data: z.infer<typeof otelLogsSchema>[];
     nextCursor: string | null;
   }>;
@@ -82,11 +90,17 @@ export interface MetricsDiscoveryResult {
 }
 
 export interface ReadMetricsDatasource {
-  getMetrics(filter: z.infer<typeof metricsDataFilterSchema>): Promise<{
+  getMetrics(
+    filter: z.infer<typeof metricsDataFilterSchema> & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
     data: z.infer<typeof otelMetricsSchema>[];
     nextCursor: string | null;
   }>;
-  discoverMetrics(): Promise<MetricsDiscoveryResult>;
+  discoverMetrics(options?: {
+    requestContext?: unknown;
+  }): Promise<MetricsDiscoveryResult>;
 }
 
 export interface LogsPartialSuccess {

@@ -1,28 +1,28 @@
 {
-  "name": "@kopai/api",
-  "version": "0.2.3",
+  "name": "@kopai/clickhouse-datasource",
+  "version": "0.1.0",
   "license": "Apache-2.0",
   "author": "Vladimir Adamic",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kopai-app/kopai-mono.git",
-    "directory": "packages/api"
+    "directory": "packages/clickhouse-datasource"
   },
-  "homepage": "https://github.com/kopai-app/kopai-mono/tree/main/packages/api#readme",
+  "homepage": "https://github.com/kopai-app/kopai-mono/tree/main/packages/clickhouse-datasource#readme",
   "bugs": {
     "url": "https://github.com/kopai-app/kopai-mono/issues"
   },
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     }
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/index.d.mts",
   "files": [
     "dist"
   ],
@@ -33,18 +33,14 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run"
   },
-  "peerDependencies": {
-    "fastify": "^5.7.4",
-    "zod": "^4.0.0"
-  },
   "dependencies": {
+    "@clickhouse/client": "^1.14.0",
     "@kopai/core": "workspace:*",
-    "fastify-type-provider-zod": "^6.1.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@fastify/swagger": "^9.7.0",
-    "@fastify/swagger-ui": "^5.2.5",
     "@kopai/tsconfig": "workspace:*",
-    "tsdown": "^0.20.3"
+    "testcontainers": "^10.0.0",
+    "tsdown": "^0.20.1"
   }
 }

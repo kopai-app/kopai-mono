@@ -1,0 +1,17 @@
+{
+  "name": "@kopai/example-clickhouse-observability-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "@kopai/api": "workspace:*",
+    "@kopai/clickhouse-datasource": "workspace:*",
+    "fastify": "^5.7.4",
+    "fastify-type-provider-zod": "^6.1.0"
+  },
+  "devDependencies": {
+    "tsdown": "^0.20.1"
+  }
+}

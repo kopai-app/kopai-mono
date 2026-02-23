@@ -29,7 +29,7 @@ export interface OtelLogs {
 }
 
 export interface OtelMetricsExponentialHistogram {
-  AggTemporality: Generated<string>;
+  AggregationTemporality: Generated<string>;
   Attributes: Generated<string>;
   Count: Generated<number>;
   "Exemplars.FilteredAttributes": Generated<string>;
@@ -87,7 +87,7 @@ export interface OtelMetricsGauge {
 }
 
 export interface OtelMetricsHistogram {
-  AggTemporality: Generated<string>;
+  AggregationTemporality: Generated<string>;
   Attributes: Generated<string>;
   BucketCounts: Generated<string>;
   Count: Generated<number>;
@@ -116,7 +116,7 @@ export interface OtelMetricsHistogram {
 }
 
 export interface OtelMetricsSum {
-  AggTemporality: Generated<string>;
+  AggregationTemporality: Generated<string>;
   Attributes: Generated<string>;
   "Exemplars.FilteredAttributes": Generated<string>;
   "Exemplars.SpanId": Generated<string>;
