@@ -1,5 +1,16 @@
 # @kopai/sqlite-datasource
 
+## 0.7.0
+
+### Minor Changes
+
+- 56f9607: Add clickhouse datasource
+
+### Patch Changes
+
+- Updated dependencies [56f9607]
+  - @kopai/core@0.6.0
+
 ## 0.6.0
 
 ### Minor Changes

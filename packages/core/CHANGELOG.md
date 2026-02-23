@@ -1,5 +1,11 @@
 # @kopai/core
 
+## 0.6.0
+
+### Minor Changes
+
+- 56f9607: Add clickhouse datasource
+
 ## 0.5.0
 
 ### Minor Changes
