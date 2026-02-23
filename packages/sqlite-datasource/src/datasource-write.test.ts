@@ -215,7 +215,7 @@ describe("OptimizedDatasource", () => {
         ServiceName: "sum-service",
         MetricName: "http.requests",
         Value: 100,
-        AggTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+        AggregationTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
         IsMonotonic: 1,
       });
     });
@@ -286,7 +286,7 @@ describe("OptimizedDatasource", () => {
         ExplicitBounds: "[10,50,100]",
         Min: 5.0,
         Max: 200.0,
-        AggTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        AggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
       });
     });
 
@@ -365,7 +365,7 @@ describe("OptimizedDatasource", () => {
         Min: 0.1,
         Max: 100.0,
         ZeroThreshold: 0.001,
-        AggTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+        AggregationTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
       });
     });
 

@@ -161,13 +161,15 @@ describe("chSumRowSchema", () => {
       ServiceName: "svc",
       Value: 100,
       Flags: 0,
-      AggTemporality: "CUMULATIVE",
-      IsMonotonic: "1",
+      AggregationTemporality: 2,
+      IsMonotonic: true,
     };
     const result = parseChRow(chSumRowSchema, row);
 
     expect(result.Value).toBe(100);
-    expect(result.AggTemporality).toBe("CUMULATIVE");
+    expect(result.AggregationTemporality).toBe(
+      "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    );
     expect(result.IsMonotonic).toBe(1);
   });
 });
@@ -195,7 +197,7 @@ describe("chHistogramRowSchema", () => {
       Max: 500.0,
       BucketCounts: ["10", "20", "15", "5"],
       ExplicitBounds: [10, 50, 100, 500],
-      AggTemporality: "DELTA",
+      AggregationTemporality: 1,
     };
     const result = parseChRow(chHistogramRowSchema, row);
 
@@ -229,12 +231,11 @@ describe("chExpHistogramRowSchema", () => {
       Max: null,
       Scale: "3",
       ZeroCount: "5",
-      ZeroThreshold: 0.001,
       PositiveOffset: "1",
       PositiveBucketCounts: ["10", "20", "30"],
       NegativeOffset: "0",
       NegativeBucketCounts: [],
-      AggTemporality: "CUMULATIVE",
+      AggregationTemporality: 2,
     };
     const result = parseChRow(chExpHistogramRowSchema, row);
 

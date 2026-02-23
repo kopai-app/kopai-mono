@@ -311,7 +311,7 @@ export const otelSumSchema = metricsBaseSchema.extend({
     .number()
     .optional()
     .describe("Flags that apply to this data point (see DataPointFlags)."),
-  AggTemporality: z
+  AggregationTemporality: z
     .string()
     .optional()
     .describe("Aggregation temporality (DELTA or CUMULATIVE)."),
@@ -332,7 +332,7 @@ export const otelHistogramSchema = metricsBaseSchema.extend({
     .optional()
     .describe("Count of values in each bucket."),
   ExplicitBounds: z.array(z.number()).optional().describe("Bucket boundaries."),
-  AggTemporality: z
+  AggregationTemporality: z
     .string()
     .optional()
     .describe("Aggregation temporality (DELTA or CUMULATIVE)."),
@@ -376,7 +376,7 @@ export const otelExponentialHistogramSchema = metricsBaseSchema.extend({
     .describe(
       "Width of the zero region. Values within [-ZeroThreshold, ZeroThreshold] go to the zero count bucket."
     ),
-  AggTemporality: z
+  AggregationTemporality: z
     .string()
     .optional()
     .describe("Aggregation temporality (DELTA or CUMULATIVE)."),

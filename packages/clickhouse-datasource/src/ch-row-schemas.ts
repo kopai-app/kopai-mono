@@ -24,9 +24,10 @@ import { ClickHouseDatasourceParseError } from "./clickhouse-datasource-error.js
 
 /** @internal */
 export function toNumber(
-  value: string | number | null | undefined
+  value: string | number | boolean | null | undefined
 ): number | undefined {
   if (value == null) return undefined;
+  if (typeof value === "boolean") return value ? 1 : 0;
   if (typeof value === "number") return value;
   if (value === "") return undefined;
   const n = Number(value);
@@ -74,12 +75,22 @@ const chOptionalStringArray = z
   .transform((arr) => (arr.length === 0 ? undefined : arr));
 
 const chNumber = z
-  .union([z.string(), z.number(), z.null(), z.undefined()])
+  .union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()])
   .transform(toNumber);
 
 const chNumberArray = z
   .array(z.union([z.string(), z.number()]))
   .transform(toNumberArray);
+
+const AGG_TEMPORALITY_MAP: Record<number, string> = {
+  0: "AGGREGATION_TEMPORALITY_UNSPECIFIED",
+  1: "AGGREGATION_TEMPORALITY_DELTA",
+  2: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+};
+
+const chAggTemporality = z
+  .union([z.number(), z.null(), z.undefined()])
+  .transform((v) => (v != null ? AGG_TEMPORALITY_MAP[v] : undefined));
 
 // ---------------------------------------------------------------------------
 // Traces
@@ -171,7 +182,7 @@ export const chSumRowSchema = chMetricsBase.extend({
   MetricType: z.literal("Sum").default("Sum"),
   Value: z.number(),
   Flags: chNumber,
-  AggTemporality: chOptionalString,
+  AggregationTemporality: chAggTemporality,
   IsMonotonic: chNumber,
 });
 
@@ -183,7 +194,7 @@ export const chHistogramRowSchema = chMetricsBase.extend({
   Max: z.number().nullable().optional(),
   BucketCounts: chNumberArray,
   ExplicitBounds: chNumberArray.optional(),
-  AggTemporality: chOptionalString,
+  AggregationTemporality: chAggTemporality,
 });
 
 export const chExpHistogramRowSchema = chMetricsBase.extend({
@@ -194,12 +205,15 @@ export const chExpHistogramRowSchema = chMetricsBase.extend({
   Max: z.number().nullable().optional(),
   Scale: chNumber,
   ZeroCount: chNumber,
-  ZeroThreshold: z.number().optional(),
   PositiveOffset: chNumber,
   PositiveBucketCounts: chNumberArray,
   NegativeOffset: chNumber,
   NegativeBucketCounts: chNumberArray,
-  AggTemporality: chOptionalString,
+  ZeroThreshold: z
+    .number()
+    .optional()
+    .transform((v) => v ?? undefined),
+  AggregationTemporality: chAggTemporality,
 });
 
 export const chSummaryRowSchema = chMetricsBase.extend({

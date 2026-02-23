@@ -470,7 +470,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         query = query.select([
           "Value",
           "Flags",
-          "AggTemporality",
+          "AggregationTemporality",
           "IsMonotonic",
         ]);
       } else if (metricType === "Histogram") {
@@ -481,7 +481,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           "ExplicitBounds",
           "Min",
           "Max",
-          "AggTemporality",
+          "AggregationTemporality",
         ]);
       } else if (metricType === "ExponentialHistogram") {
         query = query.select([
@@ -496,7 +496,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           "Min",
           "Max",
           "ZeroThreshold",
-          "AggTemporality",
+          "AggregationTemporality",
         ]);
       } else if (metricType === "Summary") {
         query = query.select(["Count", "Sum"]);
@@ -1085,7 +1085,7 @@ function toSumRow(
       exemplars,
       (e) => e.traceId ?? ""
     ),
-    AggTemporality: aggTemporalityToString(aggregationTemporality),
+    AggregationTemporality: aggTemporalityToString(aggregationTemporality),
     IsMonotonic: isMonotonic ? 1 : 0,
   };
 }
@@ -1136,7 +1136,7 @@ function toHistogramRow(
       exemplars,
       (e) => e.traceId ?? ""
     ),
-    AggTemporality: aggTemporalityToString(aggregationTemporality),
+    AggregationTemporality: aggTemporalityToString(aggregationTemporality),
   };
 }
 
@@ -1195,7 +1195,7 @@ function toExpHistogramRow(
       exemplars,
       (e) => e.traceId ?? ""
     ),
-    AggTemporality: aggTemporalityToString(aggregationTemporality),
+    AggregationTemporality: aggTemporalityToString(aggregationTemporality),
   };
 }
 
@@ -1464,7 +1464,7 @@ function mapRowToOtelMetrics(
       MetricType: "Sum" as const,
       Value: row.Value as number,
       Flags: toNumber(row.Flags),
-      AggTemporality: row.AggTemporality as string | undefined,
+      AggregationTemporality: row.AggregationTemporality as string | undefined,
       IsMonotonic: toNumber(row.IsMonotonic),
     };
   }
@@ -1479,7 +1479,7 @@ function mapRowToOtelMetrics(
       Max: row.Max as number | null | undefined,
       BucketCounts: parseNumberArrayField(row.BucketCounts),
       ExplicitBounds: parseNumberArrayField(row.ExplicitBounds),
-      AggTemporality: row.AggTemporality as string | undefined,
+      AggregationTemporality: row.AggregationTemporality as string | undefined,
     };
   }
 
@@ -1497,7 +1497,7 @@ function mapRowToOtelMetrics(
       PositiveBucketCounts: parseNumberArrayField(row.PositiveBucketCounts),
       NegativeOffset: toNumber(row.NegativeOffset),
       NegativeBucketCounts: parseNumberArrayField(row.NegativeBucketCounts),
-      AggTemporality: row.AggTemporality as string | undefined,
+      AggregationTemporality: row.AggregationTemporality as string | undefined,
     };
   }
 
