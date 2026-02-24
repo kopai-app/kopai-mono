@@ -1,5 +1,11 @@
 # @kopai/cli
 
+## 0.6.0
+
+### Minor Changes
+
+- 1aa5992: Add login-related commands
+
 ## 0.5.3
 
 ### Patch Changes
