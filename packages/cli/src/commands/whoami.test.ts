@@ -105,13 +105,14 @@ describe("whoami command", () => {
     expect(output).toContain("Could not reach server to validate token.");
   });
 
-  it("always exits 0 (informational command)", async () => {
+  it("sets non-zero exit code on validation failure", async () => {
     vi.mocked(loadConfig).mockReturnValue({
       token: "kpi_test_token_12345678901234567890123456",
     });
     mockSearchTracesPage.mockRejectedValue(new Error("any error"));
 
-    // Should not throw
-    await expect(runCommand([])).resolves.toBeDefined();
+    process.exitCode = 0;
+    await runCommand([]);
+    expect(process.exitCode).toBe(1);
   });
 });

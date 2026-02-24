@@ -9,6 +9,7 @@ export interface Config {
 
 export const CONFIG_FILENAME = ".kopairc";
 export const TOKEN_PREFIX_LENGTH = 10;
+export const DEFAULT_URL = "http://localhost:8000/signals";
 
 /** Owner read+write only (rw-------). Used for files containing secrets. */
 const OWNER_READ_WRITE = 0o600;
@@ -54,7 +55,10 @@ export function saveConfig(updates: Partial<Config>, targetPath: string): void {
     }
   }
   const merged = { ...existing, ...updates };
-  writeFileSync(targetPath, JSON.stringify(merged, null, 2) + "\n", "utf-8");
+  writeFileSync(targetPath, JSON.stringify(merged, null, 2) + "\n", {
+    encoding: "utf-8",
+    mode: OWNER_READ_WRITE,
+  });
   chmodSync(targetPath, OWNER_READ_WRITE);
 }
 
@@ -65,10 +69,17 @@ export function removeConfigToken(targetPath: string): boolean {
     const config = JSON.parse(content) as Config;
     if (!config.token) return false;
     delete config.token;
-    writeFileSync(targetPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
-    chmodSync(targetPath, OWNER_READ_WRITE);
-    return true;
+    writeFileSync(targetPath, JSON.stringify(config, null, 2) + "\n", {
+      encoding: "utf-8",
+      mode: OWNER_READ_WRITE,
+    });
   } catch {
     return false;
   }
+  try {
+    chmodSync(targetPath, OWNER_READ_WRITE);
+  } catch {
+    // chmod failure does not affect the successful token removal
+  }
+  return true;
 }

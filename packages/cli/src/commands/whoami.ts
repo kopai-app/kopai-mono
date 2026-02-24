@@ -1,8 +1,6 @@
 import { Command } from "commander";
 import { KopaiClient } from "@kopai/sdk";
-import { loadConfig, TOKEN_PREFIX_LENGTH } from "../config.js";
-
-const DEFAULT_URL = "http://localhost:8000/signals";
+import { loadConfig, TOKEN_PREFIX_LENGTH, DEFAULT_URL } from "../config.js";
 
 export function createWhoamiCommand(): Command {
   return new Command("whoami")
@@ -37,6 +35,7 @@ export function createWhoamiCommand(): Command {
         } else {
           console.log("Could not reach server to validate token.");
         }
+        process.exitCode = 1;
       }
     });
 }

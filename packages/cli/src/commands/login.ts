@@ -6,6 +6,7 @@ import {
   saveConfig,
   resolveConfigPath,
   TOKEN_PREFIX_LENGTH,
+  DEFAULT_URL,
   type Config,
 } from "../config.js";
 
@@ -31,14 +32,14 @@ export function createLoginCommand(): Command {
       const token = await readTokenFromStdin();
       if (!token) {
         console.error("Token cannot be empty.");
-        process.exitCode = 1;
+        process.exitCode = 2;
         return;
       }
 
-      const updates: Partial<Config> = { token };
-      if (opts.url) {
-        updates.url = opts.url;
-      }
+      const updates: Partial<Config> = {
+        token,
+        url: opts.url ?? DEFAULT_URL,
+      };
 
       const targetPath = resolveConfigPath(opts.global ?? false);
       saveConfig(updates, targetPath);

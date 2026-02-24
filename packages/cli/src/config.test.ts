@@ -123,7 +123,7 @@ describe("saveConfig", () => {
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       "/tmp/.kopairc",
       JSON.stringify({ token: "abc123" }, null, 2) + "\n",
-      "utf-8"
+      { encoding: "utf-8", mode: 0o600 }
     );
   });
 
@@ -142,7 +142,7 @@ describe("saveConfig", () => {
         null,
         2
       ) + "\n",
-      "utf-8"
+      { encoding: "utf-8", mode: 0o600 }
     );
   });
 
@@ -176,7 +176,7 @@ describe("removeConfigToken", () => {
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       "/tmp/.kopairc",
       JSON.stringify({ url: "http://example.com" }, null, 2) + "\n",
-      "utf-8"
+      { encoding: "utf-8", mode: 0o600 }
     );
   });
 
