@@ -4,6 +4,9 @@ import { Command } from "commander";
 import { createTracesCommand } from "./commands/traces.js";
 import { createLogsCommand } from "./commands/logs.js";
 import { createMetricsCommand } from "./commands/metrics.js";
+import { createLoginCommand } from "./commands/login.js";
+import { createLogoutCommand } from "./commands/logout.js";
+import { createWhoamiCommand } from "./commands/whoami.js";
 import pkg from "../package.json" with { type: "json" };
 
 const program = new Command();
@@ -15,6 +18,9 @@ program
   .addCommand(createTracesCommand())
   .addCommand(createLogsCommand())
   .addCommand(createMetricsCommand())
+  .addCommand(createLoginCommand())
+  .addCommand(createLogoutCommand())
+  .addCommand(createWhoamiCommand())
   .addHelpText(
     "after",
     `
