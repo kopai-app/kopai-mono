@@ -739,9 +739,18 @@ function MetricsTab() {
 // Page
 // ---------------------------------------------------------------------------
 
-const client = new KopaiClient({ baseUrl: "/signals" });
+let _defaultClient: KopaiClient | undefined;
+function getDefaultClient() {
+  _defaultClient ??= new KopaiClient({ baseUrl: "/signals" });
+  return _defaultClient;
+}
 
-export default function ObservabilityPage() {
+interface ObservabilityPageProps {
+  client?: KopaiClient;
+}
+
+export default function ObservabilityPage({ client }: ObservabilityPageProps) {
+  const activeClient = client ?? getDefaultClient();
   const {
     tab: activeTab,
     service: selectedService,
@@ -792,7 +801,7 @@ export default function ObservabilityPage() {
   }, [selectedService]);
 
   return (
-    <KopaiSDKProvider client={client}>
+    <KopaiSDKProvider client={activeClient}>
       <KeyboardShortcutsProvider
         onNavigateServices={() => pushURLState({ tab: "services" })}
         onNavigateLogs={() => pushURLState({ tab: "logs" })}
