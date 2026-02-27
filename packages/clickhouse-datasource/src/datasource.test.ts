@@ -36,6 +36,8 @@ function expectAscending(values: bigint[]): void {
 const CLICKHOUSE_HTTP_PORT = 8123;
 const TEST_DATABASE = "test_db";
 const TENANT_B_DATABASE = "tenant_b_db";
+const READER_USERNAME = "test_db_reader";
+const READER_PASSWORD = "reader_pass";
 const CONTAINER_STARTUP_TIMEOUT = 60_000;
 
 let container: StartedTestContainer;
@@ -58,6 +60,14 @@ function tenantBRequestContext() {
     database: TENANT_B_DATABASE,
     username: "default",
     password: "",
+  };
+}
+
+function readerRequestContext() {
+  return {
+    database: TEST_DATABASE,
+    username: READER_USERNAME,
+    password: READER_PASSWORD,
   };
 }
 
@@ -127,6 +137,14 @@ beforeAll(async () => {
   await createOtelTables(tenantBClient);
   await seedTenantBData(tenantBClient);
   await tenantBClient.close();
+
+  // Create a read-only user scoped to test_db only (mirrors prod tenant readers)
+  await adminClient.command({
+    query: `CREATE USER IF NOT EXISTS ${READER_USERNAME} IDENTIFIED WITH plaintext_password BY '${READER_PASSWORD}'`,
+  });
+  await adminClient.command({
+    query: `GRANT SELECT ON ${TEST_DATABASE}.* TO ${READER_USERNAME}`,
+  });
 
   ds = new ClickHouseReadDatasource(baseUrl);
 }, CONTAINER_STARTUP_TIMEOUT);
@@ -1611,6 +1629,13 @@ WHERE notEmpty(ResourceAttributes)
 GROUP BY MetricName, MetricType, source, attr_key`,
         });
       }
+
+      // Insert marker metric into MV target table ONLY (not in source tables).
+      // If MV path runs → discovers this metric. If fallback runs → doesn't.
+      await adminClient.command({
+        query: `INSERT INTO ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
+          VALUES ('mv.path.marker', 'Gauge', 'Proves MV path was used', '1')`,
+      });
     });
 
     it("discovers all metric names via MV fast path", async () => {
@@ -1618,7 +1643,8 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: requestContext(),
       });
 
-      expect(result.metrics.length).toBe(8);
+      // 9 = 8 backfilled + 1 marker inserted directly into MV target table
+      expect(result.metrics.length).toBe(9);
 
       const names = result.metrics.map((m) => m.name).sort();
       expect(names).toEqual([
@@ -1626,6 +1652,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         "http.server.request.count",
         "http.server.request.duration",
         "http.server.request.duration.exp",
+        "mv.path.marker",
         "rpc.server.duration.summary",
         "system.cpu.utilization",
         "test.multi.attr",
@@ -1718,6 +1745,23 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         "gauge metric"
       );
       expect(gauge.attributes._truncated).toBeUndefined();
+    });
+
+    it("discovers metrics via MV path with restricted reader user", async () => {
+      // Regression: the detection query used system.tables which requires
+      // elevated privileges. Tenant reader users only have SELECT on their
+      // own database — system.tables query is denied. The detection must
+      // use SHOW TABLES which respects database-level SELECT grants.
+      const result = await ds.discoverMetrics({
+        requestContext: readerRequestContext(),
+      });
+
+      // 9 = 8 backfilled + 1 marker only in MV target table.
+      // If fallback ran instead, marker wouldn't appear → only 8.
+      expect(result.metrics.length).toBe(9);
+      const marker = result.metrics.find((m) => m.name === "mv.path.marker");
+      expect(marker).toBeDefined();
+      expect(marker?.type).toBe("Gauge");
     });
   });
 
@@ -1818,8 +1862,8 @@ GROUP BY MetricName, MetricType, source, attr_key`,
       const tenantANames = tenantA.metrics.map((m) => m.name).sort();
       const tenantBNames = tenantB.metrics.map((m) => m.name).sort();
 
-      // Tenant A has 8 metrics, tenant B has 1
-      expect(tenantANames.length).toBe(8);
+      // Tenant A has 9 metrics (8 backfilled + 1 MV marker), tenant B has 1
+      expect(tenantANames.length).toBe(9);
       expect(tenantBNames).toEqual(["tenant.b.gauge"]);
 
       // No cross-contamination
