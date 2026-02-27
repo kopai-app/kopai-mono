@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import type { Logger } from "./types.js";
 import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import {
   GenericContainer,
@@ -33,9 +34,19 @@ function expectAscending(values: bigint[]): void {
   }
 }
 
+function createSpyLogger() {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } satisfies Logger;
+}
+
 const CLICKHOUSE_HTTP_PORT = 8123;
 const TEST_DATABASE = "test_db";
 const TENANT_B_DATABASE = "tenant_b_db";
+const READER_USERNAME = "test_db_reader";
+const READER_PASSWORD = "reader_pass";
 const CONTAINER_STARTUP_TIMEOUT = 60_000;
 
 let container: StartedTestContainer;
@@ -58,6 +69,14 @@ function tenantBRequestContext() {
     database: TENANT_B_DATABASE,
     username: "default",
     password: "",
+  };
+}
+
+function readerRequestContext() {
+  return {
+    database: TEST_DATABASE,
+    username: READER_USERNAME,
+    password: READER_PASSWORD,
   };
 }
 
@@ -127,6 +146,14 @@ beforeAll(async () => {
   await createOtelTables(tenantBClient);
   await seedTenantBData(tenantBClient);
   await tenantBClient.close();
+
+  // Create a read-only user scoped to test_db only (mirrors prod tenant readers)
+  await adminClient.command({
+    query: `CREATE USER IF NOT EXISTS ${READER_USERNAME} IDENTIFIED WITH plaintext_password BY '${READER_PASSWORD}'`,
+  });
+  await adminClient.command({
+    query: `GRANT SELECT ON ${TEST_DATABASE}.* TO ${READER_USERNAME}`,
+  });
 
   ds = new ClickHouseReadDatasource(baseUrl);
 }, CONTAINER_STARTUP_TIMEOUT);
@@ -1394,7 +1421,7 @@ describe("ClickHouseReadDatasource", () => {
     });
   });
 
-  describe("discoverMetrics", () => {
+  describe("discoverMetrics errors without MVs", () => {
     beforeAll(async () => {
       // Ensure no MV tables exist regardless of test ordering
       await adminClient.command({
@@ -1405,154 +1432,36 @@ describe("ClickHouseReadDatasource", () => {
       });
     });
 
-    it("discovers all metric names and types", async () => {
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
-
-      // 5 original metrics + 1 dup-timestamp metric + 1 truncation test metric + 1 multi-attr metric
-      expect(result.metrics.length).toBe(8);
-
-      const names = result.metrics.map((m) => m.name).sort();
-      expect(names).toEqual([
-        "dup.ts.gauge",
-        "http.server.request.count",
-        "http.server.request.duration",
-        "http.server.request.duration.exp",
-        "rpc.server.duration.summary",
-        "system.cpu.utilization",
-        "test.multi.attr",
-        "test.truncation.metric",
-      ]);
+    it("throws when MV tables do not exist", async () => {
+      await expect(
+        ds.discoverMetrics({ requestContext: requestContext() })
+      ).rejects.toThrow(/MV tables not found/);
     });
 
-    it("returns metric type correctly", async () => {
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
+    it("logs warning when MV tables not found", async () => {
+      const spy = createSpyLogger();
+      await expect(
+        ds.discoverMetrics({
+          requestContext: { ...requestContext(), logger: spy },
+        })
+      ).rejects.toThrow(/MV tables not found/);
 
-      const gauge = result.metrics.find(
-        (m) => m.name === "system.cpu.utilization"
-      );
-      expect(gauge?.type).toBe("Gauge");
-      expect(gauge?.unit).toBe("1");
-      expect(gauge?.description).toBe("CPU utilization");
-    });
-
-    it("returns attribute keys and values", async () => {
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
-
-      const gauge = result.metrics.find(
-        (m) => m.name === "system.cpu.utilization"
-      );
-      expect(gauge?.attributes.values).toHaveProperty("cpu");
-      expect(gauge?.attributes.values["cpu"]).toContain("0");
-    });
-
-    it("returns resource attributes", async () => {
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
-
-      const gauge = result.metrics.find(
-        (m) => m.name === "system.cpu.utilization"
-      );
-      expect(gauge?.resourceAttributes.values).toHaveProperty(
-        "service.version"
-      );
-    });
-
-    it("sets _truncated when attribute values exceed 100", async () => {
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
-
-      const metric = defined(
-        result.metrics.find((m) => m.name === "test.truncation.metric"),
-        "truncation metric"
-      );
-      // 102 distinct idx values → groupUniqArray(101) returns 101 → truncated
-      expect(metric.attributes._truncated).toBe(true);
-      const idxValues = defined(metric.attributes.values["idx"], "idx values");
-      expect(idxValues.length).toBeLessThanOrEqual(100);
-    });
-
-    it("returns correct attribute keys for metrics with multiple attributes per row", async () => {
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
-
-      const metric = defined(
-        result.metrics.find((m) => m.name === "test.multi.attr"),
-        "multi-attr metric"
-      );
-
-      // The row has 3 attribute keys: region, env, tier
-      // A correct query returns exactly 3 keys, each with 1 value.
-      // The double-arrayJoin bug would produce 3*3=9 rows, inflating values.
-      const attrKeys = Object.keys(metric.attributes.values).sort();
-      expect(attrKeys).toEqual(["env", "region", "tier"]);
-      expect(metric.attributes.values["region"]).toEqual(["us-east"]);
-      expect(metric.attributes.values["env"]).toEqual(["prod"]);
-      expect(metric.attributes.values["tier"]).toEqual(["premium"]);
-
-      // Resource attribute should also be correct: 1 key with 1 value
-      const resKeys = Object.keys(metric.resourceAttributes.values);
-      expect(resKeys).toEqual(["cloud.provider"]);
-      expect(metric.resourceAttributes.values["cloud.provider"]).toEqual([
-        "aws",
-      ]);
-    });
-
-    it("does not set _truncated when attribute values are within limit", async () => {
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
-
-      const gauge = defined(
-        result.metrics.find((m) => m.name === "system.cpu.utilization"),
-        "gauge metric"
-      );
-      // 3 distinct cpu values ("0", "1", "2") — well under 100
-      expect(gauge.attributes._truncated).toBeUndefined();
-    });
-  });
-
-  describe("discoverMetrics falls back without MVs", () => {
-    beforeAll(async () => {
-      // Ensure no MV tables exist regardless of test ordering
-      await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}`,
-      });
-      await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
+      expect(spy.warn).toHaveBeenCalledOnce();
+      expect(spy.warn.mock.calls[0]?.[0]).toMatchObject({
+        database: TEST_DATABASE,
+        method: "discoverMetrics",
       });
     });
 
-    it("returns results via full-scan when MV tables do not exist", async () => {
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
-
-      expect(result.metrics.length).toBeGreaterThan(0);
-      const names = result.metrics.map((m) => m.name).sort();
-      expect(names).toContain("system.cpu.utilization");
-    });
-
-    it("falls back when only names MV table exists", async () => {
+    it("throws when only names MV table exists", async () => {
       const namesOnly = `CREATE TABLE IF NOT EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
 (MetricName String, MetricType LowCardinality(String), MetricDescription String, MetricUnit String)
 ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
       await adminClient.command({ query: namesOnly });
 
-      const result = await ds.discoverMetrics({
-        requestContext: requestContext(),
-      });
-
-      // Should still work via fallback
-      expect(result.metrics.length).toBeGreaterThan(0);
+      await expect(
+        ds.discoverMetrics({ requestContext: requestContext() })
+      ).rejects.toThrow(/MV tables not found/);
 
       await adminClient.command({
         query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
@@ -1719,6 +1628,33 @@ GROUP BY MetricName, MetricType, source, attr_key`,
       );
       expect(gauge.attributes._truncated).toBeUndefined();
     });
+
+    it("logs timing and metric count on success", async () => {
+      const spy = createSpyLogger();
+      const result = await ds.discoverMetrics({
+        requestContext: { ...requestContext(), logger: spy },
+      });
+
+      expect(result.metrics.length).toBe(8);
+      expect(spy.info).toHaveBeenCalledOnce();
+      const logObj = spy.info.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(logObj).toMatchObject({
+        database: TEST_DATABASE,
+        method: "discoverMetrics",
+        metricCount: 8,
+      });
+      expect(logObj.durationMs).toBeTypeOf("number");
+    });
+
+    it("discovers metrics via MV path with restricted reader user", async () => {
+      // Verify reader users with database-level SELECT grants can detect
+      // and query MV tables successfully.
+      const result = await ds.discoverMetrics({
+        requestContext: readerRequestContext(),
+      });
+
+      expect(result.metrics.length).toBe(8);
+    });
   });
 
   describe("getDiscoverMVSchema validation", () => {
@@ -1811,20 +1747,91 @@ GROUP BY MetricName, MetricType, source, attr_key`,
       const tenantA = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
-      const tenantB = await ds.discoverMetrics({
-        requestContext: tenantBRequestContext(),
-      });
 
       const tenantANames = tenantA.metrics.map((m) => m.name).sort();
-      const tenantBNames = tenantB.metrics.map((m) => m.name).sort();
 
-      // Tenant A has 8 metrics, tenant B has 1
       expect(tenantANames.length).toBe(8);
-      expect(tenantBNames).toEqual(["tenant.b.gauge"]);
-
-      // No cross-contamination
       expect(tenantANames).not.toContain("tenant.b.gauge");
-      expect(tenantBNames).not.toContain("system.cpu.utilization");
+    });
+
+    it("discoverMetrics throws for tenant without MVs", async () => {
+      // Tenant B has no MV tables — discoverMetrics must fail explicitly
+      await expect(
+        ds.discoverMetrics({ requestContext: tenantBRequestContext() })
+      ).rejects.toThrow(/MV tables not found/);
+    });
+  });
+
+  describe("structured logging", () => {
+    it("logs success for getTraces", async () => {
+      const spy = createSpyLogger();
+      await ds.getTraces({
+        requestContext: { ...requestContext(), logger: spy },
+      });
+
+      expect(spy.info).toHaveBeenCalledOnce();
+      const logObj = spy.info.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(logObj).toMatchObject({
+        database: TEST_DATABASE,
+        method: "getTraces",
+      });
+      expect(logObj.durationMs).toBeTypeOf("number");
+      expect(logObj.rowCount).toBeTypeOf("number");
+    });
+
+    it("logs success for getLogs", async () => {
+      const spy = createSpyLogger();
+      await ds.getLogs({
+        requestContext: { ...requestContext(), logger: spy },
+      });
+
+      expect(spy.info).toHaveBeenCalledOnce();
+      const logObj = spy.info.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(logObj).toMatchObject({
+        database: TEST_DATABASE,
+        method: "getLogs",
+      });
+      expect(logObj.durationMs).toBeTypeOf("number");
+      expect(logObj.rowCount).toBeTypeOf("number");
+    });
+
+    it("logs success for getMetrics", async () => {
+      const spy = createSpyLogger();
+      await ds.getMetrics({
+        metricType: "Gauge",
+        metricName: "system.cpu.utilization",
+        requestContext: { ...requestContext(), logger: spy },
+      });
+
+      expect(spy.info).toHaveBeenCalledOnce();
+      const logObj = spy.info.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(logObj).toMatchObject({
+        database: TEST_DATABASE,
+        method: "getMetrics",
+      });
+      expect(logObj.durationMs).toBeTypeOf("number");
+      expect(logObj.rowCount).toBeTypeOf("number");
+    });
+
+    it("logs error on query failure", async () => {
+      const spy = createSpyLogger();
+      const badCtx = {
+        database: "nonexistent_db",
+        username: "bad_user",
+        password: "bad_pass",
+        logger: spy,
+      };
+
+      await expect(ds.getTraces({ requestContext: badCtx })).rejects.toThrow();
+
+      expect(spy.error).toHaveBeenCalledOnce();
+      const logObj = spy.error.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(logObj).toMatchObject({
+        database: "nonexistent_db",
+        method: "getTraces",
+      });
+      expect(logObj.durationMs).toBeTypeOf("number");
+      expect(logObj.err).toBeDefined();
     });
   });
 });
