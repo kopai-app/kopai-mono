@@ -1,13 +1,17 @@
 import type { dataFilterSchemas, datasource } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
-const TABLE_MAP: Record<datasource.MetricType, string> = {
-  Gauge: "otel_metrics_gauge",
-  Sum: "otel_metrics_sum",
-  Histogram: "otel_metrics_histogram",
-  ExponentialHistogram: "otel_metrics_exponential_histogram",
-  Summary: "otel_metrics_summary",
-};
+export const METRIC_TABLES = [
+  { type: "Gauge", table: "otel_metrics_gauge" },
+  { type: "Sum", table: "otel_metrics_sum" },
+  { type: "Histogram", table: "otel_metrics_histogram" },
+  { type: "ExponentialHistogram", table: "otel_metrics_exponential_histogram" },
+  { type: "Summary", table: "otel_metrics_summary" },
+] as const;
+
+const TABLE_MAP: Record<datasource.MetricType, string> = Object.fromEntries(
+  METRIC_TABLES.map(({ type, table }) => [type, table])
+) as Record<datasource.MetricType, string>;
 
 const COMMON_COLUMNS = [
   "ResourceAttributes",

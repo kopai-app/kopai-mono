@@ -9,6 +9,7 @@ import {
 } from "testcontainers";
 import { ClickHouseReadDatasource } from "./datasource.js";
 import { getDiscoverMVSchema } from "./discover-mv-schema.js";
+import { DISCOVER_NAMES_TABLE, DISCOVER_ATTRS_TABLE } from "./query-metrics.js";
 
 /** Returns the first element of an array, failing the test if the array is empty. */
 function firstRow<T>(data: T[]): T {
@@ -1397,10 +1398,10 @@ describe("ClickHouseReadDatasource", () => {
     beforeAll(async () => {
       // Ensure no MV tables exist regardless of test ordering
       await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_attrs`,
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}`,
       });
       await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_names`,
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
       });
     });
 
@@ -1523,10 +1524,10 @@ describe("ClickHouseReadDatasource", () => {
     beforeAll(async () => {
       // Ensure no MV tables exist regardless of test ordering
       await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_attrs`,
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}`,
       });
       await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_names`,
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
       });
     });
 
@@ -1541,7 +1542,7 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("falls back when only names MV table exists", async () => {
-      const namesOnly = `CREATE TABLE IF NOT EXISTS ${TEST_DATABASE}.otel_metrics_discover_names
+      const namesOnly = `CREATE TABLE IF NOT EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
 (MetricName String, MetricType LowCardinality(String), MetricDescription String, MetricUnit String)
 ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
       await adminClient.command({ query: namesOnly });
@@ -1554,7 +1555,7 @@ ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
       expect(result.metrics.length).toBeGreaterThan(0);
 
       await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_names`,
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
       });
     });
   });
@@ -1587,12 +1588,12 @@ ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
       ];
       for (const { type, table } of metricTypes) {
         await adminClient.command({
-          query: `INSERT INTO ${TEST_DATABASE}.otel_metrics_discover_names
+          query: `INSERT INTO ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
 SELECT MetricName, '${type}' AS MetricType, MetricDescription, MetricUnit
 FROM ${TEST_DATABASE}.${table}`,
         });
         await adminClient.command({
-          query: `INSERT INTO ${TEST_DATABASE}.otel_metrics_discover_attrs
+          query: `INSERT INTO ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}
 SELECT MetricName, '${type}' AS MetricType, 'attr' AS source, attr_key,
     groupUniqArrayState(101)(Attributes[attr_key]) AS attr_values
 FROM ${TEST_DATABASE}.${table}
@@ -1601,7 +1602,7 @@ WHERE notEmpty(Attributes)
 GROUP BY MetricName, MetricType, source, attr_key`,
         });
         await adminClient.command({
-          query: `INSERT INTO ${TEST_DATABASE}.otel_metrics_discover_attrs
+          query: `INSERT INTO ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}
 SELECT MetricName, '${type}' AS MetricType, 'res_attr' AS source, attr_key,
     groupUniqArrayState(101)(ResourceAttributes[attr_key]) AS attr_values
 FROM ${TEST_DATABASE}.${table}

@@ -235,25 +235,65 @@ export class ClickHouseReadDatasource
     const auth = { username, password };
     const http_headers = { "X-ClickHouse-Database": database };
 
-    // Detect MV tables and choose fast or fallback path
-    const useMV = await this.hasDiscoverMVs({ username, password, database });
-    const { namesQuery, attributesQuery } = useMV
-      ? buildDiscoverMetricsFromMV()
-      : buildDiscoverMetricsQueries();
+    // Try MV fast path; degrade to full-scan on any failure
+    let nameRows: z.infer<typeof chDiscoverNameRowSchema>[] = [];
+    let attrRows: z.infer<typeof chDiscoverAttrRowSchema>[] = [];
 
-    const [nameRows, attrRows] = await Promise.all([
-      this.client
-        .query({ query: namesQuery, format: "JSONEachRow", auth, http_headers })
-        .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
-      this.client
-        .query({
-          query: attributesQuery,
-          format: "JSONEachRow",
-          auth,
-          http_headers,
-        })
-        .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
-    ]);
+    let useMV = false;
+    try {
+      useMV = await this.hasDiscoverMVs({ username, password, database });
+    } catch {
+      // detection failed — fall through to full-scan
+    }
+
+    if (useMV) {
+      try {
+        const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
+        [nameRows, attrRows] = await Promise.all([
+          this.client
+            .query({
+              query: namesQuery,
+              format: "JSONEachRow",
+              auth,
+              http_headers,
+            })
+            .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
+          this.client
+            .query({
+              query: attributesQuery,
+              format: "JSONEachRow",
+              auth,
+              http_headers,
+            })
+            .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
+        ]);
+      } catch {
+        // MV query failed — fall back to full-scan
+        useMV = false;
+      }
+    }
+
+    if (!useMV) {
+      const { namesQuery, attributesQuery } = buildDiscoverMetricsQueries();
+      [nameRows, attrRows] = await Promise.all([
+        this.client
+          .query({
+            query: namesQuery,
+            format: "JSONEachRow",
+            auth,
+            http_headers,
+          })
+          .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
+        this.client
+          .query({
+            query: attributesQuery,
+            format: "JSONEachRow",
+            auth,
+            http_headers,
+          })
+          .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
+      ]);
+    }
 
     // Build lookup map for attributes
     const attrMap = new Map<

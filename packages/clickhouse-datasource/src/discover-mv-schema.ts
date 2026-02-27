@@ -14,17 +14,13 @@
  * See ADR-044 for design rationale and benchmarks.
  */
 
-import { DISCOVER_NAMES_TABLE, DISCOVER_ATTRS_TABLE } from "./query-metrics.js";
+import {
+  DISCOVER_NAMES_TABLE,
+  DISCOVER_ATTRS_TABLE,
+  METRIC_TABLES,
+} from "./query-metrics.js";
 
 const DB_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-
-const METRIC_TABLES = [
-  { type: "Gauge", table: "otel_metrics_gauge" },
-  { type: "Sum", table: "otel_metrics_sum" },
-  { type: "Histogram", table: "otel_metrics_histogram" },
-  { type: "ExponentialHistogram", table: "otel_metrics_exponential_histogram" },
-  { type: "Summary", table: "otel_metrics_summary" },
-] as const;
 
 function targetTableDDL(db: string): string[] {
   return [
