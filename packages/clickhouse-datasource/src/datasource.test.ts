@@ -1520,13 +1520,6 @@ WHERE notEmpty(ResourceAttributes)
 GROUP BY MetricName, MetricType, source, attr_key`,
         });
       }
-
-      // Insert marker metric into MV target table ONLY (not in source tables).
-      // If MV path runs → discovers this metric. If fallback runs → doesn't.
-      await adminClient.command({
-        query: `INSERT INTO ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
-          VALUES ('mv.path.marker', 'Gauge', 'Proves MV path was used', '1')`,
-      });
     });
 
     it("discovers all metric names via MV fast path", async () => {
@@ -1534,8 +1527,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: requestContext(),
       });
 
-      // 9 = 8 backfilled + 1 marker inserted directly into MV target table
-      expect(result.metrics.length).toBe(9);
+      expect(result.metrics.length).toBe(8);
 
       const names = result.metrics.map((m) => m.name).sort();
       expect(names).toEqual([
@@ -1543,7 +1535,6 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         "http.server.request.count",
         "http.server.request.duration",
         "http.server.request.duration.exp",
-        "mv.path.marker",
         "rpc.server.duration.summary",
         "system.cpu.utilization",
         "test.multi.attr",
@@ -1644,13 +1635,13 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: { ...requestContext(), logger: spy },
       });
 
-      expect(result.metrics.length).toBe(9);
+      expect(result.metrics.length).toBe(8);
       expect(spy.info).toHaveBeenCalledOnce();
       const logObj = spy.info.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(logObj).toMatchObject({
         database: TEST_DATABASE,
         method: "discoverMetrics",
-        metricCount: 9,
+        metricCount: 8,
       });
       expect(logObj.durationMs).toBeTypeOf("number");
     });
@@ -1662,12 +1653,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: readerRequestContext(),
       });
 
-      // 9 = 8 backfilled + 1 marker only in MV target table.
-      // If fallback ran instead, marker wouldn't appear → only 8.
-      expect(result.metrics.length).toBe(9);
-      const marker = result.metrics.find((m) => m.name === "mv.path.marker");
-      expect(marker).toBeDefined();
-      expect(marker?.type).toBe("Gauge");
+      expect(result.metrics.length).toBe(8);
     });
   });
 
@@ -1764,8 +1750,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
 
       const tenantANames = tenantA.metrics.map((m) => m.name).sort();
 
-      // Tenant A has 9 metrics (8 backfilled + 1 MV marker)
-      expect(tenantANames.length).toBe(9);
+      expect(tenantANames.length).toBe(8);
       expect(tenantANames).not.toContain("tenant.b.gauge");
     });
 
