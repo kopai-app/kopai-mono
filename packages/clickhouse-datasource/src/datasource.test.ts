@@ -8,6 +8,8 @@ import {
   type StartedTestContainer,
 } from "testcontainers";
 import { ClickHouseReadDatasource } from "./datasource.js";
+import { getDiscoverMVSchema } from "./discover-mv-schema.js";
+import { DISCOVER_NAMES_TABLE, DISCOVER_ATTRS_TABLE } from "./query-metrics.js";
 
 /** Returns the first element of an array, failing the test if the array is empty. */
 function firstRow<T>(data: T[]): T {
@@ -1393,6 +1395,16 @@ describe("ClickHouseReadDatasource", () => {
   });
 
   describe("discoverMetrics", () => {
+    beforeAll(async () => {
+      // Ensure no MV tables exist regardless of test ordering
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}`,
+      });
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
+      });
+    });
+
     it("discovers all metric names and types", async () => {
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
@@ -1505,6 +1517,230 @@ describe("ClickHouseReadDatasource", () => {
       );
       // 3 distinct cpu values ("0", "1", "2") — well under 100
       expect(gauge.attributes._truncated).toBeUndefined();
+    });
+  });
+
+  describe("discoverMetrics falls back without MVs", () => {
+    beforeAll(async () => {
+      // Ensure no MV tables exist regardless of test ordering
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}`,
+      });
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
+      });
+    });
+
+    it("returns results via full-scan when MV tables do not exist", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      expect(result.metrics.length).toBeGreaterThan(0);
+      const names = result.metrics.map((m) => m.name).sort();
+      expect(names).toContain("system.cpu.utilization");
+    });
+
+    it("falls back when only names MV table exists", async () => {
+      const namesOnly = `CREATE TABLE IF NOT EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
+(MetricName String, MetricType LowCardinality(String), MetricDescription String, MetricUnit String)
+ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
+      await adminClient.command({ query: namesOnly });
+
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      // Should still work via fallback
+      expect(result.metrics.length).toBeGreaterThan(0);
+
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
+      });
+    });
+  });
+
+  describe("discoverMetrics with materialized views", () => {
+    beforeAll(async () => {
+      const schema = getDiscoverMVSchema(TEST_DATABASE);
+
+      // Create target tables
+      for (const stmt of schema.targetTables) {
+        await adminClient.command({ query: stmt });
+      }
+
+      // Create materialized views
+      for (const stmt of schema.materializedViews) {
+        await adminClient.command({ query: stmt });
+      }
+
+      // Backfill MV target tables from existing source data
+      // (MVs only capture new inserts; existing data needs manual backfill)
+      const metricTypes = [
+        { type: "Gauge", table: "otel_metrics_gauge" },
+        { type: "Sum", table: "otel_metrics_sum" },
+        { type: "Histogram", table: "otel_metrics_histogram" },
+        {
+          type: "ExponentialHistogram",
+          table: "otel_metrics_exponential_histogram",
+        },
+        { type: "Summary", table: "otel_metrics_summary" },
+      ];
+      for (const { type, table } of metricTypes) {
+        await adminClient.command({
+          query: `INSERT INTO ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
+SELECT MetricName, '${type}' AS MetricType, MetricDescription, MetricUnit
+FROM ${TEST_DATABASE}.${table}`,
+        });
+        await adminClient.command({
+          query: `INSERT INTO ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}
+SELECT MetricName, '${type}' AS MetricType, 'attr' AS source, attr_key,
+    groupUniqArrayState(101)(Attributes[attr_key]) AS attr_values
+FROM ${TEST_DATABASE}.${table}
+ARRAY JOIN mapKeys(Attributes) AS attr_key
+WHERE notEmpty(Attributes)
+GROUP BY MetricName, MetricType, source, attr_key`,
+        });
+        await adminClient.command({
+          query: `INSERT INTO ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}
+SELECT MetricName, '${type}' AS MetricType, 'res_attr' AS source, attr_key,
+    groupUniqArrayState(101)(ResourceAttributes[attr_key]) AS attr_values
+FROM ${TEST_DATABASE}.${table}
+ARRAY JOIN mapKeys(ResourceAttributes) AS attr_key
+WHERE notEmpty(ResourceAttributes)
+GROUP BY MetricName, MetricType, source, attr_key`,
+        });
+      }
+    });
+
+    it("discovers all metric names via MV fast path", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      expect(result.metrics.length).toBe(8);
+
+      const names = result.metrics.map((m) => m.name).sort();
+      expect(names).toEqual([
+        "dup.ts.gauge",
+        "http.server.request.count",
+        "http.server.request.duration",
+        "http.server.request.duration.exp",
+        "rpc.server.duration.summary",
+        "system.cpu.utilization",
+        "test.multi.attr",
+        "test.truncation.metric",
+      ]);
+    });
+
+    it("returns correct metric type via MVs", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const gauge = result.metrics.find(
+        (m) => m.name === "system.cpu.utilization"
+      );
+      expect(gauge?.type).toBe("Gauge");
+      expect(gauge?.unit).toBe("1");
+      expect(gauge?.description).toBe("CPU utilization");
+    });
+
+    it("returns attribute keys and values via MVs", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const gauge = result.metrics.find(
+        (m) => m.name === "system.cpu.utilization"
+      );
+      expect(gauge?.attributes.values).toHaveProperty("cpu");
+      expect(gauge?.attributes.values["cpu"]).toContain("0");
+    });
+
+    it("returns resource attributes via MVs", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const gauge = result.metrics.find(
+        (m) => m.name === "system.cpu.utilization"
+      );
+      expect(gauge?.resourceAttributes.values).toHaveProperty(
+        "service.version"
+      );
+    });
+
+    it("sets _truncated when attribute values exceed 100 via MVs", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const metric = defined(
+        result.metrics.find((m) => m.name === "test.truncation.metric"),
+        "truncation metric"
+      );
+      expect(metric.attributes._truncated).toBe(true);
+      const idxValues = defined(metric.attributes.values["idx"], "idx values");
+      expect(idxValues.length).toBeLessThanOrEqual(100);
+    });
+
+    it("returns correct multi-attr keys via MVs", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const metric = defined(
+        result.metrics.find((m) => m.name === "test.multi.attr"),
+        "multi-attr metric"
+      );
+
+      const attrKeys = Object.keys(metric.attributes.values).sort();
+      expect(attrKeys).toEqual(["env", "region", "tier"]);
+      expect(metric.attributes.values["region"]).toEqual(["us-east"]);
+      expect(metric.attributes.values["env"]).toEqual(["prod"]);
+      expect(metric.attributes.values["tier"]).toEqual(["premium"]);
+
+      const resKeys = Object.keys(metric.resourceAttributes.values);
+      expect(resKeys).toEqual(["cloud.provider"]);
+      expect(metric.resourceAttributes.values["cloud.provider"]).toEqual([
+        "aws",
+      ]);
+    });
+
+    it("does not set _truncated when within limit via MVs", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const gauge = defined(
+        result.metrics.find((m) => m.name === "system.cpu.utilization"),
+        "gauge metric"
+      );
+      expect(gauge.attributes._truncated).toBeUndefined();
+    });
+  });
+
+  describe("getDiscoverMVSchema validation", () => {
+    it("rejects database names with SQL injection", () => {
+      expect(() => getDiscoverMVSchema("db; DROP TABLE x")).toThrow(
+        /Invalid database name/
+      );
+    });
+
+    it("rejects empty database name", () => {
+      expect(() => getDiscoverMVSchema("")).toThrow(/Invalid database name/);
+    });
+
+    it("rejects database names starting with a digit", () => {
+      expect(() => getDiscoverMVSchema("1bad")).toThrow(
+        /Invalid database name/
+      );
+    });
+
+    it("accepts valid database names", () => {
+      expect(() => getDiscoverMVSchema("otel_default")).not.toThrow();
+      expect(() => getDiscoverMVSchema("_private")).not.toThrow();
     });
   });
 

@@ -1,13 +1,17 @@
 import type { dataFilterSchemas, datasource } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
-const TABLE_MAP: Record<datasource.MetricType, string> = {
-  Gauge: "otel_metrics_gauge",
-  Sum: "otel_metrics_sum",
-  Histogram: "otel_metrics_histogram",
-  ExponentialHistogram: "otel_metrics_exponential_histogram",
-  Summary: "otel_metrics_summary",
-};
+export const METRIC_TABLES = [
+  { type: "Gauge", table: "otel_metrics_gauge" },
+  { type: "Sum", table: "otel_metrics_sum" },
+  { type: "Histogram", table: "otel_metrics_histogram" },
+  { type: "ExponentialHistogram", table: "otel_metrics_exponential_histogram" },
+  { type: "Summary", table: "otel_metrics_summary" },
+] as const;
+
+const TABLE_MAP: Record<datasource.MetricType, string> = Object.fromEntries(
+  METRIC_TABLES.map(({ type, table }) => [type, table])
+) as Record<datasource.MetricType, string>;
 
 const COMMON_COLUMNS = [
   "ResourceAttributes",
@@ -188,8 +192,46 @@ LIMIT {limit:UInt32}`;
   return { query, params };
 }
 
+// ---------------------------------------------------------------------------
+// Materialized-view target table names for metrics discovery.
+// When these tables exist, discoverMetrics uses them for near-instant results.
+// ---------------------------------------------------------------------------
+
+export const DISCOVER_NAMES_TABLE = "otel_metrics_discover_names";
+export const DISCOVER_ATTRS_TABLE = "otel_metrics_discover_attrs";
+
 /**
- * Build the two queries for discoverMetrics.
+ * Query to detect whether the MV target tables exist in the current database.
+ * Returns rows with a `name` column for each table found.
+ */
+export function buildDetectDiscoverMVQuery(): string {
+  return `SELECT name FROM system.tables WHERE database = currentDatabase() AND name IN ('${DISCOVER_NAMES_TABLE}', '${DISCOVER_ATTRS_TABLE}')`;
+}
+
+/**
+ * Build queries that read from the MV target tables.
+ */
+export function buildDiscoverMetricsFromMV(): {
+  namesQuery: string;
+  attributesQuery: string;
+} {
+  const namesQuery = `
+SELECT MetricName, MetricType, MetricDescription, MetricUnit
+FROM ${DISCOVER_NAMES_TABLE} FINAL
+ORDER BY MetricName, MetricType`;
+
+  const attributesQuery = `
+SELECT MetricName, MetricType, source, attr_key,
+    groupUniqArrayMerge(101)(attr_values) AS attr_values
+FROM ${DISCOVER_ATTRS_TABLE}
+GROUP BY MetricName, MetricType, source, attr_key
+ORDER BY MetricName, MetricType, source, attr_key`;
+
+  return { namesQuery, attributesQuery };
+}
+
+/**
+ * Build the two queries for discoverMetrics (full table scan fallback).
  */
 export function buildDiscoverMetricsQueries(): {
   namesQuery: string;

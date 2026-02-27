@@ -12,6 +12,10 @@ import { buildLogsQuery } from "./query-logs.js";
 import {
   buildMetricsQuery,
   buildDiscoverMetricsQueries,
+  buildDiscoverMetricsFromMV,
+  buildDetectDiscoverMVQuery,
+  DISCOVER_NAMES_TABLE,
+  DISCOVER_ATTRS_TABLE,
 } from "./query-metrics.js";
 import {
   parseChRow,
@@ -196,6 +200,31 @@ export class ClickHouseReadDatasource
     return { data, nextCursor };
   }
 
+  /**
+   * Detect whether both MV target tables exist in the given database.
+   * Returns true only if both names and attrs tables are present.
+   */
+  private async hasDiscoverMVs(auth: {
+    username: string;
+    password: string;
+    database: string;
+  }): Promise<boolean> {
+    const rs = await this.client.query({
+      query: buildDetectDiscoverMVQuery(),
+      format: "JSONEachRow",
+      auth: { username: auth.username, password: auth.password },
+      http_headers: { "X-ClickHouse-Database": auth.database },
+    });
+    const found = new Set<string>();
+    for await (const batch of rs.stream()) {
+      for (const row of batch) {
+        const json = row.json() as { name: string };
+        found.add(json.name);
+      }
+    }
+    return found.has(DISCOVER_NAMES_TABLE) && found.has(DISCOVER_ATTRS_TABLE);
+  }
+
   async discoverMetrics(options?: {
     requestContext?: unknown;
   }): Promise<datasource.MetricsDiscoveryResult> {
@@ -203,23 +232,68 @@ export class ClickHouseReadDatasource
     assertClickHouseRequestContext(ctx);
     const { database, username, password } = ctx;
 
-    const { namesQuery, attributesQuery } = buildDiscoverMetricsQueries();
     const auth = { username, password };
     const http_headers = { "X-ClickHouse-Database": database };
 
-    const [nameRows, attrRows] = await Promise.all([
-      this.client
-        .query({ query: namesQuery, format: "JSONEachRow", auth, http_headers })
-        .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
-      this.client
-        .query({
-          query: attributesQuery,
-          format: "JSONEachRow",
-          auth,
-          http_headers,
-        })
-        .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
-    ]);
+    // Try MV fast path; degrade to full-scan on any failure
+    let nameRows: z.infer<typeof chDiscoverNameRowSchema>[] = [];
+    let attrRows: z.infer<typeof chDiscoverAttrRowSchema>[] = [];
+
+    let useMV = false;
+    try {
+      useMV = await this.hasDiscoverMVs({ username, password, database });
+    } catch {
+      // detection failed — fall through to full-scan
+    }
+
+    if (useMV) {
+      try {
+        const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
+        [nameRows, attrRows] = await Promise.all([
+          this.client
+            .query({
+              query: namesQuery,
+              format: "JSONEachRow",
+              auth,
+              http_headers,
+            })
+            .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
+          this.client
+            .query({
+              query: attributesQuery,
+              format: "JSONEachRow",
+              auth,
+              http_headers,
+            })
+            .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
+        ]);
+      } catch {
+        // MV query failed — fall back to full-scan
+        useMV = false;
+      }
+    }
+
+    if (!useMV) {
+      const { namesQuery, attributesQuery } = buildDiscoverMetricsQueries();
+      [nameRows, attrRows] = await Promise.all([
+        this.client
+          .query({
+            query: namesQuery,
+            format: "JSONEachRow",
+            auth,
+            http_headers,
+          })
+          .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
+        this.client
+          .query({
+            query: attributesQuery,
+            format: "JSONEachRow",
+            auth,
+            http_headers,
+          })
+          .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
+      ]);
+    }
 
     // Build lookup map for attributes
     const attrMap = new Map<
