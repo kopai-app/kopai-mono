@@ -1,5 +1,11 @@
 # @kopai/clickhouse-datasource
 
+## 0.1.2
+
+### Patch Changes
+
+- ed34f9e: Add option to optimize metrics discover performance using materialized views
+
 ## 0.1.1
 
 ### Patch Changes
