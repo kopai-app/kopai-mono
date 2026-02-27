@@ -16,9 +16,6 @@ import { buildLogsQuery } from "./query-logs.js";
 import {
   buildMetricsQuery,
   buildDiscoverMetricsFromMV,
-  buildDetectDiscoverMVQuery,
-  DISCOVER_NAMES_TABLE,
-  DISCOVER_ATTRS_TABLE,
 } from "./query-metrics.js";
 import {
   parseChRow,
@@ -39,6 +36,29 @@ const noopLogger: Logger = {
 
 function getLogger(ctx: ClickHouseRequestContext): Logger {
   return ctx.logger ?? noopLogger;
+}
+
+const CH_NODE_HEADER = "x-clickhouse-server-display-name";
+
+/** Extract short ClickHouse node identifier from response headers. */
+function getChNode(rs: ResultSet<"JSONEachRow">): string | undefined {
+  const raw = rs.response_headers[CH_NODE_HEADER];
+  if (typeof raw !== "string") return undefined;
+  // Header value is a full FQDN like "chi-clickhouse-prod-prod-cluster-0-0-0.ns.svc.cluster.local"
+  // Extract just the pod name (first segment before the dot).
+  return raw.split(".")[0];
+}
+
+/** ClickHouse error code for TABLE_DOES_NOT_EXIST */
+const CH_ERR_TABLE_NOT_FOUND = "60";
+
+function isChError(err: unknown, code: string): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === code
+  );
 }
 
 /** Collect all rows from a ResultSet stream, parsing each with the given schema. */
@@ -93,6 +113,7 @@ export class ClickHouseReadDatasource
     const start = performance.now();
 
     let rows;
+    let chNode: string | undefined;
     try {
       const { query, params } = buildTracesQuery(filter);
 
@@ -103,12 +124,13 @@ export class ClickHouseReadDatasource
         auth: { username, password },
         http_headers: { "X-ClickHouse-Database": database },
       });
+      chNode = getChNode(resultSet);
 
       rows = await streamParse(resultSet, chTracesRowSchema);
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
       log.error(
-        { database, username, method: "getTraces", durationMs, err },
+        { database, username, method: "getTraces", durationMs, chNode, err },
         "query failed"
       );
       throw err;
@@ -130,6 +152,7 @@ export class ClickHouseReadDatasource
         method: "getTraces",
         durationMs,
         rowCount: rows.length,
+        chNode,
       },
       "query complete"
     );
@@ -150,6 +173,7 @@ export class ClickHouseReadDatasource
     const start = performance.now();
 
     let rows: { parsed: z.output<typeof chLogsRowSchema>; _rowHash: string }[];
+    let chNode: string | undefined;
     try {
       const { query, params } = buildLogsQuery(filter);
 
@@ -160,6 +184,7 @@ export class ClickHouseReadDatasource
         auth: { username, password },
         http_headers: { "X-ClickHouse-Database": database },
       });
+      chNode = getChNode(resultSet);
 
       rows = [];
       for await (const batch of resultSet.stream()) {
@@ -174,7 +199,7 @@ export class ClickHouseReadDatasource
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
       log.error(
-        { database, username, method: "getLogs", durationMs, err },
+        { database, username, method: "getLogs", durationMs, chNode, err },
         "query failed"
       );
       throw err;
@@ -199,6 +224,7 @@ export class ClickHouseReadDatasource
         method: "getLogs",
         durationMs,
         rowCount: rows.length,
+        chNode,
       },
       "query complete"
     );
@@ -222,6 +248,7 @@ export class ClickHouseReadDatasource
     const schema = metricSchemaMap[metricType];
 
     let rows: { parsed: z.output<typeof schema>; _rowHash: string }[];
+    let chNode: string | undefined;
     try {
       const { query, params } = buildMetricsQuery(filter);
 
@@ -232,6 +259,7 @@ export class ClickHouseReadDatasource
         auth: { username, password },
         http_headers: { "X-ClickHouse-Database": database },
       });
+      chNode = getChNode(resultSet);
 
       rows = [];
       for await (const batch of resultSet.stream()) {
@@ -246,7 +274,7 @@ export class ClickHouseReadDatasource
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
       log.error(
-        { database, username, method: "getMetrics", durationMs, err },
+        { database, username, method: "getMetrics", durationMs, chNode, err },
         "query failed"
       );
       throw err;
@@ -271,35 +299,11 @@ export class ClickHouseReadDatasource
         method: "getMetrics",
         durationMs,
         rowCount: rows.length,
+        chNode,
       },
       "query complete"
     );
     return { data, nextCursor };
-  }
-
-  /**
-   * Detect whether both MV target tables exist in the given database.
-   * Returns true only if both names and attrs tables are present.
-   */
-  private async hasDiscoverMVs(auth: {
-    username: string;
-    password: string;
-    database: string;
-  }): Promise<boolean> {
-    const rs = await this.client.query({
-      query: buildDetectDiscoverMVQuery(),
-      format: "JSONEachRow",
-      auth: { username: auth.username, password: auth.password },
-      http_headers: { "X-ClickHouse-Database": auth.database },
-    });
-    const found = new Set<string>();
-    for await (const batch of rs.stream()) {
-      for (const row of batch) {
-        const json = row.json() as { name: string };
-        found.add(json.name);
-      }
-    }
-    return found.has(DISCOVER_NAMES_TABLE) && found.has(DISCOVER_ATTRS_TABLE);
   }
 
   async discoverMetrics(options?: {
@@ -315,54 +319,43 @@ export class ClickHouseReadDatasource
     const auth = { username, password };
     const http_headers = { "X-ClickHouse-Database": database };
 
-    let hasMVs: boolean;
-    try {
-      hasMVs = await this.hasDiscoverMVs({ username, password, database });
-    } catch (err) {
-      const durationMs = Math.round(performance.now() - start);
-      log.error({ ...logCtx, durationMs, err }, "MV detection failed");
-      throw err;
-    }
-    const detectionMs = Math.round(performance.now() - start);
-
-    if (!hasMVs) {
-      log.warn({ ...logCtx, detectionMs }, "MV tables not found");
-      throw new Error(`MV tables not found in ${database}`);
-    }
-
-    const queryStart = performance.now();
+    // Query MV tables directly — no system.tables detection needed.
+    // Reader users may lack access to system.tables, causing false negatives.
     let nameRows: z.infer<typeof chDiscoverNameRowSchema>[];
     let attrRows: z.infer<typeof chDiscoverAttrRowSchema>[];
+    let chNodes: (string | undefined)[] = [];
     try {
       const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
+      const [namesRs, attrsRs] = await Promise.all([
+        this.client.query({
+          query: namesQuery,
+          format: "JSONEachRow",
+          auth,
+          http_headers,
+        }),
+        this.client.query({
+          query: attributesQuery,
+          format: "JSONEachRow",
+          auth,
+          http_headers,
+        }),
+      ]);
+      chNodes = [getChNode(namesRs), getChNode(attrsRs)];
       [nameRows, attrRows] = await Promise.all([
-        this.client
-          .query({
-            query: namesQuery,
-            format: "JSONEachRow",
-            auth,
-            http_headers,
-          })
-          .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
-        this.client
-          .query({
-            query: attributesQuery,
-            format: "JSONEachRow",
-            auth,
-            http_headers,
-          })
-          .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
+        streamParse(namesRs, chDiscoverNameRowSchema),
+        streamParse(attrsRs, chDiscoverAttrRowSchema),
       ]);
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
-      const queryMs = Math.round(performance.now() - queryStart);
-      log.error(
-        { ...logCtx, durationMs, detectionMs, queryMs, err },
-        "MV query failed"
-      );
+      // ClickHouse error code 60 = TABLE_DOES_NOT_EXIST → MV tables not provisioned
+      if (isChError(err, CH_ERR_TABLE_NOT_FOUND)) {
+        log.warn({ ...logCtx, durationMs, chNodes }, "MV tables not found");
+        throw new Error(`MV tables not found in ${database}`, { cause: err });
+      }
+      log.error({ ...logCtx, durationMs, chNodes, err }, "MV query failed");
       throw err;
     }
-    const queryMs = Math.round(performance.now() - queryStart);
+    const queryMs = Math.round(performance.now() - start);
 
     // Build lookup map for attributes
     const attrMap = new Map<
@@ -428,11 +421,11 @@ export class ClickHouseReadDatasource
       {
         ...logCtx,
         durationMs,
-        detectionMs,
         queryMs,
         metricCount: metrics.length,
         nameRows: nameRows.length,
         attrRows: attrRows.length,
+        chNodes,
       },
       "query complete"
     );
