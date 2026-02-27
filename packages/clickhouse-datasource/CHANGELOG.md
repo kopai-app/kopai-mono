@@ -1,5 +1,11 @@
 # @kopai/clickhouse-datasource
 
+## 0.2.0
+
+### Minor Changes
+
+- 7542c2b: Make debugging easier
+
 ## 0.1.2
 
 ### Patch Changes
