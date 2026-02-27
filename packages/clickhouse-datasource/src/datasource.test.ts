@@ -1394,6 +1394,16 @@ describe("ClickHouseReadDatasource", () => {
   });
 
   describe("discoverMetrics", () => {
+    beforeAll(async () => {
+      // Ensure no MV tables exist regardless of test ordering
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_attrs`,
+      });
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_names`,
+      });
+    });
+
     it("discovers all metric names and types", async () => {
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
@@ -1510,8 +1520,17 @@ describe("ClickHouseReadDatasource", () => {
   });
 
   describe("discoverMetrics falls back without MVs", () => {
+    beforeAll(async () => {
+      // Ensure no MV tables exist regardless of test ordering
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_attrs`,
+      });
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.otel_metrics_discover_names`,
+      });
+    });
+
     it("returns results via full-scan when MV tables do not exist", async () => {
-      // MVs haven't been created yet at this point in the suite
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1554,9 +1573,42 @@ ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
         await adminClient.command({ query: stmt });
       }
 
-      // Backfill from existing data
-      for (const stmt of schema.backfill) {
-        await adminClient.command({ query: stmt });
+      // Backfill MV target tables from existing source data
+      // (MVs only capture new inserts; existing data needs manual backfill)
+      const metricTypes = [
+        { type: "Gauge", table: "otel_metrics_gauge" },
+        { type: "Sum", table: "otel_metrics_sum" },
+        { type: "Histogram", table: "otel_metrics_histogram" },
+        {
+          type: "ExponentialHistogram",
+          table: "otel_metrics_exponential_histogram",
+        },
+        { type: "Summary", table: "otel_metrics_summary" },
+      ];
+      for (const { type, table } of metricTypes) {
+        await adminClient.command({
+          query: `INSERT INTO ${TEST_DATABASE}.otel_metrics_discover_names
+SELECT MetricName, '${type}' AS MetricType, MetricDescription, MetricUnit
+FROM ${TEST_DATABASE}.${table}`,
+        });
+        await adminClient.command({
+          query: `INSERT INTO ${TEST_DATABASE}.otel_metrics_discover_attrs
+SELECT MetricName, '${type}' AS MetricType, 'attr' AS source, attr_key,
+    groupUniqArrayState(101)(Attributes[attr_key]) AS attr_values
+FROM ${TEST_DATABASE}.${table}
+ARRAY JOIN mapKeys(Attributes) AS attr_key
+WHERE notEmpty(Attributes)
+GROUP BY MetricName, MetricType, source, attr_key`,
+        });
+        await adminClient.command({
+          query: `INSERT INTO ${TEST_DATABASE}.otel_metrics_discover_attrs
+SELECT MetricName, '${type}' AS MetricType, 'res_attr' AS source, attr_key,
+    groupUniqArrayState(101)(ResourceAttributes[attr_key]) AS attr_values
+FROM ${TEST_DATABASE}.${table}
+ARRAY JOIN mapKeys(ResourceAttributes) AS attr_key
+WHERE notEmpty(ResourceAttributes)
+GROUP BY MetricName, MetricType, source, attr_key`,
+        });
       }
     });
 

@@ -9,7 +9,7 @@
  *   2. For replicated setups, replace `ReplacingMergeTree` with
  *      `ReplicatedReplacingMergeTree` and `AggregatingMergeTree` with
  *      `ReplicatedAggregatingMergeTree`
- *   3. Run target table DDLs first, then MVs, then backfill
+ *   3. Run target table DDLs first, then MVs
  *
  * See ADR-044 for design rationale and benchmarks.
  */
@@ -93,40 +93,6 @@ GROUP BY MetricName, MetricType, source, attr_key`
   return stmts;
 }
 
-function backfillDDL(db: string): string[] {
-  const stmts: string[] = [];
-
-  for (const { type, table } of METRIC_TABLES) {
-    stmts.push(
-      `INSERT INTO ${db}.${DISCOVER_NAMES_TABLE}
-SELECT MetricName, '${type}' AS MetricType, MetricDescription, MetricUnit
-FROM ${db}.${table}`
-    );
-
-    stmts.push(
-      `INSERT INTO ${db}.${DISCOVER_ATTRS_TABLE}
-SELECT MetricName, '${type}' AS MetricType, 'attr' AS source, attr_key,
-    groupUniqArrayState(101)(Attributes[attr_key]) AS attr_values
-FROM ${db}.${table}
-ARRAY JOIN mapKeys(Attributes) AS attr_key
-WHERE notEmpty(Attributes)
-GROUP BY MetricName, MetricType, source, attr_key`
-    );
-
-    stmts.push(
-      `INSERT INTO ${db}.${DISCOVER_ATTRS_TABLE}
-SELECT MetricName, '${type}' AS MetricType, 'res_attr' AS source, attr_key,
-    groupUniqArrayState(101)(ResourceAttributes[attr_key]) AS attr_values
-FROM ${db}.${table}
-ARRAY JOIN mapKeys(ResourceAttributes) AS attr_key
-WHERE notEmpty(ResourceAttributes)
-GROUP BY MetricName, MetricType, source, attr_key`
-    );
-  }
-
-  return stmts;
-}
-
 /**
  * Generate all DDL statements needed to set up metrics discover MVs.
  *
@@ -136,7 +102,6 @@ GROUP BY MetricName, MetricType, source, attr_key`
 export function getDiscoverMVSchema(database: string): {
   targetTables: string[];
   materializedViews: string[];
-  backfill: string[];
 } {
   if (!DB_IDENTIFIER_RE.test(database)) {
     throw new Error(`Invalid database name: ${database}`);
@@ -144,6 +109,5 @@ export function getDiscoverMVSchema(database: string): {
   return {
     targetTables: targetTableDDL(database),
     materializedViews: materializedViewDDL(database),
-    backfill: backfillDDL(database),
   };
 }
