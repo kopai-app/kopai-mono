@@ -6,12 +6,15 @@ import type {
   datasource,
 } from "@kopai/core";
 import type z from "zod";
-import { assertClickHouseRequestContext } from "./types.js";
+import {
+  assertClickHouseRequestContext,
+  type Logger,
+  type ClickHouseRequestContext,
+} from "./types.js";
 import { buildTracesQuery } from "./query-traces.js";
 import { buildLogsQuery } from "./query-logs.js";
 import {
   buildMetricsQuery,
-  buildDiscoverMetricsQueries,
   buildDiscoverMetricsFromMV,
   buildDetectDiscoverMVQuery,
   DISCOVER_NAMES_TABLE,
@@ -27,6 +30,16 @@ import {
 } from "./ch-row-schemas.js";
 
 const MAX_ATTR_VALUES = 100;
+
+const noopLogger: Logger = {
+  info() {},
+  warn() {},
+  error() {},
+};
+
+function getLogger(ctx: ClickHouseRequestContext): Logger {
+  return ctx.logger ?? noopLogger;
+}
 
 /** Collect all rows from a ResultSet stream, parsing each with the given schema. */
 async function streamParse<S extends z.ZodType>(
@@ -76,20 +89,33 @@ export class ClickHouseReadDatasource
   }> {
     assertClickHouseRequestContext(filter.requestContext);
     const { database, username, password } = filter.requestContext;
+    const log = getLogger(filter.requestContext);
+    const start = performance.now();
 
-    const { query, params } = buildTracesQuery(filter);
+    let rows;
+    try {
+      const { query, params } = buildTracesQuery(filter);
+
+      const resultSet = await this.client.query({
+        query,
+        query_params: params,
+        format: "JSONEachRow",
+        auth: { username, password },
+        http_headers: { "X-ClickHouse-Database": database },
+      });
+
+      rows = await streamParse(resultSet, chTracesRowSchema);
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        { database, username, method: "getTraces", durationMs, err },
+        "query failed"
+      );
+      throw err;
+    }
+
+    const durationMs = Math.round(performance.now() - start);
     const limit = filter.limit ?? 100;
-
-    const resultSet = await this.client.query({
-      query,
-      query_params: params,
-      format: "JSONEachRow",
-      auth: { username, password },
-      http_headers: { "X-ClickHouse-Database": database },
-    });
-
-    const rows = await streamParse(resultSet, chTracesRowSchema);
-
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
 
@@ -97,6 +123,16 @@ export class ClickHouseReadDatasource
     const nextCursor =
       hasMore && lastRow ? `${lastRow.Timestamp}:${lastRow.SpanId}` : null;
 
+    log.info(
+      {
+        database,
+        username,
+        method: "getTraces",
+        durationMs,
+        rowCount: rows.length,
+      },
+      "query complete"
+    );
     return { data, nextCursor };
   }
 
@@ -110,32 +146,42 @@ export class ClickHouseReadDatasource
   }> {
     assertClickHouseRequestContext(filter.requestContext);
     const { database, username, password } = filter.requestContext;
+    const log = getLogger(filter.requestContext);
+    const start = performance.now();
 
-    const { query, params } = buildLogsQuery(filter);
-    const limit = filter.limit ?? 100;
+    let rows: { parsed: z.output<typeof chLogsRowSchema>; _rowHash: string }[];
+    try {
+      const { query, params } = buildLogsQuery(filter);
 
-    const resultSet = await this.client.query({
-      query,
-      query_params: params,
-      format: "JSONEachRow",
-      auth: { username, password },
-      http_headers: { "X-ClickHouse-Database": database },
-    });
+      const resultSet = await this.client.query({
+        query,
+        query_params: params,
+        format: "JSONEachRow",
+        auth: { username, password },
+        http_headers: { "X-ClickHouse-Database": database },
+      });
 
-    const rows: {
-      parsed: z.output<typeof chLogsRowSchema>;
-      _rowHash: string;
-    }[] = [];
-    for await (const batch of resultSet.stream()) {
-      for (const row of batch) {
-        const json = row.json() as Record<string, unknown>;
-        rows.push({
-          parsed: parseChRow(chLogsRowSchema, json),
-          _rowHash: String(json._rowHash),
-        });
+      rows = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json() as Record<string, unknown>;
+          rows.push({
+            parsed: parseChRow(chLogsRowSchema, json),
+            _rowHash: String(json._rowHash),
+          });
+        }
       }
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        { database, username, method: "getLogs", durationMs, err },
+        "query failed"
+      );
+      throw err;
     }
 
+    const durationMs = Math.round(performance.now() - start);
+    const limit = filter.limit ?? 100;
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
     const data = items.map((r) => r.parsed);
@@ -146,6 +192,16 @@ export class ClickHouseReadDatasource
         ? `${lastItem.parsed.Timestamp}:${lastItem._rowHash}`
         : null;
 
+    log.info(
+      {
+        database,
+        username,
+        method: "getLogs",
+        durationMs,
+        rowCount: rows.length,
+      },
+      "query complete"
+    );
     return { data, nextCursor };
   }
 
@@ -159,34 +215,45 @@ export class ClickHouseReadDatasource
   }> {
     assertClickHouseRequestContext(filter.requestContext);
     const { database, username, password } = filter.requestContext;
+    const log = getLogger(filter.requestContext);
+    const start = performance.now();
 
-    const { query, params } = buildMetricsQuery(filter);
-    const limit = filter.limit ?? 100;
     const metricType = filter.metricType;
     const schema = metricSchemaMap[metricType];
 
-    const resultSet = await this.client.query({
-      query,
-      query_params: params,
-      format: "JSONEachRow",
-      auth: { username, password },
-      http_headers: { "X-ClickHouse-Database": database },
-    });
+    let rows: { parsed: z.output<typeof schema>; _rowHash: string }[];
+    try {
+      const { query, params } = buildMetricsQuery(filter);
 
-    const rows: {
-      parsed: z.output<typeof schema>;
-      _rowHash: string;
-    }[] = [];
-    for await (const batch of resultSet.stream()) {
-      for (const row of batch) {
-        const json = row.json() as Record<string, unknown>;
-        rows.push({
-          parsed: parseChRow(schema, json),
-          _rowHash: String(json._rowHash),
-        });
+      const resultSet = await this.client.query({
+        query,
+        query_params: params,
+        format: "JSONEachRow",
+        auth: { username, password },
+        http_headers: { "X-ClickHouse-Database": database },
+      });
+
+      rows = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json() as Record<string, unknown>;
+          rows.push({
+            parsed: parseChRow(schema, json),
+            _rowHash: String(json._rowHash),
+          });
+        }
       }
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        { database, username, method: "getMetrics", durationMs, err },
+        "query failed"
+      );
+      throw err;
     }
 
+    const durationMs = Math.round(performance.now() - start);
+    const limit = filter.limit ?? 100;
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
     const data = items.map((r) => r.parsed);
@@ -197,6 +264,16 @@ export class ClickHouseReadDatasource
         ? `${lastItem.parsed.TimeUnix}:${lastItem._rowHash}`
         : null;
 
+    log.info(
+      {
+        database,
+        username,
+        method: "getMetrics",
+        durationMs,
+        rowCount: rows.length,
+      },
+      "query complete"
+    );
     return { data, nextCursor };
   }
 
@@ -231,50 +308,33 @@ export class ClickHouseReadDatasource
     const ctx = options?.requestContext;
     assertClickHouseRequestContext(ctx);
     const { database, username, password } = ctx;
+    const log = getLogger(ctx);
+    const logCtx = { database, username, method: "discoverMetrics" };
+    const start = performance.now();
 
     const auth = { username, password };
     const http_headers = { "X-ClickHouse-Database": database };
 
-    // Try MV fast path; degrade to full-scan on any failure
-    let nameRows: z.infer<typeof chDiscoverNameRowSchema>[] = [];
-    let attrRows: z.infer<typeof chDiscoverAttrRowSchema>[] = [];
-
-    let useMV = false;
+    let hasMVs: boolean;
     try {
-      useMV = await this.hasDiscoverMVs({ username, password, database });
-    } catch {
-      // detection failed — fall through to full-scan
+      hasMVs = await this.hasDiscoverMVs({ username, password, database });
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error({ ...logCtx, durationMs, err }, "MV detection failed");
+      throw err;
+    }
+    const detectionMs = Math.round(performance.now() - start);
+
+    if (!hasMVs) {
+      log.warn({ ...logCtx, detectionMs }, "MV tables not found");
+      throw new Error(`MV tables not found in ${database}`);
     }
 
-    if (useMV) {
-      try {
-        const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
-        [nameRows, attrRows] = await Promise.all([
-          this.client
-            .query({
-              query: namesQuery,
-              format: "JSONEachRow",
-              auth,
-              http_headers,
-            })
-            .then((rs) => streamParse(rs, chDiscoverNameRowSchema)),
-          this.client
-            .query({
-              query: attributesQuery,
-              format: "JSONEachRow",
-              auth,
-              http_headers,
-            })
-            .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
-        ]);
-      } catch {
-        // MV query failed — fall back to full-scan
-        useMV = false;
-      }
-    }
-
-    if (!useMV) {
-      const { namesQuery, attributesQuery } = buildDiscoverMetricsQueries();
+    const queryStart = performance.now();
+    let nameRows: z.infer<typeof chDiscoverNameRowSchema>[];
+    let attrRows: z.infer<typeof chDiscoverAttrRowSchema>[];
+    try {
+      const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
       [nameRows, attrRows] = await Promise.all([
         this.client
           .query({
@@ -293,7 +353,16 @@ export class ClickHouseReadDatasource
           })
           .then((rs) => streamParse(rs, chDiscoverAttrRowSchema)),
       ]);
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      const queryMs = Math.round(performance.now() - queryStart);
+      log.error(
+        { ...logCtx, durationMs, detectionMs, queryMs, err },
+        "MV query failed"
+      );
+      throw err;
     }
+    const queryMs = Math.round(performance.now() - queryStart);
 
     // Build lookup map for attributes
     const attrMap = new Map<
@@ -354,6 +423,19 @@ export class ClickHouseReadDatasource
       };
     });
 
+    const durationMs = Math.round(performance.now() - start);
+    log.info(
+      {
+        ...logCtx,
+        durationMs,
+        detectionMs,
+        queryMs,
+        metricCount: metrics.length,
+        nameRows: nameRows.length,
+        attrRows: attrRows.length,
+      },
+      "query complete"
+    );
     return { metrics };
   }
 }

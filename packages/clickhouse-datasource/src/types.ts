@@ -1,3 +1,15 @@
+/** Matches pino.LogFn overloads so Fastify's request.log is directly assignable. */
+export interface LogFn {
+  (msg: string, ...args: unknown[]): void;
+  (obj: object, msg?: string, ...args: unknown[]): void;
+}
+
+export interface Logger {
+  info: LogFn;
+  warn: LogFn;
+  error: LogFn;
+}
+
 /**
  * Request context expected by ClickHouseReadDatasource.
  * Consuming apps provide this via requestContext on each method call.
@@ -6,6 +18,7 @@ export interface ClickHouseRequestContext {
   database: string;
   username: string;
   password: string;
+  logger?: Logger;
 }
 
 /**
