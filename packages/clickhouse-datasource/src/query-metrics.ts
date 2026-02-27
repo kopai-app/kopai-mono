@@ -188,8 +188,46 @@ LIMIT {limit:UInt32}`;
   return { query, params };
 }
 
+// ---------------------------------------------------------------------------
+// Materialized-view target table names for metrics discovery.
+// When these tables exist, discoverMetrics uses them for near-instant results.
+// ---------------------------------------------------------------------------
+
+export const DISCOVER_NAMES_TABLE = "otel_metrics_discover_names";
+export const DISCOVER_ATTRS_TABLE = "otel_metrics_discover_attrs";
+
 /**
- * Build the two queries for discoverMetrics.
+ * Query to detect whether the MV target tables exist in the current database.
+ * Returns rows with a `name` column for each table found.
+ */
+export function buildDetectDiscoverMVQuery(): string {
+  return `SELECT name FROM system.tables WHERE database = currentDatabase() AND name IN ('${DISCOVER_NAMES_TABLE}', '${DISCOVER_ATTRS_TABLE}')`;
+}
+
+/**
+ * Build queries that read from the MV target tables.
+ */
+export function buildDiscoverMetricsFromMV(): {
+  namesQuery: string;
+  attributesQuery: string;
+} {
+  const namesQuery = `
+SELECT MetricName, MetricType, MetricDescription, MetricUnit
+FROM ${DISCOVER_NAMES_TABLE} FINAL
+ORDER BY MetricName, MetricType`;
+
+  const attributesQuery = `
+SELECT MetricName, MetricType, source, attr_key,
+    groupUniqArrayMerge(101)(attr_values) AS attr_values
+FROM ${DISCOVER_ATTRS_TABLE}
+GROUP BY MetricName, MetricType, source, attr_key
+ORDER BY MetricName, MetricType, source, attr_key`;
+
+  return { namesQuery, attributesQuery };
+}
+
+/**
+ * Build the two queries for discoverMetrics (full table scan fallback).
  */
 export function buildDiscoverMetricsQueries(): {
   namesQuery: string;

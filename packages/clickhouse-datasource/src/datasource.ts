@@ -12,6 +12,10 @@ import { buildLogsQuery } from "./query-logs.js";
 import {
   buildMetricsQuery,
   buildDiscoverMetricsQueries,
+  buildDiscoverMetricsFromMV,
+  buildDetectDiscoverMVQuery,
+  DISCOVER_NAMES_TABLE,
+  DISCOVER_ATTRS_TABLE,
 } from "./query-metrics.js";
 import {
   parseChRow,
@@ -196,6 +200,31 @@ export class ClickHouseReadDatasource
     return { data, nextCursor };
   }
 
+  /**
+   * Detect whether both MV target tables exist in the given database.
+   * Returns true only if both names and attrs tables are present.
+   */
+  private async hasDiscoverMVs(auth: {
+    username: string;
+    password: string;
+    database: string;
+  }): Promise<boolean> {
+    const rs = await this.client.query({
+      query: buildDetectDiscoverMVQuery(),
+      format: "JSONEachRow",
+      auth: { username: auth.username, password: auth.password },
+      http_headers: { "X-ClickHouse-Database": auth.database },
+    });
+    const found = new Set<string>();
+    for await (const batch of rs.stream()) {
+      for (const row of batch) {
+        const json = row.json() as { name: string };
+        found.add(json.name);
+      }
+    }
+    return found.has(DISCOVER_NAMES_TABLE) && found.has(DISCOVER_ATTRS_TABLE);
+  }
+
   async discoverMetrics(options?: {
     requestContext?: unknown;
   }): Promise<datasource.MetricsDiscoveryResult> {
@@ -203,9 +232,14 @@ export class ClickHouseReadDatasource
     assertClickHouseRequestContext(ctx);
     const { database, username, password } = ctx;
 
-    const { namesQuery, attributesQuery } = buildDiscoverMetricsQueries();
     const auth = { username, password };
     const http_headers = { "X-ClickHouse-Database": database };
+
+    // Detect MV tables and choose fast or fallback path
+    const useMV = await this.hasDiscoverMVs({ username, password, database });
+    const { namesQuery, attributesQuery } = useMV
+      ? buildDiscoverMetricsFromMV()
+      : buildDiscoverMetricsQueries();
 
     const [nameRows, attrRows] = await Promise.all([
       this.client
