@@ -39,7 +39,7 @@
     "@kopai/core": "workspace:*",
     "@kopai/sdk": "workspace:*",
     "@tanstack/react-query": "^5",
-    "@tanstack/react-virtual": "^3.11.2",
+    "@tanstack/react-virtual": "^3.13.19",
     "recharts": "^3.7.0"
   },
   "peerDependencies": {
@@ -48,20 +48,20 @@
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "@storybook/addon-docs": "^10.2.10",
-    "@storybook/react": "^10.2.10",
-    "@storybook/react-vite": "^10.2.10",
+    "@storybook/addon-docs": "^10.2.13",
+    "@storybook/react": "^10.2.13",
+    "@storybook/react-vite": "^10.2.13",
     "@testing-library/react": "^16.3.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.1.4",
-    "@tailwindcss/postcss": "^4.2.0",
+    "@tailwindcss/postcss": "^4.2.1",
     "jsdom": "^28.1.0",
     "postcss": "^8.5.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "storybook": "^10.2.10",
-    "tailwindcss": "^4.2.0",
+    "storybook": "^10.2.13",
+    "tailwindcss": "^4.2.1",
     "tsdown": "^0.20.3",
     "vite": "^7.3.1"
   }
