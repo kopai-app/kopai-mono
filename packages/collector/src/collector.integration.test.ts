@@ -175,11 +175,9 @@ describe("collector integration", () => {
       severityText: "INFO",
     });
 
-    // Small delay to allow log processor to complete
-    await new Promise((r) => setTimeout(r, 50));
-    await loggerProvider.forceFlush();
-
-    expect(writeLogsSpy).toHaveBeenCalled();
+    // SimpleLogRecordProcessor fires exports without tracking them in forceFlush(),
+    // unlike SimpleSpanProcessor which tracks pending exports. Poll until export lands.
+    await vi.waitFor(() => expect(writeLogsSpy).toHaveBeenCalled());
     const call = writeLogsSpy.mock.calls[0]![0];
     expect(call.resourceLogs!).toHaveLength(1);
     expect(
@@ -337,11 +335,9 @@ describe("collector integration (protobuf)", () => {
       severityText: "INFO",
     });
 
-    // Small delay to allow log processor to complete
-    await new Promise((r) => setTimeout(r, 50));
-    await loggerProvider.forceFlush();
-
-    expect(writeLogsSpy).toHaveBeenCalled();
+    // SimpleLogRecordProcessor fires exports without tracking them in forceFlush(),
+    // unlike SimpleSpanProcessor which tracks pending exports. Poll until export lands.
+    await vi.waitFor(() => expect(writeLogsSpy).toHaveBeenCalled());
     const call = writeLogsSpy.mock.calls[0]![0];
     expect(call.resourceLogs!).toHaveLength(1);
     expect(
