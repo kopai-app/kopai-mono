@@ -3,7 +3,7 @@ import {
   type FastifyReply,
   type FastifyRequest,
 } from "fastify";
-import { SignalsApiError } from "./errors.js";
+import { DashboardNotFoundError, SignalsApiError } from "./errors.js";
 import type { SignalsApiErrorResponse } from "./error-schema-zod.js";
 export function errorHandler(
   error: FastifyError | Error | string,
@@ -39,6 +39,14 @@ export function errorHandler(
   }
 
   request.log.error(error);
+  if (error instanceof DashboardNotFoundError) {
+    return reply.status(404).send({
+      type: "https://docs.kopai.app/errors/dashboard-not-found",
+      status: 404,
+      title: "Dashboard not found",
+      detail: error.message,
+    } satisfies SignalsApiErrorResponse);
+  }
   if (error instanceof SignalsApiError) {
     return reply.status(500).send({
       type: "https://docs.kopai.app/errors/signals-api-internal-error", // TODO: document error

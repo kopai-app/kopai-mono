@@ -6,3 +6,7 @@ export abstract class SignalsApiError extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+export class DashboardNotFoundError extends SignalsApiError {
+  readonly code = "DASHBOARD_NOT_FOUND";
+}

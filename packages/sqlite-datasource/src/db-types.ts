@@ -193,6 +193,16 @@ export interface OtelTracesTraceIdTs {
   TraceId: string;
 }
 
+export interface Dashboards {
+  id: string;
+  name: string;
+  created_at: string;
+  metadata: string;
+  ui_tree_version: string;
+  ui_tree_version_major: number;
+  ui_tree: string;
+}
+
 export interface DB {
   otel_logs: OtelLogs;
   otel_metrics_exponential_histogram: OtelMetricsExponentialHistogram;
@@ -202,4 +212,5 @@ export interface DB {
   otel_metrics_summary: OtelMetricsSummary;
   otel_traces: OtelTraces;
   otel_traces_trace_id_ts: OtelTracesTraceIdTs;
+  dashboards: Dashboards;
 }

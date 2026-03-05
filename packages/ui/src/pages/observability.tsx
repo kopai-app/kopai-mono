@@ -12,9 +12,6 @@ import { useKopaiData } from "../hooks/use-kopai-data.js";
 import { useLiveLogs } from "../hooks/use-live-logs.js";
 import type { denormalizedSignals, dataFilterSchemas } from "@kopai/core";
 import type { DataSource } from "../lib/component-catalog.js";
-import { observabilityCatalog } from "../lib/observability-catalog.js";
-import { createRendererFromCatalog } from "../lib/renderer.js";
-
 // Observability components
 import {
   LogTimeline,
@@ -25,6 +22,7 @@ import {
   TraceDetail,
   KeyboardShortcutsProvider,
   useRegisterShortcuts,
+  DynamicDashboard,
 } from "../components/observability/index.js";
 import type {
   TraceSummary,
@@ -32,17 +30,6 @@ import type {
 } from "../components/observability/index.js";
 
 import { SERVICES_SHORTCUTS } from "../components/observability/ServiceList/shortcuts.js";
-import { OtelMetricDiscovery } from "../components/observability/renderers/index.js";
-import {
-  Heading,
-  Text,
-  Card,
-  Stack,
-  Grid,
-  Badge,
-  Divider,
-  Empty,
-} from "../components/dashboard/index.js";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 
@@ -67,6 +54,7 @@ interface URLState {
   service: string | null;
   trace: string | null;
   span: string | null;
+  dashboardId: string | null;
 }
 
 function readURLState(): URLState {
@@ -74,13 +62,14 @@ function readURLState(): URLState {
   const service = params.get("service");
   const trace = params.get("trace");
   const span = params.get("span");
+  const dashboardId = params.get("dashboardId");
   const rawTab = params.get("tab");
   const tab = service
     ? "services"
     : rawTab === "logs" || rawTab === "metrics"
       ? rawTab
       : "services";
-  return { tab, service, trace, span };
+  return { tab, service, trace, span, dashboardId };
 }
 
 function pushURLState(
@@ -118,6 +107,7 @@ let _cachedState: URLState = {
   service: null,
   trace: null,
   span: null,
+  dashboardId: null,
 };
 
 function getURLSnapshot(): URLState {
@@ -660,26 +650,10 @@ function ServicesTab({
 }
 
 // ---------------------------------------------------------------------------
-// Metrics tab — renderer + catalog
+// Metrics tab — DynamicDashboard
 // ---------------------------------------------------------------------------
 
-const MetricsRenderer = createRendererFromCatalog(observabilityCatalog, {
-  Card,
-  Grid,
-  Stack,
-  Heading,
-  Text,
-  Badge,
-  Divider,
-  Empty,
-  LogTimeline: () => null,
-  TraceDetail: () => null,
-  MetricTimeSeries: () => null,
-  MetricHistogram: () => null,
-  MetricStat: () => null,
-  MetricTable: () => null,
-  MetricDiscovery: OtelMetricDiscovery,
-});
+const DASHBOARDS_API_BASE = "/dashboards";
 
 const METRICS_TREE = {
   root: "root",
@@ -731,8 +705,60 @@ const METRICS_TREE = {
   },
 };
 
+function useDashboardTree(dashboardId: string | null) {
+  const [state, setState] = useState<{
+    loading: boolean;
+    error: string | null;
+    tree: typeof METRICS_TREE | null;
+  }>({ loading: false, error: null, tree: null });
+
+  useEffect(() => {
+    if (!dashboardId) {
+      setState({ loading: false, error: null, tree: null });
+      return;
+    }
+    const ac = new AbortController();
+    setState({ loading: true, error: null, tree: null });
+    fetch(`${DASHBOARDS_API_BASE}/${dashboardId}`, { signal: ac.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load dashboard: ${res.status}`);
+        return res.json();
+      })
+      .then((data: { uiTree: typeof METRICS_TREE }) => {
+        if (!ac.signal.aborted) {
+          setState({ loading: false, error: null, tree: data.uiTree });
+        }
+      })
+      .catch((err) => {
+        if (!ac.signal.aborted) {
+          setState({
+            loading: false,
+            error: (err as Error).message,
+            tree: null,
+          });
+        }
+      });
+    return () => ac.abort();
+  }, [dashboardId]);
+
+  return state;
+}
+
 function MetricsTab() {
-  return <MetricsRenderer tree={METRICS_TREE} />;
+  const kopaiClient = useKopaiSDK();
+  const { dashboardId } = useURLState();
+  const { loading, error, tree } = useDashboardTree(dashboardId);
+
+  if (loading)
+    return (
+      <p className="text-muted-foreground text-sm">Loading dashboard...</p>
+    );
+  if (error)
+    return <p className="text-muted-foreground text-sm">Error: {error}</p>;
+
+  return (
+    <DynamicDashboard kopaiClient={kopaiClient} uiTree={tree ?? METRICS_TREE} />
+  );
 }
 
 // ---------------------------------------------------------------------------

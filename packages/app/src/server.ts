@@ -16,6 +16,7 @@ import { otelCollectorRoutes } from "./collector/index.js";
 import {
   initializeDatabase,
   createOptimizedDatasource,
+  DashboardDbDatasource,
 } from "@kopai/sqlite-datasource";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -127,10 +128,12 @@ apiServer.register(fastifySwaggerUI, {
 
 const sqliteDatabase = initializeDatabase(env.SQLITE_DB_FILE_PATH);
 const telemetryDatasource = createOptimizedDatasource(sqliteDatabase);
+const dashboardDatasource = new DashboardDbDatasource(sqliteDatabase);
 
 apiServer.after(() => {
   apiServer.register(apiRoutes, {
     readTelemetryDatasource: telemetryDatasource,
+    dynamicDashboardDatasource: dashboardDatasource,
   });
   apiServer.register(async (fastify) => {
     await fastify.register(FastifyVite, {
