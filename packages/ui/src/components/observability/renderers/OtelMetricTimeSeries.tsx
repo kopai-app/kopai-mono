@@ -25,6 +25,8 @@ export function OtelMetricTimeSeries(props: Props) {
       error={props.error ?? undefined}
       height={props.element.props.height ?? 400}
       showBrush={props.element.props.showBrush ?? true}
+      yAxisLabel={props.element.props.yAxisLabel ?? undefined}
+      unit={props.element.props.unit ?? undefined}
     />
   );
 }

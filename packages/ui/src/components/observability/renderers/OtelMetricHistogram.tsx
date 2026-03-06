@@ -24,6 +24,8 @@ export function OtelMetricHistogram(props: Props) {
       isLoading={props.loading}
       error={props.error ?? undefined}
       height={props.element.props.height ?? 400}
+      yAxisLabel={props.element.props.yAxisLabel ?? undefined}
+      unit={props.element.props.unit ?? undefined}
     />
   );
 }

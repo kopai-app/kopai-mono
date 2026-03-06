@@ -214,3 +214,100 @@ export const mockStatRows: OtelMetricsRow[] = cpuValues.map((value, i) => ({
   ScopeName: "opentelemetry.instrumentation.system",
   ScopeVersion: "0.44.0",
 }));
+
+// ── Gauge: redis.memory.used (no attributes — reproduces {} label) ──
+
+const memoryValues = [
+  3100000, 3050000, 3200000, 3150000, 3300000, 3250000, 3400000, 3350000,
+  3500000, 3450000, 3300000, 3200000, 3100000, 3050000, 3150000,
+];
+
+export const mockNoAttributeRows: OtelMetricsRow[] = memoryValues.map(
+  (value, i) => ({
+    MetricType: "Gauge" as const,
+    MetricName: "redis.memory.used",
+    MetricDescription: "Total memory used by Redis",
+    MetricUnit: "By",
+    TimeUnix: ts(i * INTERVAL_MS),
+    StartTimeUnix: ts(0),
+    Value: value,
+    ServiceName: "redis",
+    Attributes: {},
+    ResourceAttributes: { "service.name": "redis" },
+    ScopeName: "opentelemetry.instrumentation.redis",
+    ScopeVersion: "0.44.0",
+  })
+);
+
+// ── Gauge: redis.memory.peak (~2-3 GB range — tests GB scaling) ──
+
+const peakMemoryValues = [
+  2_100_000_000, 2_200_000_000, 2_350_000_000, 2_500_000_000, 2_400_000_000,
+  2_600_000_000, 2_750_000_000, 2_900_000_000, 2_800_000_000, 3_000_000_000,
+  2_950_000_000, 2_700_000_000, 2_550_000_000, 2_400_000_000, 2_300_000_000,
+];
+
+export const mockLargeByteRows: OtelMetricsRow[] = peakMemoryValues.map(
+  (value, i) => ({
+    MetricType: "Gauge" as const,
+    MetricName: "redis.memory.peak",
+    MetricDescription: "Peak memory consumed by Redis",
+    MetricUnit: "By",
+    TimeUnix: ts(i * INTERVAL_MS),
+    StartTimeUnix: ts(0),
+    Value: value,
+    ServiceName: "redis",
+    Attributes: {},
+    ResourceAttributes: { "service.name": "redis" },
+    ScopeName: "opentelemetry.instrumentation.redis",
+    ScopeVersion: "0.44.0",
+  })
+);
+
+// ── Gauge: process.cpu.time (multiple attributes — shows key=val labels) ──
+
+const cpuTimeStates = ["sys", "user", "sys_children", "user_children"];
+const cpuTimeBase = [27.5, 1.2, 0.3, 0.1];
+
+export const mockMultiAttributeRows: OtelMetricsRow[] = cpuTimeStates.flatMap(
+  (state, si) =>
+    Array.from({ length: 10 }, (_, i) => ({
+      MetricType: "Gauge" as const,
+      MetricName: "process.cpu.time",
+      MetricDescription: "CPU time by state",
+      MetricUnit: "s",
+      TimeUnix: ts(i * INTERVAL_MS),
+      StartTimeUnix: ts(0),
+      Value: cpuTimeBase[si]! + Math.random() * 0.5,
+      ServiceName: "api-gateway",
+      Attributes: { state, "cpu.mode": si < 2 ? "main" : "children" },
+      ResourceAttributes: { "service.name": "api-gateway" },
+      ScopeName: "opentelemetry.instrumentation.process",
+      ScopeVersion: "0.44.0",
+    }))
+);
+
+// ── Histogram: no attributes ──
+
+export const mockNoAttributeHistogramRows: OtelMetricsRow[] = [
+  {
+    MetricType: "Histogram" as const,
+    MetricName: "http.server.request_duration",
+    MetricDescription: "Duration of HTTP server requests",
+    MetricUnit: "ms",
+    TimeUnix: ts(0),
+    StartTimeUnix: ts(0),
+    ServiceName: "api-gateway",
+    Count: 1500,
+    Sum: 87450,
+    Min: 1,
+    Max: 1850,
+    ExplicitBounds: [5, 10, 25, 50, 75, 100, 250, 500, 1000],
+    BucketCounts: [120, 280, 350, 310, 180, 120, 85, 35, 15, 5],
+    AggregationTemporality: "CUMULATIVE",
+    Attributes: {},
+    ResourceAttributes: { "service.name": "api-gateway" },
+    ScopeName: "opentelemetry.instrumentation.http",
+    ScopeVersion: "0.44.0",
+  },
+];

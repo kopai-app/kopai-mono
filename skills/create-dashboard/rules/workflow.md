@@ -37,6 +37,12 @@ priority: critical
 - `uiTreeVersion` — semver string (passed via `--tree-version`)
 - `uiTree` — the component tree object with `root` and `elements` (in stdin JSON)
 
+## Units
+
+- Set `unit` on `MetricTimeSeries` and `MetricHistogram` to the raw OTEL unit from `metrics discover` (e.g. `"By"`, `"s"`, `"ms"`, `"1"`, `"{requests}"`)
+- The component auto-derives: y-axis label, tick formatting, and tooltip display from `unit` + data range
+- `yAxisLabel` is an optional override — only set it when the auto-derived label is not descriptive enough
+
 ## Layout Best Practices
 
 - Use `Stack` with `direction: "vertical"` as root for simple dashboards
@@ -48,5 +54,5 @@ priority: critical
 ## Example Creation
 
 ```bash
-echo '{"uiTree":{"root":"stack-1","elements":{"stack-1":{"key":"stack-1","type":"Stack","props":{"direction":"vertical","gap":"md","align":null},"children":["card-1"],"parentKey":""},"card-1":{"key":"card-1","type":"Card","props":{"title":"CPU Usage","description":null,"padding":null},"children":["ts-1"],"parentKey":"stack-1"},"ts-1":{"key":"ts-1","type":"MetricTimeSeries","props":{"height":300,"showBrush":null},"children":[],"parentKey":"card-1","dataSource":{"method":"searchMetricsPage","params":{"metricType":"Gauge","metricName":"system.cpu.utilization"}}}}},"metadata":{}}' | npx @kopai/cli dashboards create --name "CPU Dashboard" --tree-version "0.5.0" --json
+echo '{"uiTree":{"root":"stack-1","elements":{"stack-1":{"key":"stack-1","type":"Stack","props":{"direction":"vertical","gap":"md","align":null},"children":["card-1"],"parentKey":""},"card-1":{"key":"card-1","type":"Card","props":{"title":"CPU Usage","description":null,"padding":null},"children":["ts-1"],"parentKey":"stack-1"},"ts-1":{"key":"ts-1","type":"MetricTimeSeries","props":{"height":300,"showBrush":null,"yAxisLabel":null,"unit":"1"},"children":[],"parentKey":"card-1","dataSource":{"method":"searchMetricsPage","params":{"metricType":"Gauge","metricName":"system.cpu.utilization"}}}}},"metadata":{}}' | npx @kopai/cli dashboards create --name "CPU Dashboard" --tree-version "0.5.0" --json
 ```

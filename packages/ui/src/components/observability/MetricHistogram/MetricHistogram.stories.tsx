@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { MetricHistogram } from "./index.js";
-import { mockHistogramRows } from "../__fixtures__/metrics.js";
+import {
+  mockHistogramRows,
+  mockNoAttributeHistogramRows,
+} from "../__fixtures__/metrics.js";
 
 const meta: Meta<typeof MetricHistogram> = {
   title: "Observability/MetricHistogram",
@@ -18,3 +21,9 @@ export const Error: Story = {
   },
 };
 export const Empty: Story = { args: { rows: [] } };
+export const NoAttributes: Story = {
+  args: { rows: mockNoAttributeHistogramRows },
+};
+export const WithUnit: Story = {
+  args: { rows: mockHistogramRows, unit: "ms" },
+};
