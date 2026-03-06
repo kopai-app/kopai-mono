@@ -767,7 +767,7 @@ function MetricsTab() {
 
 let _defaultClient: KopaiClient | undefined;
 function getDefaultClient() {
-  _defaultClient ??= new KopaiClient({ baseUrl: "/signals" });
+  _defaultClient ??= new KopaiClient({ baseUrl: "" });
   return _defaultClient;
 }
 

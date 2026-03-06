@@ -33,6 +33,7 @@ export const signalsRoutes: FastifyPluginAsyncZod<{
 
 export const dashboardsRoutes: FastifyPluginAsyncZod<{
   dynamicDashboardDatasource: dashboardDatasource.DynamicDashboardDatasource;
+  promptInstructions?: string;
 }> = async function (fastify, opts) {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
@@ -40,6 +41,7 @@ export const dashboardsRoutes: FastifyPluginAsyncZod<{
 
   fastify.register(_dashboardsRoutes, {
     dynamicDashboardDatasource: opts.dynamicDashboardDatasource,
+    promptInstructions: opts.promptInstructions,
   });
 };
 

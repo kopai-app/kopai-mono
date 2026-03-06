@@ -35,7 +35,7 @@ kopai logs search --service my-api --limit 20
 kopai metrics discover
 ```
 
-By default connects to `http://localhost:8000/signals`.
+By default connects to `http://localhost:8000`.
 
 ## Configuration
 

@@ -57,7 +57,7 @@ export const sampleDiscovery = {
 
 export const handlers = [
   // Get trace by ID endpoint
-  http.get(`${BASE_URL}/traces/:traceId`, (info) => {
+  http.get(`${BASE_URL}/signals/traces/:traceId`, (info) => {
     const { request, params } = info;
     const traceId = params.traceId as string;
 
@@ -99,7 +99,7 @@ export const handlers = [
   }),
 
   // Traces search endpoint
-  http.post(`${BASE_URL}/traces/search`, async (info) => {
+  http.post(`${BASE_URL}/signals/traces/search`, async (info) => {
     const { request } = info;
 
     // Check auth first (no body parsing needed)
@@ -140,7 +140,7 @@ export const handlers = [
   }),
 
   // Logs endpoint
-  http.post(`${BASE_URL}/logs/search`, async (info) => {
+  http.post(`${BASE_URL}/signals/logs/search`, async (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -178,7 +178,7 @@ export const handlers = [
   }),
 
   // Metrics endpoint
-  http.post(`${BASE_URL}/metrics/search`, async (info) => {
+  http.post(`${BASE_URL}/signals/metrics/search`, async (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -216,7 +216,7 @@ export const handlers = [
   }),
 
   // Metrics discovery endpoint
-  http.get(`${BASE_URL}/metrics/discover`, (info) => {
+  http.get(`${BASE_URL}/signals/metrics/discover`, (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -235,7 +235,7 @@ export const handlers = [
   }),
 
   // 404 endpoint for testing
-  http.post(`${BASE_URL}/not-found`, () => {
+  http.post(`${BASE_URL}/signals/not-found`, () => {
     return HttpResponse.json(
       {
         type: "https://api.kopai.io/errors/not-found",

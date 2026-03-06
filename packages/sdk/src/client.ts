@@ -86,7 +86,7 @@ export class KopaiClient {
     opts?: RequestOptions
   ): Promise<OtelTracesRow[]> {
     const schema = z.array(denormalizedSignals.otelTracesSchema);
-    return request(`${this.baseUrl}/traces/${traceId}`, schema, {
+    return request(`${this.baseUrl}/signals/traces/${traceId}`, schema, {
       method: "GET",
       ...opts,
       baseHeaders: this.baseHeaders,
@@ -122,14 +122,18 @@ export class KopaiClient {
     const validatedFilter =
       dataFilterSchemas.tracesDataFilterSchema.parse(filter);
 
-    return request(`${this.baseUrl}/traces/search`, tracesResponseSchema, {
-      method: "POST",
-      body: validatedFilter,
-      ...opts,
-      baseHeaders: this.baseHeaders,
-      fetchFn: this.fetchFn,
-      defaultTimeout: this.defaultTimeout,
-    });
+    return request(
+      `${this.baseUrl}/signals/traces/search`,
+      tracesResponseSchema,
+      {
+        method: "POST",
+        body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
   }
 
   /**
@@ -159,7 +163,7 @@ export class KopaiClient {
     const validatedFilter =
       dataFilterSchemas.logsDataFilterSchema.parse(filter);
 
-    return request(`${this.baseUrl}/logs/search`, logsResponseSchema, {
+    return request(`${this.baseUrl}/signals/logs/search`, logsResponseSchema, {
       method: "POST",
       body: validatedFilter,
       ...opts,
@@ -196,14 +200,18 @@ export class KopaiClient {
     const validatedFilter =
       dataFilterSchemas.metricsDataFilterSchema.parse(filter);
 
-    return request(`${this.baseUrl}/metrics/search`, metricsResponseSchema, {
-      method: "POST",
-      body: validatedFilter,
-      ...opts,
-      baseHeaders: this.baseHeaders,
-      fetchFn: this.fetchFn,
-      defaultTimeout: this.defaultTimeout,
-    });
+    return request(
+      `${this.baseUrl}/signals/metrics/search`,
+      metricsResponseSchema,
+      {
+        method: "POST",
+        body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
   }
 
   /**
@@ -212,12 +220,16 @@ export class KopaiClient {
   async discoverMetrics(
     opts?: RequestOptions
   ): Promise<MetricsDiscoveryResult> {
-    return request(`${this.baseUrl}/metrics/discover`, metricsDiscoverySchema, {
-      method: "GET",
-      ...opts,
-      baseHeaders: this.baseHeaders,
-      fetchFn: this.fetchFn,
-      defaultTimeout: this.defaultTimeout,
-    });
+    return request(
+      `${this.baseUrl}/signals/metrics/discover`,
+      metricsDiscoverySchema,
+      {
+        method: "GET",
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
   }
 }

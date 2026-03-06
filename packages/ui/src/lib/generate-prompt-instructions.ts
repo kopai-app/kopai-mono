@@ -74,16 +74,19 @@ function buildExampleElements(
   for (const name of otherNames) {
     const key = `${String(name).toLowerCase()}-1`;
     childKeys.push(key);
-    elements[key] = {
+    const element: Record<string, unknown> = {
       key,
       type: String(name),
       props: {},
       parentKey: containerKey,
-      dataSource: {
+    };
+    if (!components[name]?.hasChildren) {
+      element.dataSource = {
         method: "searchTracesPage",
         params: { limit: 10 },
-      },
-    };
+      };
+    }
+    elements[key] = element;
   }
 
   return { root: containerKey, elements };

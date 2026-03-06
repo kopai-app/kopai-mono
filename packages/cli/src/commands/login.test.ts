@@ -70,12 +70,12 @@ describe("login command", () => {
   });
 
   it("includes url in updates when --url provided", async () => {
-    await runCommand(["--url", "https://example.com/signals"]);
+    await runCommand(["--url", "https://example.com"]);
 
     expect(saveConfig).toHaveBeenCalledWith(
       {
         token: "kpi_test_token_12345678901234567890123456",
-        url: "https://example.com/signals",
+        url: "https://example.com",
       },
       "/mock/.kopairc"
     );

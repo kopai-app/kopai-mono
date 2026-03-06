@@ -12,7 +12,7 @@ npx @kopai/cli <command>
 
 ## Configuration
 
-**Default:** `http://localhost:8000/signals` (no auth required)
+**Default:** `http://localhost:8000` (no auth required)
 
 Works out of the box with local @kopai/app. No configuration needed for local development.
 

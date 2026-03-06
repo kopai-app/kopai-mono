@@ -17,13 +17,23 @@ export interface ClientOptions {
   timeout?: number;
 }
 
-const DEFAULT_URL = "http://localhost:8000/signals";
+const DEFAULT_URL = "http://localhost:8000";
+
+export interface ConnectionOpts {
+  url: string;
+  token: string | undefined;
+}
+
+export function resolveConnectionOpts(opts: ClientOptions): ConnectionOpts {
+  const fileConfig = loadConfig(opts.config);
+  return {
+    url: opts.url ?? fileConfig.url ?? DEFAULT_URL,
+    token: opts.token ?? fileConfig.token,
+  };
+}
 
 export function createClient(opts: ClientOptions): KopaiClient {
-  const fileConfig = loadConfig(opts.config);
-
-  const url = opts.url ?? fileConfig.url ?? DEFAULT_URL;
-  const token = opts.token ?? fileConfig.token;
+  const { url, token } = resolveConnectionOpts(opts);
 
   const timeout =
     opts.timeout != null ? parseInt(String(opts.timeout), 10) : undefined;

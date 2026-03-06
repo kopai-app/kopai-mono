@@ -100,6 +100,29 @@ function App() {
 }
 ```
 
+## AI Dashboard Generation
+
+AI agents can generate valid `uiTree` structures using the schema endpoint:
+
+```bash
+# Get component schema, props, and JSON schema for uiTree
+npx @kopai/cli dashboards schema --url http://localhost:8000
+
+# Or via API directly
+curl http://localhost:8000/dashboards/schema
+```
+
+Use the `/create-dashboard` skill in Claude Code for guided dashboard creation with live schema injection.
+
+Install the skill via [skills.sh](https://skills.sh):
+
+```bash
+npx skills add https://github.com/kopai-app/kopai-mono/tree/main/skills/create-dashboard
+
+# Or from a local checkout
+npx skills add ./skills/create-dashboard
+```
+
 ## Data Fetching
 
 Components can receive data via `dataSource`. The renderer uses `useKopaiData` hook internally:

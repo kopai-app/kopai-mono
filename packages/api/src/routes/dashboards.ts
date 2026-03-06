@@ -6,7 +6,31 @@ import { DashboardNotFoundError } from "./errors.js";
 
 export const dashboardsRoutes: FastifyPluginAsyncZod<{
   dynamicDashboardDatasource: dashboardDatasource.DynamicDashboardDatasource;
+  promptInstructions?: string;
 }> = async function (fastify, opts) {
+  fastify.route({
+    method: "GET",
+    url: "/dashboards/schema",
+    schema: {
+      description:
+        "Get UI tree schema as markdown prompt instructions for AI agents",
+      produces: ["text/markdown"],
+      response: {
+        200: { type: "string", description: "Markdown prompt instructions" },
+        404: {
+          type: "string",
+          description: "Prompt instructions not configured",
+        },
+      },
+    },
+    handler: async (_req, reply) => {
+      if (!opts.promptInstructions) {
+        return reply.status(404).send("Dashboard schema not configured");
+      }
+      reply.type("text/markdown").send(opts.promptInstructions);
+    },
+  });
+
   fastify.route({
     method: "POST",
     url: "/dashboards",

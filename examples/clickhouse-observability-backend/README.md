@@ -139,10 +139,10 @@ NOW=$(date +%s) && curl -X POST http://localhost:4318/v1/metrics \
 ### Via @kopai/cli
 
 ```bash
-kopai traces search --url http://localhost:8000/signals
-kopai logs search --url http://localhost:8000/signals
-kopai metrics search --url http://localhost:8000/signals --type Gauge
-kopai metrics discover --url http://localhost:8000/signals
+kopai traces search --url http://localhost:8000
+kopai logs search --url http://localhost:8000
+kopai metrics search --url http://localhost:8000 --type Gauge
+kopai metrics discover --url http://localhost:8000
 ```
 
 ### Via curl
