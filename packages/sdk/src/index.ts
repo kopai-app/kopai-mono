@@ -15,6 +15,8 @@ export type {
   MetricsDiscoveryResult,
   DiscoveredMetric,
   DiscoveredMetricAttributes,
+  Dashboard,
+  CreateDashboardParams,
 } from "./types.js";
 
 // Errors

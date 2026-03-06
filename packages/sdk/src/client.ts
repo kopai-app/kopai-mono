@@ -1,4 +1,8 @@
-import { dataFilterSchemas, denormalizedSignals } from "@kopai/core";
+import {
+  dataFilterSchemas,
+  denormalizedSignals,
+  dashboardDatasource,
+} from "@kopai/core";
 import z from "zod";
 import { request } from "./request.js";
 import { paginate } from "./pagination.js";
@@ -13,6 +17,8 @@ import type {
   OtelLogsRow,
   OtelMetricsRow,
   MetricsDiscoveryResult,
+  Dashboard,
+  CreateDashboardParams,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT = 30_000;
@@ -32,6 +38,8 @@ const metricsResponseSchema = z.object({
   data: z.array(denormalizedSignals.otelMetricsSchema),
   nextCursor: z.string().nullable(),
 });
+
+const dashboardResponseSchema = dashboardDatasource.dashboardSchema;
 
 const metricsDiscoverySchema = z.object({
   metrics: z.array(
@@ -231,5 +239,22 @@ export class KopaiClient {
         defaultTimeout: this.defaultTimeout,
       }
     );
+  }
+
+  /**
+   * Create a new dashboard.
+   */
+  async createDashboard(
+    params: CreateDashboardParams,
+    opts?: RequestOptions
+  ): Promise<Dashboard> {
+    return request(`${this.baseUrl}/dashboards`, dashboardResponseSchema, {
+      method: "POST",
+      body: params,
+      ...opts,
+      baseHeaders: this.baseHeaders,
+      fetchFn: this.fetchFn,
+      defaultTimeout: this.defaultTimeout,
+    });
   }
 }

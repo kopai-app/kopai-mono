@@ -19,6 +19,7 @@ import {
   sampleLog,
   sampleMetric,
   sampleDiscovery,
+  sampleDashboard,
 } from "./mocks/handlers.js";
 
 const server = setupServer(...handlers);
@@ -149,6 +150,46 @@ describe("KopaiClient", () => {
       expect(result.metrics).toHaveLength(1);
       expect(result.metrics[0]!.name).toBe(sampleDiscovery.metrics[0]!.name);
       expect(result.metrics[0]!.type).toBe("Histogram");
+    });
+  });
+
+  describe("createDashboard", () => {
+    it("creates dashboard and returns result", async () => {
+      const result = await client.createDashboard({
+        name: "My Dashboard",
+        uiTreeVersion: "0.5.0",
+        uiTree: sampleDashboard.uiTree,
+      });
+
+      expect(result.id).toBe(sampleDashboard.id);
+      expect(result.name).toBe("My Dashboard");
+      expect(result.uiTreeVersion).toBe(sampleDashboard.uiTreeVersion);
+    });
+
+    it("throws on auth error", async () => {
+      const unauthClient = new KopaiClient({
+        baseUrl: BASE_URL,
+      });
+
+      await expect(
+        unauthClient.createDashboard({
+          name: "Test",
+          uiTreeVersion: "0.5.0",
+          uiTree: {},
+        })
+      ).rejects.toThrow(KopaiError);
+
+      try {
+        await unauthClient.createDashboard({
+          name: "Test",
+          uiTreeVersion: "0.5.0",
+          uiTree: {},
+        });
+      } catch (e) {
+        const error = e as KopaiError;
+        expect(error.status).toBe(401);
+        expect(error.code).toBe("UNAUTHORIZED");
+      }
     });
   });
 

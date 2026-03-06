@@ -154,6 +154,31 @@ kopai metrics search --type Sum --attr "host=server1"
 
 **Fields:** TimeUnix, StartTimeUnix, MetricType, MetricName, MetricDescription, MetricUnit, ServiceName, Value, Count, Sum, Min, Max, Attributes, ResourceAttributes, ScopeName, ScopeAttributes, Exemplars, BucketCounts, ExplicitBounds
 
+### dashboards
+
+#### `dashboards schema`
+
+Print the UI tree component schema (for AI agents).
+
+```bash
+kopai dashboards schema
+```
+
+#### `dashboards create`
+
+Create a dashboard. Reads uiTree JSON from stdin.
+
+```bash
+echo '{"uiTree":{...},"metadata":{}}' | kopai dashboards create --name "My Dashboard" --tree-version "0.5.0" --json
+```
+
+**Required flags:**
+
+- `--name <name>` - Dashboard display name
+- `--tree-version <semver>` - UI tree version (e.g. `"0.5.0"`)
+
+Stdin JSON should contain `uiTree` (required) and optionally `metadata`. If the JSON has no `uiTree` key, the entire object is treated as the uiTree.
+
 #### `metrics discover`
 
 List available metrics.

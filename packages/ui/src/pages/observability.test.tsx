@@ -22,6 +22,7 @@ function createMockClient(): MockClient {
     searchTraces: vi.fn().mockResolvedValue({ data: [] }),
     searchLogs: vi.fn().mockResolvedValue({ data: [] }),
     searchMetrics: vi.fn().mockResolvedValue({ data: [] }),
+    createDashboard: vi.fn().mockResolvedValue({}),
   };
 }
 

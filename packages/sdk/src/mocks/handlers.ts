@@ -6,6 +6,7 @@ import type {
   MetricsDiscoveryResult,
   SearchResult,
   ApiErrorResponse,
+  Dashboard,
 } from "../types.js";
 
 const BASE_URL = "https://api.kopai.test";
@@ -36,6 +37,27 @@ export const sampleMetric = {
   StartTimeUnix: "1705000000000000000",
   ServiceName: "test-service",
 } satisfies OtelMetricsRow;
+
+// Sample dashboard
+export const sampleDashboard: Dashboard = {
+  id: "dash-001",
+  name: "Test Dashboard",
+  createdAt: "2025-01-01T00:00:00Z",
+  metadata: {},
+  uiTreeVersion: "0.5.0" as Dashboard["uiTreeVersion"],
+  uiTree: {
+    root: "s1",
+    elements: {
+      s1: {
+        key: "s1",
+        type: "Stack",
+        props: { direction: "vertical", gap: "md", align: null },
+        children: [],
+        parentKey: "",
+      },
+    },
+  },
+};
 
 // Sample metrics discovery
 export const sampleDiscovery = {
@@ -232,6 +254,33 @@ export const handlers = [
     }
 
     return HttpResponse.json(sampleDiscovery);
+  }),
+
+  // Create dashboard endpoint
+  http.post(`${BASE_URL}/dashboards`, async (info) => {
+    const { request } = info;
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Unauthorized",
+          code: "UNAUTHORIZED",
+        } satisfies ApiErrorResponse,
+        { status: 401 }
+      );
+    }
+
+    const body = (await request.clone().json()) as Record<string, unknown>;
+
+    return HttpResponse.json(
+      {
+        ...sampleDashboard,
+        name: body.name as string,
+      },
+      { status: 201 }
+    );
   }),
 
   // 404 endpoint for testing
