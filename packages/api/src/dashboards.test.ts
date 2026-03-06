@@ -9,6 +9,12 @@ class TestApiError extends SignalsApiError {
   readonly code = "TEST_ERROR";
 }
 
+class TestNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Dashboard not found: ${id}`);
+  }
+}
+
 const mockDashboard: dashboardDatasource.Dashboard = {
   id: "dash-001",
   name: "Test Dashboard",
@@ -184,9 +190,7 @@ describe("dashboardsRoutes", () => {
     });
 
     it("returns 404 when dashboard not found", async () => {
-      getDashboardSpy.mockRejectedValue(
-        new TestApiError("Dashboard not found: missing")
-      );
+      getDashboardSpy.mockRejectedValue(new TestNotFoundError("missing"));
 
       const response = await server.inject({
         method: "GET",
@@ -198,6 +202,24 @@ describe("dashboardsRoutes", () => {
         type: "https://docs.kopai.app/errors/dashboard-not-found",
         status: 404,
         title: "Dashboard not found",
+      });
+    });
+
+    it("returns 500 for internal error", async () => {
+      getDashboardSpy.mockRejectedValue(
+        new TestApiError("Database connection lost")
+      );
+
+      const response = await server.inject({
+        method: "GET",
+        url: "/dashboards/dash-001",
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-internal-error",
+        status: 500,
+        detail: "Database connection lost",
       });
     });
   });

@@ -7,11 +7,13 @@ import {
   useRef,
 } from "react";
 import { KopaiSDKProvider, useKopaiSDK } from "../providers/kopai-provider.js";
+import { useQuery } from "@tanstack/react-query";
 import { KopaiClient } from "@kopai/sdk";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
 import { useLiveLogs } from "../hooks/use-live-logs.js";
 import type { denormalizedSignals, dataFilterSchemas } from "@kopai/core";
 import type { DataSource } from "../lib/component-catalog.js";
+import { observabilityCatalog } from "../lib/observability-catalog.js";
 // Observability components
 import {
   LogTimeline,
@@ -24,6 +26,7 @@ import {
   useRegisterShortcuts,
   DynamicDashboard,
 } from "../components/observability/index.js";
+import type { UITree } from "../components/observability/DynamicDashboard/index.js";
 import type {
   TraceSummary,
   TraceSearchFilters,
@@ -78,6 +81,7 @@ function pushURLState(
     service?: string | null;
     trace?: string | null;
     span?: string | null;
+    dashboardId?: string | null;
   },
   { replace = false }: { replace?: boolean } = {}
 ) {
@@ -86,6 +90,12 @@ function pushURLState(
   if (state.service) params.set("service", state.service);
   if (state.trace) params.set("trace", state.trace);
   if (state.span) params.set("span", state.span);
+  // Preserve dashboardId from current URL if not explicitly provided
+  const dashboardId =
+    state.dashboardId !== undefined
+      ? state.dashboardId
+      : new URLSearchParams(window.location.search).get("dashboardId");
+  if (dashboardId) params.set("dashboardId", dashboardId);
   const qs = params.toString();
   const url = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
   if (replace) {
@@ -706,42 +716,32 @@ const METRICS_TREE = {
 };
 
 function useDashboardTree(dashboardId: string | null) {
-  const [state, setState] = useState<{
-    loading: boolean;
-    error: string | null;
-    tree: typeof METRICS_TREE | null;
-  }>({ loading: false, error: null, tree: null });
-
-  useEffect(() => {
-    if (!dashboardId) {
-      setState({ loading: false, error: null, tree: null });
-      return;
-    }
-    const ac = new AbortController();
-    setState({ loading: true, error: null, tree: null });
-    fetch(`${DASHBOARDS_API_BASE}/${dashboardId}`, { signal: ac.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Failed to load dashboard: ${res.status}`);
-        return res.json();
-      })
-      .then((data: { uiTree: typeof METRICS_TREE }) => {
-        if (!ac.signal.aborted) {
-          setState({ loading: false, error: null, tree: data.uiTree });
-        }
-      })
-      .catch((err) => {
-        if (!ac.signal.aborted) {
-          setState({
-            loading: false,
-            error: (err as Error).message,
-            tree: null,
-          });
-        }
+  const { data, isFetching, error } = useQuery<UITree, Error>({
+    queryKey: ["dashboard-tree", dashboardId],
+    queryFn: async ({ signal }) => {
+      const res = await fetch(`${DASHBOARDS_API_BASE}/${dashboardId}`, {
+        signal,
       });
-    return () => ac.abort();
-  }, [dashboardId]);
+      if (!res.ok) throw new Error(`Failed to load dashboard: ${res.status}`);
+      const json = await res.json();
+      const parsed = observabilityCatalog.uiTreeSchema.safeParse(json.uiTree);
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const path = issue?.path.length ? issue.path.join(".") + ": " : "";
+        throw new Error(
+          `Dashboard has an invalid layout: ${path}${issue?.message}`
+        );
+      }
+      return parsed.data;
+    },
+    enabled: !!dashboardId,
+  });
 
-  return state;
+  return {
+    loading: isFetching,
+    error: error?.message ?? null,
+    tree: data ?? null,
+  };
 }
 
 function MetricsTab() {

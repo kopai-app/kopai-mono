@@ -38,8 +38,8 @@ export function errorHandler(
     } satisfies SignalsApiErrorResponse);
   }
 
-  request.log.error(error);
   if (error instanceof DashboardNotFoundError) {
+    request.log.info(error.message);
     return reply.status(404).send({
       type: "https://docs.kopai.app/errors/dashboard-not-found",
       status: 404,
@@ -47,6 +47,7 @@ export function errorHandler(
       detail: error.message,
     } satisfies SignalsApiErrorResponse);
   }
+  request.log.error(error);
   if (error instanceof SignalsApiError) {
     return reply.status(500).send({
       type: "https://docs.kopai.app/errors/signals-api-internal-error", // TODO: document error

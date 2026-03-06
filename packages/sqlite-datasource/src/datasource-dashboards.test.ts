@@ -3,9 +3,12 @@ import { DatabaseSync } from "node:sqlite";
 import { DashboardDbDatasource } from "./dashboard-datasource.js";
 import { initializeDatabase } from "./initialize-database.js";
 import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
-import type { dashboardDatasource } from "@kopai/core";
+import { dashboardDatasource } from "@kopai/core";
 
 type Dashboard = dashboardDatasource.Dashboard;
+
+/** Parse a semver string through the branded schema for type-safe test values */
+const semver = (s: string) => dashboardDatasource.semverSchema.parse(s);
 
 describe("DashboardDbDatasource", () => {
   let testConnection: DatabaseSync;
@@ -58,7 +61,7 @@ describe("DashboardDbDatasource", () => {
 
       // Verify via search with compatible filter
       const result = await ds.searchDashboards({
-        uiTreeVersionCompatible: "2.0.0",
+        uiTreeVersionCompatible: semver("2.0.0"),
         limit: 100,
         sortOrder: "DESC",
       });
@@ -66,7 +69,7 @@ describe("DashboardDbDatasource", () => {
       expect(result.data[0]!.id).toBe(d1.id);
 
       const result0 = await ds.searchDashboards({
-        uiTreeVersionCompatible: "0.5.0",
+        uiTreeVersionCompatible: semver("0.5.0"),
         limit: 100,
         sortOrder: "DESC",
       });
@@ -155,7 +158,7 @@ describe("DashboardDbDatasource", () => {
       });
 
       const result = await ds.searchDashboards({
-        uiTreeVersion: "1.0.0",
+        uiTreeVersion: semver("1.0.0"),
         limit: 100,
         sortOrder: "DESC",
       });
@@ -179,7 +182,7 @@ describe("DashboardDbDatasource", () => {
       });
 
       const result = await ds.searchDashboards({
-        uiTreeVersionCompatible: "1.5.0",
+        uiTreeVersionCompatible: semver("1.5.0"),
         limit: 100,
         sortOrder: "DESC",
       });
@@ -308,7 +311,7 @@ describe("DashboardDbDatasource", () => {
 
       const result = await ds.searchDashboards({
         name: "Prod",
-        uiTreeVersionCompatible: "1.0.0",
+        uiTreeVersionCompatible: semver("1.0.0"),
         metadata: { env: "prod" },
         limit: 100,
         sortOrder: "DESC",

@@ -17,14 +17,18 @@ export function OtelTraceDetail(props: Props) {
   }
 
   const response = props.data as { data?: OtelTracesRow[] } | null;
+  const rows = response?.data ?? [];
+  const firstRow = rows[0];
+  const service = firstRow?.ServiceName ?? "unknown";
+  const traceId = firstRow?.TraceId ?? "";
 
   return (
     <TraceDetail
-      rows={response?.data ?? []}
+      rows={rows}
       isLoading={props.loading}
       error={props.error ?? undefined}
-      service=""
-      traceId=""
+      service={service}
+      traceId={traceId}
       onBack={() => {}}
     />
   );

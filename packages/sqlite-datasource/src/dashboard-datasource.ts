@@ -24,7 +24,10 @@ const queryBuilder = new Kysely<DB>({
 
 function extractMajor(semver: string): number {
   const match = semver.match(/^(\d+)\./);
-  return match ? parseInt(match[1]!, 10) : 0;
+  if (!match) {
+    throw new SqliteDatasourceQueryError(`Invalid semver string: "${semver}"`);
+  }
+  return parseInt(match[1]!, 10);
 }
 
 function mapRowToDashboard(

@@ -50,10 +50,14 @@ export const dashboardsRoutes: FastifyPluginAsyncZod<{
         });
         res.send(result);
       } catch (error) {
-        throw new DashboardNotFoundError(
-          `Dashboard not found: ${req.params.dashboardId}`,
-          { cause: error }
-        );
+        const msg = error instanceof Error ? error.message.toLowerCase() : "";
+        if (msg.includes("not found")) {
+          throw new DashboardNotFoundError(
+            `Dashboard not found: ${req.params.dashboardId}`,
+            { cause: error }
+          );
+        }
+        throw error;
       }
     },
   });
