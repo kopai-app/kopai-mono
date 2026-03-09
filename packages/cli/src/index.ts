@@ -8,6 +8,7 @@ import { createDashboardsCommand } from "./commands/dashboards.js";
 import { createLoginCommand } from "./commands/login.js";
 import { createLogoutCommand } from "./commands/logout.js";
 import { createWhoamiCommand } from "./commands/whoami.js";
+import { checkForUpdates } from "./update-check.js";
 import pkg from "../package.json" with { type: "json" };
 
 const program = new Command();
@@ -33,3 +34,4 @@ Examples:
   );
 
 program.parse();
+checkForUpdates(pkg.version);
