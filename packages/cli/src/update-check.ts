@@ -7,7 +7,7 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 interface CacheData {
   lastCheck: number;
-  latestVersion: string;
+  latestVersion: string | null;
 }
 
 interface CheckOptions {
@@ -57,14 +57,12 @@ async function readCache(cacheDir: string): Promise<CacheData | null> {
   try {
     const raw = await readFile(join(cacheDir, CACHE_FILENAME), "utf-8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (
-      typeof parsed.lastCheck !== "number" ||
-      typeof parsed.latestVersion !== "string" ||
-      !parsed.latestVersion
-    ) {
-      return null;
-    }
-    return { lastCheck: parsed.lastCheck, latestVersion: parsed.latestVersion };
+    if (typeof parsed.lastCheck !== "number") return null;
+    const latestVersion =
+      typeof parsed.latestVersion === "string" && parsed.latestVersion
+        ? parsed.latestVersion
+        : null;
+    return { lastCheck: parsed.lastCheck, latestVersion };
   } catch {
     return null;
   }
@@ -89,7 +87,8 @@ async function fetchLatestVersion(
       signal: controller.signal,
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { version: string };
+    const data = (await res.json()) as Record<string, unknown>;
+    if (typeof data?.version !== "string" || !data.version.trim()) return null;
     return data.version;
   } catch {
     return null;
@@ -114,7 +113,10 @@ export async function checkForUpdates(
   const cache = await readCache(cacheDir);
 
   if (cache && Date.now() - cache.lastCheck < CHECK_INTERVAL_MS) {
-    if (compareVersions(currentVersion, cache.latestVersion)) {
+    if (
+      cache.latestVersion &&
+      compareVersions(currentVersion, cache.latestVersion)
+    ) {
       printNotice(currentVersion, cache.latestVersion);
     }
     return;
@@ -122,11 +124,10 @@ export async function checkForUpdates(
 
   const fetchFn = opts?.fetchFn ?? fetch;
   const latest = await fetchLatestVersion(fetchFn);
-  if (!latest) return;
 
   await writeCache(cacheDir, { lastCheck: Date.now(), latestVersion: latest });
 
-  if (compareVersions(currentVersion, latest)) {
+  if (latest && compareVersions(currentVersion, latest)) {
     printNotice(currentVersion, latest);
   }
 }

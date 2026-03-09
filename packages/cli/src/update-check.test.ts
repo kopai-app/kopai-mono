@@ -207,14 +207,21 @@ describe("checkForUpdates", () => {
 
   it("does not crash when fetch fails", async () => {
     vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"));
+    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
     const mockFetch = vi.fn().mockRejectedValue(new Error("network error"));
 
     await expect(
       checkForUpdates("0.7.0", { fetchFn: mockFetch })
-    ).resolves.not.toThrow();
+    ).resolves.toBeUndefined();
 
     expect(stderrSpy).not.toHaveBeenCalled();
+    // should still write cache to throttle retries
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining("update-check.json"),
+      expect.stringContaining('"latestVersion":null')
+    );
   });
 
   it("does not crash when cache write fails", async () => {
@@ -228,7 +235,7 @@ describe("checkForUpdates", () => {
 
     await expect(
       checkForUpdates("0.7.0", { fetchFn: mockFetch })
-    ).resolves.not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
   it("skips everything when KOPAI_NO_UPDATE_CHECK is set", async () => {
