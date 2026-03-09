@@ -44,6 +44,8 @@ const GENERIC_SCALES: ScaleEntry[] = [
   { threshold: 0, divisor: 1, suffix: "" },
 ];
 
+const BRACE_UNIT_PATTERN = /^\{(.+)\}$/;
+
 const UNIT_SCALE_MAP: Record<string, ScaleEntry[]> = {
   By: BYTE_SCALES,
   s: SECOND_SCALES,
@@ -91,7 +93,7 @@ export function resolveUnitScale(
   }
 
   // Curly-brace units like {requests}
-  const braceMatch = unit.match(/^\{(.+)\}$/);
+  const braceMatch = BRACE_UNIT_PATTERN.exec(unit);
   if (braceMatch) {
     const cleaned = braceMatch[1]!;
     const s = pickScale(GENERIC_SCALES, maxValue);

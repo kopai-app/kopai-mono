@@ -80,13 +80,16 @@ function buildHistogramData(
   buckets: BucketData[];
   seriesKeys: string[];
   displayLabelMap: Map<string, string>;
+  unit: string;
 } {
   const buckets: BucketData[] = [];
   const seriesKeysSet = new Set<string>();
   const displayLabelMap = new Map<string, string>();
+  let unit = "";
 
   for (const row of rows) {
     if (row.MetricType !== "Histogram") continue;
+    if (!unit && row.MetricUnit) unit = row.MetricUnit;
     const name = row.MetricName ?? "count";
     const key = row.Attributes ? JSON.stringify(row.Attributes) : "__default__";
     const seriesName = key === "__default__" ? name : key;
@@ -127,7 +130,12 @@ function buildHistogramData(
   }
 
   buckets.sort((a, b) => a.lowerBound - b.lowerBound);
-  return { buckets, seriesKeys: Array.from(seriesKeysSet), displayLabelMap };
+  return {
+    buckets,
+    seriesKeys: Array.from(seriesKeysSet),
+    displayLabelMap,
+    unit,
+  };
 }
 
 export function MetricHistogram({
@@ -143,27 +151,28 @@ export function MetricHistogram({
   labelStyle = "staggered",
 }: MetricHistogramProps) {
   const bucketLabelFormatter = formatBucketLabel ?? defaultFormatBucketLabel;
-  const rowUnit = useMemo(() => {
-    for (const r of rows)
-      if (r.MetricType === "Histogram" && r.MetricUnit) return r.MetricUnit;
-    return "";
-  }, [rows]);
-  const effectiveUnit = unitProp ?? rowUnit;
 
-  const { buckets, seriesKeys, displayLabelMap } = useMemo(() => {
+  const { buckets, seriesKeys, displayLabelMap, unit } = useMemo(() => {
     if (rows.length === 0)
-      return { buckets: [], seriesKeys: [], displayLabelMap: new Map() };
+      return {
+        buckets: [],
+        seriesKeys: [],
+        displayLabelMap: new Map(),
+        unit: "",
+      };
     return buildHistogramData(rows, bucketLabelFormatter);
   }, [rows, bucketLabelFormatter]);
 
+  const effectiveUnit = unitProp ?? unit;
+
   const boundsScale = useMemo(() => {
     if (!effectiveUnit || buckets.length === 0) return null;
-    let maxBound = 0;
-    for (const b of buckets) {
-      if (b.upperBound !== Infinity && b.upperBound > maxBound)
-        maxBound = b.upperBound;
+    // Buckets are sorted by lowerBound — walk backwards to find last finite upperBound
+    for (let i = buckets.length - 1; i >= 0; i--) {
+      if (buckets[i]!.upperBound !== Infinity)
+        return resolveUnitScale(effectiveUnit, buckets[i]!.upperBound);
     }
-    return resolveUnitScale(effectiveUnit, maxBound);
+    return null;
   }, [effectiveUnit, buckets]);
 
   if (isLoading) return <HistogramLoadingSkeleton height={height} />;

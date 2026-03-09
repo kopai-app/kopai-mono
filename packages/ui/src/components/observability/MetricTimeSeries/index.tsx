@@ -256,26 +256,24 @@ export function MetricTimeSeries({
     [chartData, seriesKeys, maxDataPoints]
   );
 
-  const scale = useMemo(() => {
-    let max = 0;
-    for (const dp of displayData) {
-      for (const key of seriesKeys) {
-        const v = dp[key];
-        if (v !== undefined && Math.abs(v) > max) max = Math.abs(v);
+  const { tickFormatter, displayFormatter, resolvedYAxisLabel } =
+    useMemo(() => {
+      let max = 0;
+      for (const dp of displayData) {
+        for (const key of seriesKeys) {
+          const v = dp[key];
+          if (v !== undefined && Math.abs(v) > max) max = Math.abs(v);
+        }
       }
-    }
-    return resolveUnitScale(effectiveUnit, max);
-  }, [displayData, seriesKeys, effectiveUnit]);
-
-  const tickFormatter = useMemo(
-    () => formatValue ?? ((v: number) => formatTickValue(v, scale)),
-    [formatValue, scale]
-  );
-  const displayFormatter = useMemo(
-    () => formatValue ?? ((v: number) => formatDisplayValue(v, scale)),
-    [formatValue, scale]
-  );
-  const resolvedYAxisLabel = yAxisLabel ?? (scale.label || undefined);
+      const scale = resolveUnitScale(effectiveUnit, max);
+      return {
+        tickFormatter:
+          formatValue ?? ((v: number) => formatTickValue(v, scale)),
+        displayFormatter:
+          formatValue ?? ((v: number) => formatDisplayValue(v, scale)),
+        resolvedYAxisLabel: yAxisLabel ?? (scale.label || undefined),
+      };
+    }, [displayData, seriesKeys, effectiveUnit, formatValue, yAxisLabel]);
 
   const handleLegendClick = useCallback((dataKey: string) => {
     setHiddenSeries((prev) => {
