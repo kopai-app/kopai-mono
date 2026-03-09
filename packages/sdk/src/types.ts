@@ -5,8 +5,8 @@ import type {
   dataFilterSchemas,
   denormalizedSignals,
   datasource,
+  dashboardDatasource,
 } from "@kopai/core";
-
 // Re-export types from @kopai/core for convenience
 export type TracesDataFilter = dataFilterSchemas.TracesDataFilter;
 export type LogsDataFilter = dataFilterSchemas.LogsDataFilter;
@@ -19,6 +19,14 @@ export type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
 export type MetricsDiscoveryResult = datasource.MetricsDiscoveryResult;
 export type DiscoveredMetric = datasource.DiscoveredMetric;
 export type DiscoveredMetricAttributes = datasource.DiscoveredMetricAttributes;
+
+export type Dashboard = dashboardDatasource.Dashboard;
+export interface CreateDashboardParams {
+  name: string;
+  uiTreeVersion: string;
+  uiTree: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
 
 /** Options for KopaiClient constructor */
 export interface KopaiClientOptions {

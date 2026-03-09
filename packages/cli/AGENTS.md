@@ -12,7 +12,7 @@ npx @kopai/cli <command>
 
 ## Configuration
 
-**Default:** `http://localhost:8000/signals` (no auth required)
+**Default:** `http://localhost:8000` (no auth required)
 
 Works out of the box with local @kopai/app. No configuration needed for local development.
 
@@ -147,6 +147,16 @@ Flags marked `(repeatable)` can be specified multiple times; all conditions must
 ### Metrics (discover)
 
 `name, type, unit, description, attributes, resourceAttributes`
+
+### Dashboards
+
+```bash
+# Print UI tree component schema
+kopai dashboards schema
+
+# Create a dashboard (pipe uiTree JSON via stdin)
+echo '{"uiTree":{"root":"s1","elements":{"s1":{"key":"s1","type":"Stack","props":{"direction":"vertical","gap":"md","align":null},"children":[],"parentKey":""}}},"metadata":{}}' | kopai dashboards create --name "My Dashboard" --tree-version "0.5.0" --json
+```
 
 ## Examples for Agents
 

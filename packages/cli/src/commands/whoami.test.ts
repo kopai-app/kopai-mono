@@ -58,14 +58,14 @@ describe("whoami command", () => {
   it("prints token prefix and URL when token configured", async () => {
     vi.mocked(loadConfig).mockReturnValue({
       token: "kpi_test_token_12345678901234567890123456",
-      url: "https://example.com/signals",
+      url: "https://example.com",
     });
     mockSearchTracesPage.mockResolvedValue({ data: [] });
 
     const output = await runCommand([]);
 
     expect(output).toContain("kpi_test_t");
-    expect(output).toContain("https://example.com/signals");
+    expect(output).toContain("https://example.com");
   });
 
   it('prints "Token is valid." on successful server validation', async () => {

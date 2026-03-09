@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { MetricStat } from "./index.js";
-import { mockStatRows } from "../__fixtures__/metrics.js";
+import { mockStatRows, mockNoAttributeRows } from "../__fixtures__/metrics.js";
 
 const meta: Meta<typeof MetricStat> = {
   title: "Observability/MetricStat",
@@ -28,3 +28,4 @@ export const Error: Story = {
   args: { rows: [], error: new globalThis.Error("Failed to fetch stat") },
 };
 export const Empty: Story = { args: { rows: [] } };
+export const NoAttributes: Story = { args: { rows: mockNoAttributeRows } };

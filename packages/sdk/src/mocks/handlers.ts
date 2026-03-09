@@ -6,6 +6,7 @@ import type {
   MetricsDiscoveryResult,
   SearchResult,
   ApiErrorResponse,
+  Dashboard,
 } from "../types.js";
 
 const BASE_URL = "https://api.kopai.test";
@@ -37,6 +38,27 @@ export const sampleMetric = {
   ServiceName: "test-service",
 } satisfies OtelMetricsRow;
 
+// Sample dashboard
+export const sampleDashboard: Dashboard = {
+  id: "dash-001",
+  name: "Test Dashboard",
+  createdAt: "2025-01-01T00:00:00Z",
+  metadata: {},
+  uiTreeVersion: "0.5.0" as Dashboard["uiTreeVersion"],
+  uiTree: {
+    root: "s1",
+    elements: {
+      s1: {
+        key: "s1",
+        type: "Stack",
+        props: { direction: "vertical", gap: "md", align: null },
+        children: [],
+        parentKey: "",
+      },
+    },
+  },
+};
+
 // Sample metrics discovery
 export const sampleDiscovery = {
   metrics: [
@@ -57,7 +79,7 @@ export const sampleDiscovery = {
 
 export const handlers = [
   // Get trace by ID endpoint
-  http.get(`${BASE_URL}/traces/:traceId`, (info) => {
+  http.get(`${BASE_URL}/signals/traces/:traceId`, (info) => {
     const { request, params } = info;
     const traceId = params.traceId as string;
 
@@ -99,7 +121,7 @@ export const handlers = [
   }),
 
   // Traces search endpoint
-  http.post(`${BASE_URL}/traces/search`, async (info) => {
+  http.post(`${BASE_URL}/signals/traces/search`, async (info) => {
     const { request } = info;
 
     // Check auth first (no body parsing needed)
@@ -140,7 +162,7 @@ export const handlers = [
   }),
 
   // Logs endpoint
-  http.post(`${BASE_URL}/logs/search`, async (info) => {
+  http.post(`${BASE_URL}/signals/logs/search`, async (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -178,7 +200,7 @@ export const handlers = [
   }),
 
   // Metrics endpoint
-  http.post(`${BASE_URL}/metrics/search`, async (info) => {
+  http.post(`${BASE_URL}/signals/metrics/search`, async (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -216,7 +238,7 @@ export const handlers = [
   }),
 
   // Metrics discovery endpoint
-  http.get(`${BASE_URL}/metrics/discover`, (info) => {
+  http.get(`${BASE_URL}/signals/metrics/discover`, (info) => {
     const { request } = info;
 
     const authHeader = request.headers.get("Authorization");
@@ -234,8 +256,35 @@ export const handlers = [
     return HttpResponse.json(sampleDiscovery);
   }),
 
+  // Create dashboard endpoint
+  http.post(`${BASE_URL}/dashboards`, async (info) => {
+    const { request } = info;
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Unauthorized",
+          code: "UNAUTHORIZED",
+        } satisfies ApiErrorResponse,
+        { status: 401 }
+      );
+    }
+
+    const body = (await request.clone().json()) as Record<string, unknown>;
+
+    return HttpResponse.json(
+      {
+        ...sampleDashboard,
+        name: body.name as string,
+      },
+      { status: 201 }
+    );
+  }),
+
   // 404 endpoint for testing
-  http.post(`${BASE_URL}/not-found`, () => {
+  http.post(`${BASE_URL}/signals/not-found`, () => {
     return HttpResponse.json(
       {
         type: "https://api.kopai.io/errors/not-found",

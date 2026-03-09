@@ -106,13 +106,19 @@ export const observabilityCatalog = createCatalog({
       props: z.object({
         height: z.number().nullable(),
         showBrush: z.boolean().nullable(),
+        yAxisLabel: z.string().nullable(),
+        unit: z.string().nullable(),
       }),
       hasChildren: false,
       description: "Time series line chart for Gauge/Sum metrics",
     },
 
     MetricHistogram: {
-      props: z.object({ height: z.number().nullable() }),
+      props: z.object({
+        height: z.number().nullable(),
+        yAxisLabel: z.string().nullable(),
+        unit: z.string().nullable(),
+      }),
       hasChildren: false,
       description: "Histogram bar chart for distribution metrics",
     },

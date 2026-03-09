@@ -15,6 +15,12 @@ import {
   Cell,
 } from "recharts";
 import type { denormalizedSignals } from "@kopai/core";
+import { formatSeriesLabel } from "../utils/attributes.js";
+import {
+  resolveUnitScale,
+  formatDisplayValue,
+  type ResolvedScale,
+} from "../utils/units.js";
 
 type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
 
@@ -32,6 +38,7 @@ export interface MetricHistogramProps {
   isLoading?: boolean;
   error?: Error;
   height?: number;
+  unit?: string;
   yAxisLabel?: string;
   showLegend?: boolean;
   formatBucketLabel?: (
@@ -69,16 +76,37 @@ const defaultFormatValue = (value: number): string => {
 function buildHistogramData(
   rows: OtelMetricsRow[],
   formatLabel = defaultFormatBucketLabel
-): { buckets: BucketData[]; seriesKeys: string[] } {
+): {
+  buckets: BucketData[];
+  seriesKeys: string[];
+  displayLabelMap: Map<string, string>;
+  unit: string;
+} {
   const buckets: BucketData[] = [];
   const seriesKeysSet = new Set<string>();
+  const displayLabelMap = new Map<string, string>();
+  let unit = "";
 
   for (const row of rows) {
     if (row.MetricType !== "Histogram") continue;
+    if (!unit && row.MetricUnit) unit = row.MetricUnit;
     const name = row.MetricName ?? "count";
     const key = row.Attributes ? JSON.stringify(row.Attributes) : "__default__";
     const seriesName = key === "__default__" ? name : key;
     seriesKeysSet.add(seriesName);
+
+    if (!displayLabelMap.has(seriesName)) {
+      if (key === "__default__") {
+        displayLabelMap.set(seriesName, name);
+      } else {
+        const labels: Record<string, string> = {};
+        if (row.Attributes) {
+          for (const [k, v] of Object.entries(row.Attributes))
+            labels[k] = String(v);
+        }
+        displayLabelMap.set(seriesName, formatSeriesLabel(labels) || name);
+      }
+    }
 
     const bounds = row.ExplicitBounds ?? [];
     const counts = row.BucketCounts ?? [];
@@ -102,7 +130,12 @@ function buildHistogramData(
   }
 
   buckets.sort((a, b) => a.lowerBound - b.lowerBound);
-  return { buckets, seriesKeys: Array.from(seriesKeysSet) };
+  return {
+    buckets,
+    seriesKeys: Array.from(seriesKeysSet),
+    displayLabelMap,
+    unit,
+  };
 }
 
 export function MetricHistogram({
@@ -110,6 +143,7 @@ export function MetricHistogram({
   isLoading = false,
   error,
   height = 400,
+  unit: unitProp,
   yAxisLabel,
   showLegend = true,
   formatBucketLabel,
@@ -117,16 +151,29 @@ export function MetricHistogram({
   labelStyle = "staggered",
 }: MetricHistogramProps) {
   const bucketLabelFormatter = formatBucketLabel ?? defaultFormatBucketLabel;
-  const unit = useMemo(() => {
-    for (const r of rows)
-      if (r.MetricType === "Histogram" && r.MetricUnit) return r.MetricUnit;
-    return "";
-  }, [rows]);
 
-  const { buckets, seriesKeys } = useMemo(() => {
-    if (rows.length === 0) return { buckets: [], seriesKeys: [] };
+  const { buckets, seriesKeys, displayLabelMap, unit } = useMemo(() => {
+    if (rows.length === 0)
+      return {
+        buckets: [],
+        seriesKeys: [],
+        displayLabelMap: new Map(),
+        unit: "",
+      };
     return buildHistogramData(rows, bucketLabelFormatter);
   }, [rows, bucketLabelFormatter]);
+
+  const effectiveUnit = unitProp ?? unit;
+
+  const boundsScale = useMemo(() => {
+    if (!effectiveUnit || buckets.length === 0) return null;
+    // Buckets are sorted by lowerBound — walk backwards to find last finite upperBound
+    for (let i = buckets.length - 1; i >= 0; i--) {
+      if (buckets[i]!.upperBound !== Infinity)
+        return resolveUnitScale(effectiveUnit, buckets[i]!.upperBound);
+    }
+    return null;
+  }, [effectiveUnit, buckets]);
 
   if (isLoading) return <HistogramLoadingSkeleton height={height} />;
 
@@ -217,9 +264,20 @@ export function MetricHistogram({
             }
           />
           <Tooltip
-            content={<HistogramTooltip formatValue={formatValue} unit={unit} />}
+            content={(props) => (
+              <HistogramTooltip
+                {...props}
+                formatValue={formatValue}
+                boundsScale={boundsScale}
+                displayLabelMap={displayLabelMap}
+              />
+            )}
           />
-          {showLegend && seriesKeys.length > 1 && <Legend />}
+          {showLegend && seriesKeys.length > 1 && (
+            <Legend
+              formatter={(value: string) => displayLabelMap.get(value) ?? value}
+            />
+          )}
           {seriesKeys.map((key, i) => (
             <Bar
               key={key}
@@ -242,31 +300,39 @@ function HistogramTooltip({
   active,
   payload,
   formatValue,
-  unit,
+  boundsScale,
+  displayLabelMap,
 }: {
   active?: boolean;
-  payload?: Array<{
+  payload?: readonly {
     dataKey: string;
     value: number;
     color: string;
     payload: BucketData;
-  }>;
+  }[];
   formatValue: (val: number) => string;
-  unit?: string;
+  boundsScale: ResolvedScale | null;
+  displayLabelMap: Map<string, string>;
 }) {
   if (!active || !payload?.length) return null;
   const bucket = payload[0]?.payload;
   if (!bucket) return null;
+
+  const boundsLabel = boundsScale
+    ? `${formatDisplayValue(bucket.lowerBound, boundsScale)} – ${bucket.upperBound === Infinity ? "∞" : formatDisplayValue(bucket.upperBound, boundsScale)}`
+    : bucket.bucket;
+
   return (
     <div className="bg-background border border-gray-700 rounded-lg p-3 shadow-lg">
       <p className="text-gray-300 text-sm font-medium mb-2">
-        Bucket: {bucket.bucket}
-        {unit ? ` ${unit}` : ""}
+        Bucket: {boundsLabel}
       </p>
       {payload.map((entry, i) => (
         <p key={i} className="text-sm" style={{ color: entry.color }}>
-          <span className="font-medium">{entry.dataKey}:</span>{" "}
-          {formatValue(entry.value)} requests
+          <span className="font-medium">
+            {displayLabelMap.get(entry.dataKey) ?? entry.dataKey}:
+          </span>{" "}
+          {formatValue(entry.value)}
         </p>
       ))}
     </div>

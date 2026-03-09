@@ -51,6 +51,9 @@ export type {
   ShortcutsRegistry,
 } from "../KeyboardShortcuts/index.js";
 
+export { DynamicDashboard } from "./DynamicDashboard/index.js";
+export type { DynamicDashboardProps } from "./DynamicDashboard/index.js";
+
 // Types
 export type {
   SpanNode,

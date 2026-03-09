@@ -19,6 +19,7 @@ import {
   sampleLog,
   sampleMetric,
   sampleDiscovery,
+  sampleDashboard,
 } from "./mocks/handlers.js";
 
 const server = setupServer(...handlers);
@@ -152,6 +153,46 @@ describe("KopaiClient", () => {
     });
   });
 
+  describe("createDashboard", () => {
+    it("creates dashboard and returns result", async () => {
+      const result = await client.createDashboard({
+        name: "My Dashboard",
+        uiTreeVersion: "0.5.0",
+        uiTree: sampleDashboard.uiTree,
+      });
+
+      expect(result.id).toBe(sampleDashboard.id);
+      expect(result.name).toBe("My Dashboard");
+      expect(result.uiTreeVersion).toBe(sampleDashboard.uiTreeVersion);
+    });
+
+    it("throws on auth error", async () => {
+      const unauthClient = new KopaiClient({
+        baseUrl: BASE_URL,
+      });
+
+      await expect(
+        unauthClient.createDashboard({
+          name: "Test",
+          uiTreeVersion: "0.5.0",
+          uiTree: {},
+        })
+      ).rejects.toThrow(KopaiError);
+
+      try {
+        await unauthClient.createDashboard({
+          name: "Test",
+          uiTreeVersion: "0.5.0",
+          uiTree: {},
+        });
+      } catch (e) {
+        const error = e as KopaiError;
+        expect(error.status).toBe(401);
+        expect(error.code).toBe("UNAUTHORIZED");
+      }
+    });
+  });
+
   describe("authentication", () => {
     it("sends bearer token in Authorization header", async () => {
       // This is implicitly tested by all successful calls
@@ -181,7 +222,7 @@ describe("KopaiClient", () => {
   describe("error handling", () => {
     it("throws KopaiError for 404", async () => {
       server.use(
-        http.get(`${BASE_URL}/traces/not-exists`, () => {
+        http.get(`${BASE_URL}/signals/traces/not-exists`, () => {
           return HttpResponse.json(
             {
               type: "https://api.kopai.io/errors/not-found",
@@ -221,7 +262,7 @@ describe("KopaiClient", () => {
   describe("timeout", () => {
     it("uses default timeout", async () => {
       server.use(
-        http.post(`${BASE_URL}/traces/search`, async () => {
+        http.post(`${BASE_URL}/signals/traces/search`, async () => {
           // This won't actually delay since we're using default timeout
           return HttpResponse.json({
             data: [sampleTrace],
@@ -243,7 +284,7 @@ describe("KopaiClient", () => {
       });
 
       server.use(
-        http.post(`${BASE_URL}/traces/search`, async () => {
+        http.post(`${BASE_URL}/signals/traces/search`, async () => {
           await new Promise((resolve) => setTimeout(resolve, 100));
           return HttpResponse.json({
             data: [sampleTrace],
@@ -263,7 +304,7 @@ describe("KopaiClient", () => {
       let capturedHeaders: Headers | null = null;
 
       server.use(
-        http.post(`${BASE_URL}/traces/search`, ({ request }) => {
+        http.post(`${BASE_URL}/signals/traces/search`, ({ request }) => {
           capturedHeaders = request.headers;
           return HttpResponse.json({
             data: [sampleTrace],

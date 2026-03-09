@@ -7,14 +7,13 @@ import {
   useRef,
 } from "react";
 import { KopaiSDKProvider, useKopaiSDK } from "../providers/kopai-provider.js";
+import { useQuery } from "@tanstack/react-query";
 import { KopaiClient } from "@kopai/sdk";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
 import { useLiveLogs } from "../hooks/use-live-logs.js";
 import type { denormalizedSignals, dataFilterSchemas } from "@kopai/core";
 import type { DataSource } from "../lib/component-catalog.js";
 import { observabilityCatalog } from "../lib/observability-catalog.js";
-import { createRendererFromCatalog } from "../lib/renderer.js";
-
 // Observability components
 import {
   LogTimeline,
@@ -25,24 +24,15 @@ import {
   TraceDetail,
   KeyboardShortcutsProvider,
   useRegisterShortcuts,
+  DynamicDashboard,
 } from "../components/observability/index.js";
+import type { UITree } from "../components/observability/DynamicDashboard/index.js";
 import type {
   TraceSummary,
   TraceSearchFilters,
 } from "../components/observability/index.js";
 
 import { SERVICES_SHORTCUTS } from "../components/observability/ServiceList/shortcuts.js";
-import { OtelMetricDiscovery } from "../components/observability/renderers/index.js";
-import {
-  Heading,
-  Text,
-  Card,
-  Stack,
-  Grid,
-  Badge,
-  Divider,
-  Empty,
-} from "../components/dashboard/index.js";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 
@@ -67,6 +57,7 @@ interface URLState {
   service: string | null;
   trace: string | null;
   span: string | null;
+  dashboardId: string | null;
 }
 
 function readURLState(): URLState {
@@ -74,13 +65,14 @@ function readURLState(): URLState {
   const service = params.get("service");
   const trace = params.get("trace");
   const span = params.get("span");
+  const dashboardId = params.get("dashboardId");
   const rawTab = params.get("tab");
   const tab = service
     ? "services"
     : rawTab === "logs" || rawTab === "metrics"
       ? rawTab
       : "services";
-  return { tab, service, trace, span };
+  return { tab, service, trace, span, dashboardId };
 }
 
 function pushURLState(
@@ -89,6 +81,7 @@ function pushURLState(
     service?: string | null;
     trace?: string | null;
     span?: string | null;
+    dashboardId?: string | null;
   },
   { replace = false }: { replace?: boolean } = {}
 ) {
@@ -97,6 +90,12 @@ function pushURLState(
   if (state.service) params.set("service", state.service);
   if (state.trace) params.set("trace", state.trace);
   if (state.span) params.set("span", state.span);
+  // Preserve dashboardId from current URL if not explicitly provided
+  const dashboardId =
+    state.dashboardId !== undefined
+      ? state.dashboardId
+      : new URLSearchParams(window.location.search).get("dashboardId");
+  if (dashboardId) params.set("dashboardId", dashboardId);
   const qs = params.toString();
   const url = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
   if (replace) {
@@ -118,6 +117,7 @@ let _cachedState: URLState = {
   service: null,
   trace: null,
   span: null,
+  dashboardId: null,
 };
 
 function getURLSnapshot(): URLState {
@@ -660,26 +660,10 @@ function ServicesTab({
 }
 
 // ---------------------------------------------------------------------------
-// Metrics tab — renderer + catalog
+// Metrics tab — DynamicDashboard
 // ---------------------------------------------------------------------------
 
-const MetricsRenderer = createRendererFromCatalog(observabilityCatalog, {
-  Card,
-  Grid,
-  Stack,
-  Heading,
-  Text,
-  Badge,
-  Divider,
-  Empty,
-  LogTimeline: () => null,
-  TraceDetail: () => null,
-  MetricTimeSeries: () => null,
-  MetricHistogram: () => null,
-  MetricStat: () => null,
-  MetricTable: () => null,
-  MetricDiscovery: OtelMetricDiscovery,
-});
+const DASHBOARDS_API_BASE = "/dashboards";
 
 const METRICS_TREE = {
   root: "root",
@@ -731,8 +715,50 @@ const METRICS_TREE = {
   },
 };
 
+function useDashboardTree(dashboardId: string | null) {
+  const { data, isFetching, error } = useQuery<UITree, Error>({
+    queryKey: ["dashboard-tree", dashboardId],
+    queryFn: async ({ signal }) => {
+      const res = await fetch(`${DASHBOARDS_API_BASE}/${dashboardId}`, {
+        signal,
+      });
+      if (!res.ok) throw new Error(`Failed to load dashboard: ${res.status}`);
+      const json = await res.json();
+      const parsed = observabilityCatalog.uiTreeSchema.safeParse(json.uiTree);
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const path = issue?.path.length ? issue.path.join(".") + ": " : "";
+        throw new Error(
+          `Dashboard has an invalid layout: ${path}${issue?.message}`
+        );
+      }
+      return parsed.data;
+    },
+    enabled: !!dashboardId,
+  });
+
+  return {
+    loading: isFetching,
+    error: error?.message ?? null,
+    tree: data ?? null,
+  };
+}
+
 function MetricsTab() {
-  return <MetricsRenderer tree={METRICS_TREE} />;
+  const kopaiClient = useKopaiSDK();
+  const { dashboardId } = useURLState();
+  const { loading, error, tree } = useDashboardTree(dashboardId);
+
+  if (loading)
+    return (
+      <p className="text-muted-foreground text-sm">Loading dashboard...</p>
+    );
+  if (error)
+    return <p className="text-muted-foreground text-sm">Error: {error}</p>;
+
+  return (
+    <DynamicDashboard kopaiClient={kopaiClient} uiTree={tree ?? METRICS_TREE} />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -741,7 +767,7 @@ function MetricsTab() {
 
 let _defaultClient: KopaiClient | undefined;
 function getDefaultClient() {
-  _defaultClient ??= new KopaiClient({ baseUrl: "/signals" });
+  _defaultClient ??= new KopaiClient({ baseUrl: "" });
   return _defaultClient;
 }
 

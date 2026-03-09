@@ -8,6 +8,13 @@ export function formatAttributeValue(value: unknown): string {
   return String(value);
 }
 
+export function formatSeriesLabel(labels: Record<string, string>): string {
+  const entries = Object.entries(labels);
+  if (entries.length === 0) return "";
+  if (entries.length === 1) return String(entries[0]![1]);
+  return entries.map(([k, v]) => `${k}=${v}`).join(", ");
+}
+
 export function isComplexValue(value: unknown): boolean {
   return (
     typeof value === "object" &&

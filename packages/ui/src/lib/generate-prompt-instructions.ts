@@ -74,16 +74,19 @@ function buildExampleElements(
   for (const name of otherNames) {
     const key = `${String(name).toLowerCase()}-1`;
     childKeys.push(key);
-    elements[key] = {
+    const element: Record<string, unknown> = {
       key,
       type: String(name),
       props: {},
       parentKey: containerKey,
-      dataSource: {
+    };
+    if (!components[name]?.hasChildren) {
+      element.dataSource = {
         method: "searchTracesPage",
         params: { limit: 10 },
-      },
-    };
+      };
+    }
+    elements[key] = element;
   }
 
   return { root: containerKey, elements };
@@ -140,7 +143,10 @@ function buildUnifiedSchema(treeSchema: z.ZodTypeAny): object {
  * const prompt = `Build a dashboard UI.\n\n${instructions}`;
  * ```
  */
-export function generatePromptInstructions(catalog: Catalog): string {
+export function generatePromptInstructions(
+  catalog: Catalog,
+  uiTreeVersion: string
+): string {
   const componentNames = Object.keys(catalog.components);
 
   const componentSections = componentNames
@@ -167,7 +173,13 @@ ${roleLine}`;
     catalog.components
   );
 
-  return `## Available Components
+  return `## UI Tree Version
+
+Use uiTreeVersion: "${uiTreeVersion}" when creating dashboards.
+
+---
+
+## Available Components
 
 ${componentSections}
 

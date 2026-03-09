@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { createTracesCommand } from "./commands/traces.js";
 import { createLogsCommand } from "./commands/logs.js";
 import { createMetricsCommand } from "./commands/metrics.js";
+import { createDashboardsCommand } from "./commands/dashboards.js";
 import { createLoginCommand } from "./commands/login.js";
 import { createLogoutCommand } from "./commands/logout.js";
 import { createWhoamiCommand } from "./commands/whoami.js";
@@ -18,6 +19,7 @@ program
   .addCommand(createTracesCommand())
   .addCommand(createLogsCommand())
   .addCommand(createMetricsCommand())
+  .addCommand(createDashboardsCommand())
   .addCommand(createLoginCommand())
   .addCommand(createLogoutCommand())
   .addCommand(createWhoamiCommand())
@@ -26,8 +28,8 @@ program
     `
 Examples:
   $ kopai traces search                                          # localhost:8000 (default, for @kopai/app running locally)
-  $ kopai traces search --url https://example.com/signals        # remote instance
-  $ kopai logs search --url https://example.com/signals --token kpi_…  # with auth`
+  $ kopai traces search --url https://example.com                # remote instance
+  $ kopai logs search --url https://example.com --token kpi_…    # with auth`
   );
 
 program.parse();

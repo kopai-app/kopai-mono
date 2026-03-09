@@ -3,8 +3,8 @@ import {
   type FastifyReply,
   type FastifyRequest,
 } from "fastify";
-import { SignalsApiError } from "./errors.js";
-import type { SignalsApiErrorResponse } from "./error-schema-zod.js";
+import { ApiError, DashboardNotFoundError } from "./errors.js";
+import type { ApiErrorResponse } from "./error-schema-zod.js";
 export function errorHandler(
   error: FastifyError | Error | string,
   request: FastifyRequest,
@@ -35,24 +35,33 @@ export function errorHandler(
       status: 400,
       title: "Invalid data",
       detail: error.message,
-    } satisfies SignalsApiErrorResponse);
+    } satisfies ApiErrorResponse);
   }
 
+  if (error instanceof DashboardNotFoundError) {
+    request.log.info(error.message);
+    return reply.status(404).send({
+      type: "https://docs.kopai.app/errors/dashboard-not-found",
+      status: 404,
+      title: "Dashboard not found",
+      detail: error.message,
+    } satisfies ApiErrorResponse);
+  }
   request.log.error(error);
-  if (error instanceof SignalsApiError) {
+  if (error instanceof ApiError) {
     return reply.status(500).send({
       type: "https://docs.kopai.app/errors/signals-api-internal-error", // TODO: document error
       status: 500,
       title: "Internal server error",
       detail: error.message,
-    } satisfies SignalsApiErrorResponse);
+    } satisfies ApiErrorResponse);
   }
 
   return reply.status(500).send({
     type: "https://docs.kopai.app/errors/signals-api-internal-error", // TODO: document error
     status: 500,
     title: "Internal server error",
-  } satisfies SignalsApiErrorResponse);
+  } satisfies ApiErrorResponse);
 }
 
 function isFastifyError(error: unknown): error is FastifyError {

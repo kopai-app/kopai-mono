@@ -21,7 +21,7 @@ describe("generatePromptInstructions", () => {
       },
     });
 
-    const prompt = generatePromptInstructions(catalog);
+    const prompt = generatePromptInstructions(catalog, "0.5.0");
     expect(prompt).toMatchSnapshot();
   });
 });

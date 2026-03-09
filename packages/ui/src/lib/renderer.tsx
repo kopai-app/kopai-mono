@@ -24,7 +24,7 @@ type RegistryFromCatalog<
 
 type Catalog = ReturnType<typeof createCatalog>;
 
-type UITree = z.infer<Catalog["uiTreeSchema"]>;
+export type UITree = z.infer<Catalog["uiTreeSchema"]>;
 
 type UIElement = UITree["elements"][string];
 

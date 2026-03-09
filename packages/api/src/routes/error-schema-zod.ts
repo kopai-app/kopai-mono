@@ -26,4 +26,4 @@ export const problemDetailsSchema = z.object({
     .describe("URI reference identifying this specific occurrence"),
 });
 
-export type SignalsApiErrorResponse = z.infer<typeof problemDetailsSchema>;
+export type ApiErrorResponse = z.infer<typeof problemDetailsSchema>;

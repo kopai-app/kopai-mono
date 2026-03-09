@@ -1,0 +1,58 @@
+---
+name: workflow
+description: Dashboard creation workflow
+priority: critical
+---
+
+# Dashboard Creation Workflow
+
+## Steps
+
+1. **Discover metrics** — run `npx @kopai/cli metrics discover --json` to get real metric names, types, and attributes
+2. **Design tree** — build a uiTree matching the component schema
+3. **Create dashboard** — pipe JSON to CLI:
+   ```bash
+   echo '{"uiTree":<tree>,"metadata":{}}' | npx @kopai/cli dashboards create --name "<name>" --tree-version "0.5.0" --json
+   ```
+
+## Tree Structure Rules
+
+- Every element needs: `key`, `type`, `children` array, `parentKey`, `props`
+- Root element's `parentKey` is `""`
+- Root key must exist in `elements`
+- No orphan elements — every non-root element's `parentKey` must reference an existing element
+- `children` array must list keys of child elements
+
+## DataSource Rules
+
+- Leaf components (hasChildren: false) can have a `dataSource`
+- `dataSource.method` must match a valid SDK method (e.g. `searchMetricsPage`, `searchLogsPage`)
+- `dataSource.params` must match the method's parameter schema
+- `metricType` in `searchMetricsPage` params is **required** — use the type from `metrics discover` output (Gauge, Sum, Histogram, etc.)
+- `metricName` should match an actual metric name from discover output
+
+## Required Fields
+
+- `name` — dashboard display name (passed via `--name`)
+- `uiTreeVersion` — semver string (passed via `--tree-version`)
+- `uiTree` — the component tree object with `root` and `elements` (in stdin JSON)
+
+## Units
+
+- Set `unit` on `MetricTimeSeries` and `MetricHistogram` to the raw OTEL unit from `metrics discover` (e.g. `"By"`, `"s"`, `"ms"`, `"1"`, `"{requests}"`)
+- The component auto-derives: y-axis label, tick formatting, and tooltip display from `unit` + data range
+- `yAxisLabel` is an optional override — only set it when the auto-derived label is not descriptive enough
+
+## Layout Best Practices
+
+- Use `Stack` with `direction: "vertical"` as root for simple dashboards
+- Use `Grid` with `columns: 2` or `columns: 3` for metric grids
+- Wrap data components in `Card` with descriptive `title`
+- Use `MetricStat` for KPI overview, `MetricTimeSeries` for trends
+- Use `MetricHistogram` only for Histogram/ExponentialHistogram metric types
+
+## Example Creation
+
+```bash
+echo '{"uiTree":{"root":"stack-1","elements":{"stack-1":{"key":"stack-1","type":"Stack","props":{"direction":"vertical","gap":"md","align":null},"children":["card-1"],"parentKey":""},"card-1":{"key":"card-1","type":"Card","props":{"title":"CPU Usage","description":null,"padding":null},"children":["ts-1"],"parentKey":"stack-1"},"ts-1":{"key":"ts-1","type":"MetricTimeSeries","props":{"height":300,"showBrush":null,"yAxisLabel":null,"unit":"1"},"children":[],"parentKey":"card-1","dataSource":{"method":"searchMetricsPage","params":{"metricType":"Gauge","metricName":"system.cpu.utilization"}}}}},"metadata":{}}' | npx @kopai/cli dashboards create --name "CPU Dashboard" --tree-version "0.5.0" --json
+```

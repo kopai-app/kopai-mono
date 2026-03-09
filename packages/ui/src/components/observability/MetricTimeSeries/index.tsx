@@ -22,6 +22,12 @@ import type {
   RechartsDataPoint,
 } from "../types.js";
 import { downsampleLTTB, type LTTBPoint } from "../utils/lttb.js";
+import { formatSeriesLabel } from "../utils/attributes.js";
+import {
+  resolveUnitScale,
+  formatTickValue,
+  formatDisplayValue,
+} from "../utils/units.js";
 
 type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
 
@@ -52,6 +58,7 @@ export interface MetricTimeSeriesProps {
   maxDataPoints?: number;
   showBrush?: boolean;
   height?: number;
+  unit?: string;
   yAxisLabel?: string;
   formatTime?: (timestamp: number) => string;
   formatValue?: (value: number) => string;
@@ -68,12 +75,6 @@ const defaultFormatTime = (timestamp: number): string => {
     second: "2-digit",
     hour12: false,
   });
-};
-
-const defaultFormatValue = (value: number): string => {
-  if (Math.abs(value) >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
-  if (Math.abs(value) >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
-  return value.toFixed(2);
 };
 
 function getStrokeDashArray(
@@ -185,6 +186,20 @@ function getSeriesKeys(metrics: ParsedMetricGroup[]): string[] {
   return Array.from(keys);
 }
 
+function buildDisplayLabelMap(
+  metrics: ParsedMetricGroup[]
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const m of metrics) {
+    for (const s of m.series) {
+      const dataKey = s.key === "__default__" ? m.name : s.key;
+      const label = formatSeriesLabel(s.labels);
+      map.set(dataKey, label || m.name);
+    }
+  }
+  return map;
+}
+
 function downsampleRechartsData(
   data: RechartsDataPoint[],
   seriesKeys: string[],
@@ -212,9 +227,10 @@ export function MetricTimeSeries({
   maxDataPoints = 500,
   showBrush = true,
   height = 400,
+  unit: unitProp,
   yAxisLabel,
   formatTime = defaultFormatTime,
-  formatValue = defaultFormatValue,
+  formatValue,
   onBrushChange,
   legendMaxLength = 30,
   thresholdLines,
@@ -222,7 +238,7 @@ export function MetricTimeSeries({
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
 
   const parsedMetrics = useMemo(() => buildMetrics(rows), [rows]);
-  const unit = parsedMetrics[0]?.unit ?? "";
+  const effectiveUnit = unitProp ?? parsedMetrics[0]?.unit ?? "";
   const chartData = useMemo(
     () => toRechartsData(parsedMetrics),
     [parsedMetrics]
@@ -231,10 +247,33 @@ export function MetricTimeSeries({
     () => getSeriesKeys(parsedMetrics),
     [parsedMetrics]
   );
+  const displayLabelMap = useMemo(
+    () => buildDisplayLabelMap(parsedMetrics),
+    [parsedMetrics]
+  );
   const displayData = useMemo(
     () => downsampleRechartsData(chartData, seriesKeys, maxDataPoints),
     [chartData, seriesKeys, maxDataPoints]
   );
+
+  const { tickFormatter, displayFormatter, resolvedYAxisLabel } =
+    useMemo(() => {
+      let max = 0;
+      for (const dp of displayData) {
+        for (const key of seriesKeys) {
+          const v = dp[key];
+          if (v !== undefined && Math.abs(v) > max) max = Math.abs(v);
+        }
+      }
+      const scale = resolveUnitScale(effectiveUnit, max);
+      return {
+        tickFormatter:
+          formatValue ?? ((v: number) => formatTickValue(v, scale)),
+        displayFormatter:
+          formatValue ?? ((v: number) => formatDisplayValue(v, scale)),
+        resolvedYAxisLabel: yAxisLabel ?? (scale.label || undefined),
+      };
+    }, [displayData, seriesKeys, effectiveUnit, formatValue, yAxisLabel]);
 
   const handleLegendClick = useCallback((dataKey: string) => {
     setHiddenSeries((prev) => {
@@ -303,13 +342,13 @@ export function MetricTimeSeries({
             tick={{ fill: "#9CA3AF", fontSize: 12 }}
           />
           <YAxis
-            tickFormatter={formatValue}
+            tickFormatter={tickFormatter}
             stroke="#9CA3AF"
             tick={{ fill: "#9CA3AF", fontSize: 12 }}
             label={
-              yAxisLabel
+              resolvedYAxisLabel
                 ? {
-                    value: yAxisLabel,
+                    value: resolvedYAxisLabel,
                     angle: -90,
                     position: "insideLeft",
                     fill: "#9CA3AF",
@@ -318,13 +357,14 @@ export function MetricTimeSeries({
             }
           />
           <Tooltip
-            content={
+            content={(props) => (
               <CustomTooltip
+                {...props}
                 formatTime={formatTime}
-                formatValue={formatValue}
-                unit={unit}
+                formatValue={displayFormatter}
+                displayLabelMap={displayLabelMap}
               />
-            }
+            )}
           />
           <Legend
             onClick={(e) => {
@@ -332,10 +372,11 @@ export function MetricTimeSeries({
               if (typeof dk === "string") handleLegendClick(dk);
             }}
             formatter={(value: string) => {
+              const label = displayLabelMap.get(value) ?? value;
               const truncated =
-                value.length > legendMaxLength
-                  ? value.slice(0, legendMaxLength - 3) + "..."
-                  : value;
+                label.length > legendMaxLength
+                  ? label.slice(0, legendMaxLength - 3) + "..."
+                  : label;
               const isHidden = hiddenSeries.has(value);
               return (
                 <span
@@ -344,7 +385,7 @@ export function MetricTimeSeries({
                     textDecoration: isHidden ? "line-through" : "none",
                     cursor: "pointer",
                   }}
-                  title={truncated !== value ? value : undefined}
+                  title={truncated !== label ? label : undefined}
                 >
                   {truncated}
                 </span>
@@ -405,24 +446,26 @@ function CustomTooltip({
   label,
   formatTime,
   formatValue,
-  unit,
+  displayLabelMap,
 }: {
   active?: boolean;
-  payload?: Array<{ dataKey: string; value: number; color: string }>;
-  label?: number;
+  payload?: readonly { dataKey: string; value: number; color: string }[];
+  label?: string | number;
   formatTime: (ts: number) => string;
   formatValue: (val: number) => string;
-  unit?: string;
+  displayLabelMap: Map<string, string>;
 }) {
-  if (!active || !payload || !label) return null;
+  if (!active || !payload || label == null) return null;
+  const ts = typeof label === "number" ? label : Number(label);
   return (
     <div className="bg-background border border-gray-700 rounded-lg p-3 shadow-lg">
-      <p className="text-gray-400 text-xs mb-2">{formatTime(label)}</p>
+      <p className="text-gray-400 text-xs mb-2">{formatTime(ts)}</p>
       {payload.map((entry, i) => (
         <p key={i} className="text-sm" style={{ color: entry.color }}>
-          <span className="font-medium">{entry.dataKey}:</span>{" "}
+          <span className="font-medium">
+            {displayLabelMap.get(entry.dataKey) ?? entry.dataKey}:
+          </span>{" "}
           {formatValue(entry.value)}
-          {unit ? ` ${unit}` : ""}
         </p>
       ))}
     </div>

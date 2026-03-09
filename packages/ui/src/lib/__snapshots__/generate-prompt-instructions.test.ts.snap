@@ -1,7 +1,13 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`generatePromptInstructions > generates full prompt instructions 1`] = `
-"## Available Components
+"## UI Tree Version
+
+Use uiTreeVersion: "0.5.0" when creating dashboards.
+
+---
+
+## Available Components
 
 ### Card
 A card container
