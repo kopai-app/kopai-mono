@@ -19,6 +19,7 @@ import type {
   MetricsDiscoveryResult,
   Dashboard,
   CreateDashboardParams,
+  SearchDashboardsFilter,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT = 30_000;
@@ -40,6 +41,11 @@ const metricsResponseSchema = z.object({
 });
 
 const dashboardResponseSchema = dashboardDatasource.dashboardSchema;
+
+const dashboardSearchResponseSchema = z.object({
+  data: z.array(dashboardDatasource.dashboardSchema),
+  nextCursor: z.string().nullable(),
+});
 
 const metricsDiscoverySchema = z.object({
   metrics: z.array(
@@ -238,6 +244,61 @@ export class KopaiClient {
         fetchFn: this.fetchFn,
         defaultTimeout: this.defaultTimeout,
       }
+    );
+  }
+
+  /**
+   * Get a dashboard by ID.
+   */
+  async getDashboard(id: string, opts?: RequestOptions): Promise<Dashboard> {
+    return request(
+      `${this.baseUrl}/dashboards/${id}`,
+      dashboardResponseSchema,
+      {
+        method: "GET",
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Search dashboards for a single page.
+   */
+  async searchDashboardsPage(
+    filter: SearchDashboardsFilter,
+    opts?: RequestOptions
+  ): Promise<SearchResult<Dashboard>> {
+    const validatedFilter =
+      dashboardDatasource.searchDashboardsFilter.parse(filter);
+
+    return request(
+      `${this.baseUrl}/dashboards/search`,
+      dashboardSearchResponseSchema,
+      {
+        method: "POST",
+        body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Search dashboards with auto-pagination.
+   */
+  searchDashboards(
+    filter: Omit<SearchDashboardsFilter, "cursor">,
+    opts?: RequestOptions
+  ): AsyncIterable<Dashboard> {
+    return paginate(
+      (cursor, signal) =>
+        this.searchDashboardsPage({ ...filter, cursor }, { ...opts, signal }),
+      opts?.signal
     );
   }
 

@@ -1,6 +1,7 @@
 /**
  * SDK types - re-exports from @kopai/core and SDK-specific types.
  */
+import type { z } from "zod";
 import type {
   dataFilterSchemas,
   denormalizedSignals,
@@ -21,6 +22,9 @@ export type DiscoveredMetric = datasource.DiscoveredMetric;
 export type DiscoveredMetricAttributes = datasource.DiscoveredMetricAttributes;
 
 export type Dashboard = dashboardDatasource.Dashboard;
+export type SearchDashboardsFilter = z.input<
+  typeof dashboardDatasource.searchDashboardsFilter
+>;
 export interface CreateDashboardParams {
   name: string;
   uiTreeVersion: string;

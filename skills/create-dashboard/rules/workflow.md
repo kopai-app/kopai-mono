@@ -56,3 +56,14 @@ priority: critical
 ```bash
 echo '{"uiTree":{"root":"stack-1","elements":{"stack-1":{"key":"stack-1","type":"Stack","props":{"direction":"vertical","gap":"md","align":null},"children":["card-1"],"parentKey":""},"card-1":{"key":"card-1","type":"Card","props":{"title":"CPU Usage","description":null,"padding":null},"children":["ts-1"],"parentKey":"stack-1"},"ts-1":{"key":"ts-1","type":"MetricTimeSeries","props":{"height":300,"showBrush":null,"yAxisLabel":null,"unit":"1"},"children":[],"parentKey":"card-1","dataSource":{"method":"searchMetricsPage","params":{"metricType":"Gauge","metricName":"system.cpu.utilization"}}}}},"metadata":{}}' | npx @kopai/cli dashboards create --name "CPU Dashboard" --tree-version "0.5.0" --json
 ```
+
+## Post-Creation
+
+After the dashboard is created, display the URL to the user:
+
+```
+<baseUrl>/?tab=metrics&dashboardId=<id>
+```
+
+- `<id>` — the `id` field from the CLI JSON response
+- `<baseUrl>` — the URL used for the CLI command: the `--url` flag value, or `http://localhost:8000` if omitted

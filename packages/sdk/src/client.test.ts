@@ -11,7 +11,12 @@ import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 import { KopaiClient } from "./client.js";
 import { KopaiError, KopaiTimeoutError } from "./errors.js";
-import type { OtelTracesRow, OtelLogsRow, OtelMetricsRow } from "./types.js";
+import type {
+  OtelTracesRow,
+  OtelLogsRow,
+  OtelMetricsRow,
+  Dashboard,
+} from "./types.js";
 import {
   handlers,
   BASE_URL,
@@ -190,6 +195,50 @@ describe("KopaiClient", () => {
         expect(error.status).toBe(401);
         expect(error.code).toBe("UNAUTHORIZED");
       }
+    });
+  });
+
+  describe("getDashboard", () => {
+    it("returns dashboard by id", async () => {
+      const result = await client.getDashboard("dash-001");
+      expect(result.id).toBe(sampleDashboard.id);
+      expect(result.name).toBe(sampleDashboard.name);
+    });
+
+    it("throws KopaiError for 404", async () => {
+      const error = await client.getDashboard("not-found").catch((e) => e);
+      expect(error).toBeInstanceOf(KopaiError);
+      expect(error.status).toBe(404);
+      expect(error.code).toBe("DASHBOARD_NOT_FOUND");
+    });
+  });
+
+  describe("searchDashboardsPage", () => {
+    it("returns single page", async () => {
+      const result = await client.searchDashboardsPage({});
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]!.id).toBe(sampleDashboard.id);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("returns page with cursor", async () => {
+      const result = await client.searchDashboardsPage({
+        name: "multi-page",
+      });
+      expect(result.data).toHaveLength(1);
+      expect(result.nextCursor).toBe("page2");
+    });
+  });
+
+  describe("searchDashboards", () => {
+    it("auto-paginates", async () => {
+      const dashboards: Dashboard[] = [];
+      for await (const d of client.searchDashboards({
+        name: "multi-page",
+      })) {
+        dashboards.push(d);
+      }
+      expect(dashboards).toHaveLength(2);
     });
   });
 

@@ -283,6 +283,77 @@ export const handlers = [
     );
   }),
 
+  // Get dashboard by ID
+  http.get(`${BASE_URL}/dashboards/:dashboardId`, (info) => {
+    const { request, params } = info;
+    const dashboardId = params.dashboardId as string;
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Unauthorized",
+          code: "UNAUTHORIZED",
+        } satisfies ApiErrorResponse,
+        { status: 401 }
+      );
+    }
+
+    if (dashboardId === "not-found") {
+      return HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Not Found",
+          code: "DASHBOARD_NOT_FOUND",
+        } satisfies ApiErrorResponse,
+        { status: 404 }
+      );
+    }
+
+    return HttpResponse.json(sampleDashboard satisfies Dashboard);
+  }),
+
+  // Search dashboards
+  http.post(`${BASE_URL}/dashboards/search`, async (info) => {
+    const { request } = info;
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Unauthorized",
+          code: "UNAUTHORIZED",
+        } satisfies ApiErrorResponse,
+        { status: 401 }
+      );
+    }
+
+    const body = (await request.clone().json()) as Record<string, unknown>;
+
+    if (body.cursor === "page2") {
+      return HttpResponse.json({
+        data: [
+          { ...sampleDashboard, id: "dash-002", name: "Page 2 Dashboard" },
+        ],
+        nextCursor: null,
+      } satisfies SearchResult<Dashboard>);
+    }
+
+    if (body.name === "multi-page") {
+      return HttpResponse.json({
+        data: [sampleDashboard],
+        nextCursor: "page2",
+      } satisfies SearchResult<Dashboard>);
+    }
+
+    return HttpResponse.json({
+      data: [sampleDashboard],
+      nextCursor: null,
+    } satisfies SearchResult<Dashboard>);
+  }),
+
   // 404 endpoint for testing
   http.post(`${BASE_URL}/signals/not-found`, () => {
     return HttpResponse.json(
