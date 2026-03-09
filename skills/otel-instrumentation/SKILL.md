@@ -1,6 +1,6 @@
 ---
 name: otel-instrumentation
-description: Instrument applications with OpenTelemetry SDK and validate telemetry using Kopai. Use when setting up observability, adding tracing/logging/metrics, testing instrumentation, or debugging missing telemetry data.
+description: Instrument applications with OpenTelemetry SDK and validate telemetry using Kopai. Use when setting up observability, adding tracing/logging/metrics, testing instrumentation, debugging missing telemetry data, or when traces/logs/metrics aren't appearing after setup. Also use when users say things like "my traces aren't showing up", "I don't see any data", or "how do I add observability to my app".
 license: Apache-2.0
 metadata:
   author: kopai

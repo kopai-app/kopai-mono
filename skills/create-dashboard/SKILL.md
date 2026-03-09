@@ -1,6 +1,6 @@
 ---
 name: create-dashboard
-description: Create a dashboard with valid uiTree using the component schema. Use when building observability dashboards or metric visualizations.
+description: Create observability dashboards from OTEL metrics, logs, and traces using Kopai. Use when building metric visualizations, monitoring views, KPI panels, or when the user wants to see their telemetry data in a dashboard — even if they don't say "dashboard" explicitly. Also use when other skills or workflows need to present telemetry data visually (e.g. after root cause analysis).
 license: Apache-2.0
 metadata:
   author: kopai

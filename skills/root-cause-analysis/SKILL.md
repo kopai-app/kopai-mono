@@ -1,6 +1,6 @@
 ---
 name: root-cause-analysis
-description: Analyze telemetry data for root cause analysis using Kopai CLI. Use when debugging errors, investigating latency issues, tracing request flows across services, or correlating logs with traces.
+description: Analyze telemetry data for root cause analysis using Kopai CLI. Use when debugging errors, investigating latency issues, tracing request flows across services, or correlating logs with traces. Also use when users report production issues like "why is my API slow", "getting 500 errors", "service is down", "requests are timing out", or any symptom that needs telemetry-based investigation — even if they don't mention traces or observability explicitly.
 license: Apache-2.0
 metadata:
   author: kopai
@@ -33,6 +33,7 @@ See otel-instrumentation skill for setup.
 - `workflow-get-context` - Get Full Trace Context
 - `workflow-correlate-logs` - Correlate Logs with Trace
 - `workflow-check-metrics` - Check Related Metrics
+- `workflow-identify-cause` - Identify Root Cause & Present Findings
 
 ### 2. Patterns (HIGH)
 
