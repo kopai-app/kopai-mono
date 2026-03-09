@@ -143,7 +143,10 @@ function buildUnifiedSchema(treeSchema: z.ZodTypeAny): object {
  * const prompt = `Build a dashboard UI.\n\n${instructions}`;
  * ```
  */
-export function generatePromptInstructions(catalog: Catalog): string {
+export function generatePromptInstructions(
+  catalog: Catalog,
+  uiTreeVersion: string
+): string {
   const componentNames = Object.keys(catalog.components);
 
   const componentSections = componentNames
@@ -170,7 +173,13 @@ ${roleLine}`;
     catalog.components
   );
 
-  return `## Available Components
+  return `## UI Tree Version
+
+Use uiTreeVersion: "${uiTreeVersion}" when creating dashboards.
+
+---
+
+## Available Components
 
 ${componentSections}
 

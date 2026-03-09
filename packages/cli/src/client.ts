@@ -26,8 +26,10 @@ export interface ConnectionOpts {
 
 export function resolveConnectionOpts(opts: ClientOptions): ConnectionOpts {
   const fileConfig = loadConfig(opts.config);
+  const raw = opts.url ?? fileConfig.url ?? DEFAULT_URL;
+  const url = raw.replace(/\/signals\/?$/, "").replace(/\/$/, "");
   return {
-    url: opts.url ?? fileConfig.url ?? DEFAULT_URL,
+    url,
     token: opts.token ?? fileConfig.token,
   };
 }
