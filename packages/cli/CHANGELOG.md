@@ -1,5 +1,11 @@
 # @kopai/cli
 
+## 0.8.0
+
+### Minor Changes
+
+- 593e7ea: Check for updates. Warn if not at latest version
+
 ## 0.7.0
 
 ### Minor Changes
