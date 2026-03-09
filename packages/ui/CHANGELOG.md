@@ -1,5 +1,16 @@
 # @kopai/ui
 
+## 0.7.0
+
+### Minor Changes
+
+- 3bf6838: Add additional dashboard methods to sdk
+
+### Patch Changes
+
+- Updated dependencies [3bf6838]
+  - @kopai/sdk@0.5.0
+
 ## 0.6.0
 
 ### Minor Changes
