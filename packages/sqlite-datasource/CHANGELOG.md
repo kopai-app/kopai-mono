@@ -1,5 +1,16 @@
 # @kopai/sqlite-datasource
 
+## 0.8.0
+
+### Minor Changes
+
+- 4731538: Add dynamic dashboard
+
+### Patch Changes
+
+- Updated dependencies [4731538]
+  - @kopai/core@0.7.0
+
 ## 0.7.0
 
 ### Minor Changes

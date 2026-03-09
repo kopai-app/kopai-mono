@@ -1,5 +1,19 @@
 # @kopai/ui
 
+## 0.6.0
+
+### Minor Changes
+
+- 4731538: Add dynamic dashboard
+
+### Patch Changes
+
+- 4731538: Move `/signals` prefix from baseUrl into SDK paths. baseUrl is now the server root (e.g. `http://localhost:8000`). CLI `--url` flag and config now point to server root. Dashboard schema fetch includes auth header.
+- Updated dependencies [4731538]
+- Updated dependencies [4731538]
+  - @kopai/sdk@0.4.0
+  - @kopai/core@0.7.0
+
 ## 0.5.0
 
 ### Minor Changes

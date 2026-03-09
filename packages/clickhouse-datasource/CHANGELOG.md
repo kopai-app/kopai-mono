@@ -1,5 +1,12 @@
 # @kopai/clickhouse-datasource
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [4731538]
+  - @kopai/core@0.7.0
+
 ## 0.3.0
 
 ### Minor Changes
