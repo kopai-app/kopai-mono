@@ -65,7 +65,16 @@ Example:
     try {
       const client = createClient(opts);
       const raw = await readStdin();
-      const body = JSON.parse(raw) as Record<string, unknown>;
+      let body: Record<string, unknown>;
+      try {
+        body = JSON.parse(raw) as Record<string, unknown>;
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          process.stderr.write(`Invalid JSON input: ${e.message}\n`);
+          process.exit(2);
+        }
+        throw e;
+      }
 
       const result = await client.createDashboard({
         name: opts.name,

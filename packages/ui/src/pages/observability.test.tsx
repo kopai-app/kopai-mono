@@ -58,6 +58,7 @@ describe("useDashboardTree validation", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     window.history.replaceState(
       null,
       "",

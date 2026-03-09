@@ -54,7 +54,7 @@ Create `.kopairc` in project root or home directory:
 
 ```json
 {
-  "url": "https://your-kopai-server.com/signals",
+  "url": "https://your-kopai-server.com",
   "token": "your-token"
 }
 ```
