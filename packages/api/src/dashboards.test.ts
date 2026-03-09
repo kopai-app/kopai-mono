@@ -3,9 +3,9 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import type { dashboardDatasource } from "@kopai/core";
 import { dashboardsRoutes } from "./index.js";
-import { SignalsApiError } from "./routes/errors.js";
+import { ApiError } from "./routes/errors.js";
 
-class TestApiError extends SignalsApiError {
+class TestApiError extends ApiError {
   readonly code = "TEST_ERROR";
 }
 

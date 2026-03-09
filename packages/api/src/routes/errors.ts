@@ -1,4 +1,4 @@
-export abstract class SignalsApiError extends Error {
+export abstract class ApiError extends Error {
   abstract readonly code: string;
 
   constructor(message: string, options?: ErrorOptions) {
@@ -7,6 +7,8 @@ export abstract class SignalsApiError extends Error {
   }
 }
 
-export class DashboardNotFoundError extends SignalsApiError {
+export abstract class SignalsApiError extends ApiError {}
+
+export class DashboardNotFoundError extends ApiError {
   readonly code = "DASHBOARD_NOT_FOUND";
 }

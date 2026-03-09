@@ -278,7 +278,7 @@ export const mockMultiAttributeRows: OtelMetricsRow[] = cpuTimeStates.flatMap(
       MetricUnit: "s",
       TimeUnix: ts(i * INTERVAL_MS),
       StartTimeUnix: ts(0),
-      Value: cpuTimeBase[si]! + Math.random() * 0.5,
+      Value: cpuTimeBase[si]! + ((si * 10 + i) % 7) * 0.07,
       ServiceName: "api-gateway",
       Attributes: { state, "cpu.mode": si < 2 ? "main" : "children" },
       ResourceAttributes: { "service.name": "api-gateway" },
