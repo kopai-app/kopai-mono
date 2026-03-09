@@ -34,4 +34,4 @@ Examples:
   );
 
 program.parse();
-checkForUpdates(pkg.version);
+void checkForUpdates(pkg.version);

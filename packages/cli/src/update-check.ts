@@ -55,8 +55,16 @@ export function shouldCheck(): boolean {
 
 async function readCache(cacheDir: string): Promise<CacheData | null> {
   try {
-    const data = await readFile(join(cacheDir, CACHE_FILENAME), "utf-8");
-    return JSON.parse(data) as CacheData;
+    const raw = await readFile(join(cacheDir, CACHE_FILENAME), "utf-8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      typeof parsed.lastCheck !== "number" ||
+      typeof parsed.latestVersion !== "string" ||
+      !parsed.latestVersion
+    ) {
+      return null;
+    }
+    return { lastCheck: parsed.lastCheck, latestVersion: parsed.latestVersion };
   } catch {
     return null;
   }
@@ -74,18 +82,19 @@ async function writeCache(cacheDir: string, data: CacheData): Promise<void> {
 async function fetchLatestVersion(
   fetchFn: typeof fetch
 ): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetchFn("https://registry.npmjs.org/@kopai/cli/latest", {
       signal: controller.signal,
     });
-    clearTimeout(timeout);
     if (!res.ok) return null;
     const data = (await res.json()) as { version: string };
     return data.version;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

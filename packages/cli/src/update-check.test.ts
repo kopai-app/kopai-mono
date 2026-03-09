@@ -46,6 +46,7 @@ describe("getCacheDir", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it("returns Library/Caches path on macOS", () => {
