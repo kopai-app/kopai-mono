@@ -1,5 +1,12 @@
 # @kopai/cli
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [3bf6838]
+  - @kopai/sdk@0.5.0
+
 ## 0.8.0
 
 ### Minor Changes

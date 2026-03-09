@@ -1,5 +1,11 @@
 # @kopai/sdk
 
+## 0.5.0
+
+### Minor Changes
+
+- 3bf6838: Add additional dashboard methods to sdk
+
 ## 0.4.0
 
 ### Minor Changes
