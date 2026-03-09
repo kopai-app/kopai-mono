@@ -292,6 +292,26 @@ describe("DashboardDbDatasource", () => {
       ).rejects.toThrow(SqliteDatasourceQueryError);
     });
 
+    it("throws for cursor with empty id", async () => {
+      await expect(
+        ds.searchDashboards({
+          cursor: "2025-01-01T00:00:00.000Z|",
+          limit: 100,
+          sortOrder: "DESC",
+        })
+      ).rejects.toThrow("id part is empty");
+    });
+
+    it("throws for cursor with invalid createdAt", async () => {
+      await expect(
+        ds.searchDashboards({
+          cursor: "not-a-date|some-id",
+          limit: 100,
+          sortOrder: "DESC",
+        })
+      ).rejects.toThrow("not a valid ISO datetime");
+    });
+
     it("combines multiple filters", async () => {
       await createTestDashboard({
         name: "Prod Dashboard",

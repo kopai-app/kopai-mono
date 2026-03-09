@@ -191,6 +191,17 @@ export class DashboardDbDatasource
         const cursorCreatedAt = filter.cursor.slice(0, sepIdx);
         const cursorId = filter.cursor.slice(sepIdx + 1);
 
+        if (!cursorId) {
+          throw new SqliteDatasourceQueryError(
+            `Invalid cursor: id part is empty`
+          );
+        }
+        if (!Number.isFinite(Date.parse(cursorCreatedAt))) {
+          throw new SqliteDatasourceQueryError(
+            `Invalid cursor: createdAt is not a valid ISO datetime`
+          );
+        }
+
         if (sortOrder === "DESC") {
           query = query.where((eb) =>
             eb.or([
