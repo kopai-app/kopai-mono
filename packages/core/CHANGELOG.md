@@ -1,5 +1,11 @@
 # @kopai/core
 
+## 0.7.0
+
+### Minor Changes
+
+- 4731538: Add dynamic dashboard
+
 ## 0.6.0
 
 ### Minor Changes

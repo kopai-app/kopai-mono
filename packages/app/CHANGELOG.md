@@ -1,5 +1,21 @@
 # @kopai/app
 
+## 0.13.0
+
+### Minor Changes
+
+- 4731538: Add dynamic dashboard
+
+### Patch Changes
+
+- Updated dependencies [4731538]
+- Updated dependencies [4731538]
+  - @kopai/ui@0.6.0
+  - @kopai/sqlite-datasource@0.8.0
+  - @kopai/core@0.7.0
+  - @kopai/api@0.4.0
+  - @kopai/collector@0.6.1
+
 ## 0.12.2
 
 ### Patch Changes

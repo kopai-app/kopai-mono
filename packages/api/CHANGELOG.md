@@ -1,5 +1,16 @@
 # @kopai/api
 
+## 0.4.0
+
+### Minor Changes
+
+- 4731538: Add dynamic dashboard
+
+### Patch Changes
+
+- Updated dependencies [4731538]
+  - @kopai/core@0.7.0
+
 ## 0.3.0
 
 ### Minor Changes
