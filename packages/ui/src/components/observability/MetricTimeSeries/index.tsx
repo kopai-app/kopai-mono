@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
   Brush,
   ReferenceLine,
+  type TooltipPayload,
 } from "recharts";
 import type { denormalizedSignals } from "@kopai/core";
 import type {
@@ -23,6 +24,7 @@ import type {
 } from "../types.js";
 import { downsampleLTTB, type LTTBPoint } from "../utils/lttb.js";
 import { formatSeriesLabel } from "../utils/attributes.js";
+import { TooltipEntryList } from "../shared/TooltipEntryList.js";
 import {
   resolveUnitScale,
   formatTickValue,
@@ -461,7 +463,7 @@ function CustomTooltip({
   displayLabelMap,
 }: {
   active?: boolean;
-  payload?: readonly { dataKey: string; value: number; color: string }[];
+  payload?: TooltipPayload;
   label?: string | number;
   formatTime: (ts: number) => string;
   formatValue: (val: number) => string;
@@ -472,14 +474,11 @@ function CustomTooltip({
   return (
     <div className="bg-background border border-gray-700 rounded-lg p-3 shadow-lg">
       <p className="text-gray-400 text-xs mb-2">{formatTime(ts)}</p>
-      {payload.map((entry, i) => (
-        <p key={i} className="text-sm" style={{ color: entry.color }}>
-          <span className="font-medium">
-            {displayLabelMap.get(entry.dataKey) ?? entry.dataKey}:
-          </span>{" "}
-          {formatValue(entry.value)}
-        </p>
-      ))}
+      <TooltipEntryList
+        payload={payload}
+        displayLabelMap={displayLabelMap}
+        formatValue={formatValue}
+      />
     </div>
   );
 }

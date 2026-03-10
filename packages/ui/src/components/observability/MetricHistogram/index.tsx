@@ -13,9 +13,11 @@ import {
   Legend,
   ResponsiveContainer,
   Cell,
+  type TooltipPayload,
 } from "recharts";
 import type { denormalizedSignals } from "@kopai/core";
 import { formatSeriesLabel } from "../utils/attributes.js";
+import { TooltipEntryList } from "../shared/TooltipEntryList.js";
 import {
   resolveUnitScale,
   formatDisplayValue,
@@ -55,6 +57,12 @@ interface BucketData {
   lowerBound: number;
   upperBound: number;
   [seriesKey: string]: number | string;
+}
+
+function isBucketData(v: unknown): v is BucketData {
+  return (
+    typeof v === "object" && v !== null && "bucket" in v && "lowerBound" in v
+  );
 }
 
 const defaultFormatBucketLabel = (
@@ -304,37 +312,29 @@ function HistogramTooltip({
   displayLabelMap,
 }: {
   active?: boolean;
-  payload?: readonly {
-    dataKey: string;
-    value: number;
-    color: string;
-    payload: BucketData;
-  }[];
+  payload?: TooltipPayload;
   formatValue: (val: number) => string;
   boundsScale: ResolvedScale | null;
   displayLabelMap: Map<string, string>;
 }) {
   if (!active || !payload?.length) return null;
-  const bucket = payload[0]?.payload;
-  if (!bucket) return null;
+  const raw = payload[0]?.payload;
+  if (!isBucketData(raw)) return null;
 
   const boundsLabel = boundsScale
-    ? `${formatDisplayValue(bucket.lowerBound, boundsScale)} – ${bucket.upperBound === Infinity ? "∞" : formatDisplayValue(bucket.upperBound, boundsScale)}`
-    : bucket.bucket;
+    ? `${formatDisplayValue(raw.lowerBound, boundsScale)} – ${raw.upperBound === Infinity ? "∞" : formatDisplayValue(raw.upperBound, boundsScale)}`
+    : raw.bucket;
 
   return (
     <div className="bg-background border border-gray-700 rounded-lg p-3 shadow-lg">
       <p className="text-gray-300 text-sm font-medium mb-2">
         Bucket: {boundsLabel}
       </p>
-      {payload.map((entry, i) => (
-        <p key={i} className="text-sm" style={{ color: entry.color }}>
-          <span className="font-medium">
-            {displayLabelMap.get(entry.dataKey) ?? entry.dataKey}:
-          </span>{" "}
-          {formatValue(entry.value)}
-        </p>
-      ))}
+      <TooltipEntryList
+        payload={payload}
+        displayLabelMap={displayLabelMap}
+        formatValue={formatValue}
+      />
     </div>
   );
 }
