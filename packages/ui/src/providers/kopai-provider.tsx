@@ -9,6 +9,7 @@ export type KopaiClient = Pick<
   | "searchMetricsPage"
   | "getTrace"
   | "discoverMetrics"
+  | "getDashboard"
 >;
 
 interface KopaiSDKContextValue {

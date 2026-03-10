@@ -663,8 +663,6 @@ function ServicesTab({
 // Metrics tab — DynamicDashboard
 // ---------------------------------------------------------------------------
 
-const DASHBOARDS_API_BASE = "/dashboards";
-
 const METRICS_TREE = {
   root: "root",
   elements: {
@@ -715,16 +713,17 @@ const METRICS_TREE = {
   },
 };
 
-function useDashboardTree(dashboardId: string | null) {
+function useDashboardTree(
+  client: Pick<KopaiClient, "getDashboard">,
+  dashboardId: string | null
+) {
   const { data, isFetching, error } = useQuery<UITree, Error>({
     queryKey: ["dashboard-tree", dashboardId],
     queryFn: async ({ signal }) => {
-      const res = await fetch(`${DASHBOARDS_API_BASE}/${dashboardId}`, {
-        signal,
-      });
-      if (!res.ok) throw new Error(`Failed to load dashboard: ${res.status}`);
-      const json = await res.json();
-      const parsed = observabilityCatalog.uiTreeSchema.safeParse(json.uiTree);
+      const dashboard = await client.getDashboard(dashboardId!, { signal });
+      const parsed = observabilityCatalog.uiTreeSchema.safeParse(
+        dashboard.uiTree
+      );
       if (!parsed.success) {
         const issue = parsed.error.issues[0];
         const path = issue?.path.length ? issue.path.join(".") + ": " : "";
@@ -747,7 +746,7 @@ function useDashboardTree(dashboardId: string | null) {
 function MetricsTab() {
   const kopaiClient = useKopaiSDK();
   const { dashboardId } = useURLState();
-  const { loading, error, tree } = useDashboardTree(dashboardId);
+  const { loading, error, tree } = useDashboardTree(kopaiClient, dashboardId);
 
   if (loading)
     return (

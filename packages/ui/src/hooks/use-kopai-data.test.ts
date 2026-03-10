@@ -18,6 +18,7 @@ const createMockClient = () => ({
   searchMetricsPage: vi.fn(),
   getTrace: vi.fn(),
   discoverMetrics: vi.fn(),
+  getDashboard: vi.fn(),
 });
 
 type MockClient = ReturnType<typeof createMockClient>;
