@@ -18,11 +18,15 @@ export function OtelLogTimeline(props: Props) {
 
   const response = props.data as { data?: OtelLogsRow[] } | null;
 
+  const height = props.element.props.height ?? 600;
+
   return (
-    <LogTimeline
-      rows={response?.data ?? []}
-      isLoading={props.loading}
-      error={props.error ?? undefined}
-    />
+    <div style={{ height }} className="flex flex-col min-h-0">
+      <LogTimeline
+        rows={response?.data ?? []}
+        isLoading={props.loading}
+        error={props.error ?? undefined}
+      />
+    </div>
   );
 }

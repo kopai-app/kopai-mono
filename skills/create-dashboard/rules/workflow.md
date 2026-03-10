@@ -12,7 +12,7 @@ priority: critical
 2. **Design tree** — build a uiTree matching the component schema
 3. **Create dashboard** — pipe JSON to CLI:
    ```bash
-   echo '{"uiTree":<tree>,"metadata":{}}' | npx @kopai/cli dashboards create --name "<name>" --tree-version "0.5.0" --json
+   echo '{"uiTree":<tree>,"metadata":{}}' | npx @kopai/cli dashboards create --name "<name>" --tree-version "0.7.0" --json
    ```
 
 ## Tree Structure Rules
@@ -50,11 +50,24 @@ priority: critical
 - Wrap data components in `Card` with descriptive `title`
 - Use `MetricStat` for KPI overview, `MetricTimeSeries` for trends
 - Use `MetricHistogram` only for Histogram/ExponentialHistogram metric types
+- Set `height: 600` on LogTimeline — smaller values collapse the log content and only show a count badge
+- Set `height: 300` on MetricTimeSeries and MetricHistogram
+- MetricStat does not need a height prop
+
+## Component Compatibility
+
+- **MetricStat** — works with **Sum** and **Gauge** only. Does NOT work with Histogram (shows "--")
+- **MetricTimeSeries** — works with **Sum** and **Gauge** only. Histogram causes internal server errors
+- **MetricHistogram** — works with **Histogram** and **ExponentialHistogram** only
+
+When choosing components, always check the metric's `type` from `metrics discover` output. Mismatched types render empty or show "--".
+
+**For Histogram metrics**: use `MetricHistogram` for distribution views, or `MetricStat` is NOT compatible. If you need a time-series trend for a Histogram metric, use `MetricHistogram` — do NOT use `MetricTimeSeries`.
 
 ## Example Creation
 
 ```bash
-echo '{"uiTree":{"root":"stack-1","elements":{"stack-1":{"key":"stack-1","type":"Stack","props":{"direction":"vertical","gap":"md","align":null},"children":["card-1"],"parentKey":""},"card-1":{"key":"card-1","type":"Card","props":{"title":"CPU Usage","description":null,"padding":null},"children":["ts-1"],"parentKey":"stack-1"},"ts-1":{"key":"ts-1","type":"MetricTimeSeries","props":{"height":300,"showBrush":null,"yAxisLabel":null,"unit":"1"},"children":[],"parentKey":"card-1","dataSource":{"method":"searchMetricsPage","params":{"metricType":"Gauge","metricName":"system.cpu.utilization"}}}}},"metadata":{}}' | npx @kopai/cli dashboards create --name "CPU Dashboard" --tree-version "0.5.0" --json
+echo '{"uiTree":{"root":"stack-1","elements":{"stack-1":{"key":"stack-1","type":"Stack","props":{"direction":"vertical","gap":"md","align":null},"children":["card-1"],"parentKey":""},"card-1":{"key":"card-1","type":"Card","props":{"title":"CPU Usage","description":null,"padding":null},"children":["ts-1"],"parentKey":"stack-1"},"ts-1":{"key":"ts-1","type":"MetricTimeSeries","props":{"height":300,"showBrush":null,"yAxisLabel":null,"unit":"1"},"children":[],"parentKey":"card-1","dataSource":{"method":"searchMetricsPage","params":{"metricType":"Gauge","metricName":"system.cpu.utilization"}}}}},"metadata":{}}' | npx @kopai/cli dashboards create --name "CPU Dashboard" --tree-version "0.7.0" --json
 ```
 
 ## Error Handling
@@ -88,3 +101,7 @@ After the dashboard is created, display the URL to the user:
 
 - `<id>` — the `id` field from the CLI JSON response
 - `<baseUrl>` — the URL used for the CLI command: the `--url` flag value, or `http://localhost:8000` if omitted
+
+Common pitfalls:
+
+- **LogTimeline with severity filter** — avoid `severityNumberMin` unless the user explicitly asks for error logs. Many services only emit info-level logs, so filtering to ERROR+ returns empty results. Default to showing all logs.
