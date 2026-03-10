@@ -881,7 +881,7 @@ describe("OptimizedDatasource", () => {
         TraceFlags: 0n,
         SeverityText: "",
         SeverityNumber: 0n,
-        Body: "null",
+        Body: "",
         LogAttributes: "{}",
         ResourceAttributes: "{}",
         ResourceSchemaUrl: "",

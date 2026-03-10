@@ -1246,7 +1246,7 @@ function aggTemporalityToString(
 }
 
 function anyValueToSimple(value: otlp.AnyValue | undefined): unknown {
-  if (!value) return null;
+  if (!value) return undefined;
   if (value.stringValue !== undefined) return value.stringValue;
   if (value.boolValue !== undefined) return value.boolValue;
   if (value.intValue !== undefined) return value.intValue;
@@ -1262,12 +1262,13 @@ function anyValueToSimple(value: otlp.AnyValue | undefined): unknown {
     }
     return obj;
   }
-  return null;
+  return undefined;
 }
 
 function anyValueToBodyString(value: otlp.AnyValue | undefined): string {
   const simple = anyValueToSimple(value);
   if (typeof simple === "string") return simple;
+  if (simple === undefined || simple === null) return "";
   return JSON.stringify(simple);
 }
 
@@ -1345,7 +1346,15 @@ function parseJsonField(
 ): Record<string, AttributeValue> | undefined {
   if (typeof value !== "string") return undefined;
   try {
-    return JSON.parse(value);
+    const parsed = JSON.parse(value);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    // Strip null values — OTLP attributes with unrecognized AnyValue types
+    // were previously stored as null, which fails Zod attributeValue validation
+    const result: Record<string, AttributeValue> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v != null) result[k] = v as AttributeValue;
+    }
+    return result;
   } catch {
     return undefined;
   }
@@ -1474,9 +1483,9 @@ function mapRowToOtelMetrics(
       ...base,
       MetricType: "Histogram" as const,
       Count: toNumber(row.Count),
-      Sum: row.Sum as number | undefined,
-      Min: row.Min as number | null | undefined,
-      Max: row.Max as number | null | undefined,
+      Sum: toNumber(row.Sum),
+      Min: row.Min == null ? (row.Min as null | undefined) : toNumber(row.Min),
+      Max: row.Max == null ? (row.Max as null | undefined) : toNumber(row.Max),
       BucketCounts: parseNumberArrayField(row.BucketCounts),
       ExplicitBounds: parseNumberArrayField(row.ExplicitBounds),
       AggregationTemporality: row.AggregationTemporality as string | undefined,
@@ -1488,9 +1497,9 @@ function mapRowToOtelMetrics(
       ...base,
       MetricType: "ExponentialHistogram" as const,
       Count: toNumber(row.Count),
-      Sum: row.Sum as number | undefined,
-      Min: row.Min as number | null | undefined,
-      Max: row.Max as number | null | undefined,
+      Sum: toNumber(row.Sum),
+      Min: row.Min == null ? (row.Min as null | undefined) : toNumber(row.Min),
+      Max: row.Max == null ? (row.Max as null | undefined) : toNumber(row.Max),
       Scale: toNumber(row.Scale),
       ZeroCount: toNumber(row.ZeroCount),
       PositiveOffset: toNumber(row.PositiveOffset),
@@ -1506,7 +1515,7 @@ function mapRowToOtelMetrics(
     ...base,
     MetricType: "Summary" as const,
     Count: toNumber(row.Count),
-    Sum: row.Sum as number | undefined,
+    Sum: toNumber(row.Sum),
     "ValueAtQuantiles.Quantile": parseNumberArrayField(
       row["ValueAtQuantiles.Quantile"]
     ),

@@ -96,12 +96,28 @@ function buildMetrics(rows: OtelMetricsRow[]): ParsedMetricGroup[] {
   for (const row of rows) {
     const name = row.MetricName ?? "unknown";
     const type = row.MetricType;
-    if (
+
+    // Extract scalar value depending on metric type
+    let value: number | undefined;
+    if (type === "Gauge" || type === "Sum") {
+      value = "Value" in row ? row.Value : undefined;
+    } else if (
       type === "Histogram" ||
       type === "ExponentialHistogram" ||
       type === "Summary"
-    )
-      continue; // TimeSeries only handles Gauge/Sum
+    ) {
+      // Use mean (Sum/Count) for distribution metrics
+      const sum = "Sum" in row ? (row as { Sum?: number }).Sum : undefined;
+      const count =
+        "Count" in row ? (row as { Count?: number }).Count : undefined;
+      if (sum != null && count != null && count > 0) {
+        value = sum / count;
+      } else if (count != null) {
+        value = count;
+      }
+    }
+
+    if (value === undefined) continue;
 
     if (!metricMap.has(name)) metricMap.set(name, new Map());
     if (!metricMeta.has(name))
@@ -136,8 +152,6 @@ function buildMetrics(rows: OtelMetricsRow[]): ParsedMetricGroup[] {
       });
     }
 
-    if (!("Value" in row)) continue;
-    const value = row.Value;
     const timestamp = parseInt(row.TimeUnix, 10) / 1e6;
     seriesMap.get(seriesKey)!.dataPoints.push({ timestamp, value });
   }
