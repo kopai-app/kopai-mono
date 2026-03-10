@@ -1116,7 +1116,7 @@ function toHistogramRow(
     StartTimeUnix: nanosToSqlite(dataPoint.startTimeUnixNano),
     TimeUnix: nanosToSqlite(dataPoint.timeUnixNano),
     Count: Number(dataPoint.count ?? 0),
-    Sum: dataPoint.sum ?? 0,
+    Sum: dataPoint.sum ?? null,
     BucketCounts: JSON.stringify(dataPoint.bucketCounts ?? []),
     ExplicitBounds: JSON.stringify(dataPoint.explicitBounds ?? []),
     Min: dataPoint.min ?? null,
@@ -1166,7 +1166,7 @@ function toExpHistogramRow(
     StartTimeUnix: nanosToSqlite(dataPoint.startTimeUnixNano),
     TimeUnix: nanosToSqlite(dataPoint.timeUnixNano),
     Count: Number(dataPoint.count ?? 0),
-    Sum: dataPoint.sum ?? 0,
+    Sum: dataPoint.sum ?? null,
     Scale: dataPoint.scale ?? 0,
     ZeroCount: Number(dataPoint.zeroCount ?? 0),
     PositiveOffset: dataPoint.positive?.offset ?? 0,
@@ -1224,7 +1224,7 @@ function toSummaryRow(
     StartTimeUnix: nanosToSqlite(dataPoint.startTimeUnixNano),
     TimeUnix: nanosToSqlite(dataPoint.timeUnixNano),
     Count: Number(dataPoint.count ?? 0),
-    Sum: dataPoint.sum ?? 0,
+    Sum: dataPoint.sum ?? null,
     "ValueAtQuantiles.Quantile": JSON.stringify(
       quantileValues.map(
         (q: otlpMetrics.SummaryDataPoint_ValueAtQuantile) => q.quantile ?? 0

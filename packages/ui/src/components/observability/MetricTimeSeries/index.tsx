@@ -112,8 +112,6 @@ function buildMetrics(rows: OtelMetricsRow[]): ParsedMetricGroup[] {
         "Count" in row ? (row as { Count?: number }).Count : undefined;
       if (sum != null && count != null && count > 0) {
         value = sum / count;
-      } else if (count != null) {
-        value = count;
       }
     }
 

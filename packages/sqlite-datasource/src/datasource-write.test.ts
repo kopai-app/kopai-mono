@@ -891,6 +891,21 @@ describe("OptimizedDatasource", () => {
         ScopeAttributes: "{}",
         ScopeSchemaUrl: "",
       });
+
+      const readDs = ds as unknown as datasource.ReadTelemetryDatasource;
+      const readResult = await readDs.getLogs({ limit: 10 });
+      expect(readResult.data).toHaveLength(1);
+      const log = readResult.data[0];
+      expect(log).toMatchObject({
+        Timestamp: "1000000000",
+        TraceId: "",
+        SpanId: "",
+        SeverityText: "",
+        SeverityNumber: 0,
+        Body: "",
+        ServiceName: "",
+        ScopeName: "minimal-scope",
+      });
     });
   });
 });

@@ -56,7 +56,7 @@ export interface OtelMetricsExponentialHistogram {
   ScopeVersion: Generated<string>;
   ServiceName: Generated<string>;
   StartTimeUnix: bigint;
-  Sum: Generated<number>;
+  Sum: number | null;
   TimeUnix: bigint;
   ZeroCount: Generated<number>;
   ZeroThreshold: Generated<number>;
@@ -111,7 +111,7 @@ export interface OtelMetricsHistogram {
   ScopeVersion: Generated<string>;
   ServiceName: Generated<string>;
   StartTimeUnix: bigint;
-  Sum: Generated<number>;
+  Sum: number | null;
   TimeUnix: bigint;
 }
 
@@ -156,7 +156,7 @@ export interface OtelMetricsSummary {
   ScopeVersion: Generated<string>;
   ServiceName: Generated<string>;
   StartTimeUnix: bigint;
-  Sum: Generated<number>;
+  Sum: number | null;
   TimeUnix: bigint;
   "ValueAtQuantiles.Quantile": Generated<string>;
   "ValueAtQuantiles.Value": Generated<string>;
