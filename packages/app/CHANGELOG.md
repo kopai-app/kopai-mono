@@ -1,5 +1,14 @@
 # @kopai/app
 
+## 0.13.2
+
+### Patch Changes
+
+- Updated dependencies [5910c06]
+- Updated dependencies [5910c06]
+  - @kopai/ui@0.8.0
+  - @kopai/sqlite-datasource@0.9.0
+
 ## 0.13.1
 
 ### Patch Changes

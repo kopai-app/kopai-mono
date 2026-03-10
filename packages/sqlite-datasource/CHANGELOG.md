@@ -1,5 +1,15 @@
 # @kopai/sqlite-datasource
 
+## 0.9.0
+
+### Minor Changes
+
+- 5910c06: Fix metrics rendering and sqlite data parsing
+
+### Patch Changes
+
+- 5910c06: Use kopai SDK to get dashboards; preserve NULL histogram/summary Sum on write path
+
 ## 0.8.0
 
 ### Minor Changes
