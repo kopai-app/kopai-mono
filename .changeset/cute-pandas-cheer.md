@@ -3,4 +3,4 @@
 "@kopai/sqlite-datasource": patch
 ---
 
-Use kopai SDK to get dashboard
+Use kopai SDK to get dashboards; preserve NULL histogram/summary Sum on write path

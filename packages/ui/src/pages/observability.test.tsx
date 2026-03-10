@@ -91,6 +91,10 @@ describe("useDashboardTree validation", () => {
       expect(screen.getByText("Test Dashboard")).toBeTruthy();
     });
 
+    expect(mockClient.getDashboard).toHaveBeenCalledWith(
+      "abc",
+      expect.anything()
+    );
     expect(screen.queryByText(/invalid layout/i)).toBeNull();
   });
 
@@ -115,5 +119,10 @@ describe("useDashboardTree validation", () => {
     await waitFor(() => {
       expect(screen.getByText(/invalid layout/i)).toBeTruthy();
     });
+
+    expect(mockClient.getDashboard).toHaveBeenCalledWith(
+      "def",
+      expect.anything()
+    );
   });
 });

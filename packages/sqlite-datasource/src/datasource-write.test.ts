@@ -748,7 +748,8 @@ describe("OptimizedDatasource", () => {
 
   describe("writeLogs", () => {
     let testConnection: DatabaseSync;
-    let ds: datasource.WriteTelemetryDatasource;
+    let ds: datasource.WriteTelemetryDatasource &
+      datasource.ReadTelemetryDatasource;
 
     beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
@@ -892,8 +893,7 @@ describe("OptimizedDatasource", () => {
         ScopeSchemaUrl: "",
       });
 
-      const readDs = ds as unknown as datasource.ReadTelemetryDatasource;
-      const readResult = await readDs.getLogs({ limit: 10 });
+      const readResult = await ds.getLogs({ limit: 10 });
       expect(readResult.data).toHaveLength(1);
       const log = readResult.data[0];
       expect(log).toMatchObject({
