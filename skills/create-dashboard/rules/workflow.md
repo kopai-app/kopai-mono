@@ -57,12 +57,12 @@ priority: critical
 ## Component Compatibility
 
 - **MetricStat** — works with **Sum** and **Gauge** only. Does NOT work with Histogram (shows "--")
-- **MetricTimeSeries** — works with **Sum** and **Gauge** only. Histogram causes internal server errors
+- **MetricTimeSeries** — works with **Sum**, **Gauge**, and **Histogram** (renders mean duration over time)
 - **MetricHistogram** — works with **Histogram** and **ExponentialHistogram** only
 
 When choosing components, always check the metric's `type` from `metrics discover` output. Mismatched types render empty or show "--".
 
-**For Histogram metrics**: use `MetricHistogram` for distribution views, or `MetricStat` is NOT compatible. If you need a time-series trend for a Histogram metric, use `MetricHistogram` — do NOT use `MetricTimeSeries`.
+**For Histogram metrics**: use `MetricHistogram` for distribution views, or `MetricTimeSeries` for trends over time (renders mean = Sum/Count). `MetricStat` is NOT compatible with Histogram.
 
 ## Example Creation
 
