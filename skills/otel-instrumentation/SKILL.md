@@ -37,6 +37,7 @@ npx @kopai/cli metrics discover --json
 ### 2. Language SDKs (HIGH)
 
 - `lang-nodejs` - Node.js Instrumentation
+- `lang-nextjs` - Next.js Instrumentation
 - `lang-python` - Python Instrumentation
 - `lang-go` - Go Instrumentation
 - `lang-java` - Java Instrumentation
@@ -66,3 +67,4 @@ Read `rules/<rule-name>.md` for details.
 
 - [cli-reference](references/cli-reference.md) - Kopai CLI command reference
 - [otel-docs](references/otel-docs.md) - OpenTelemetry documentation links
+- [nextjs-examples](references/nextjs-examples.md) - Next.js instrumentation examples
