@@ -78,12 +78,9 @@ export async function createOtelTestingHarness(
     getTraces: (filter) => ds.getTraces(filter),
     getLogs: (filter) => ds.getLogs(filter),
     getMetrics: (filter) => ds.getMetrics(filter),
-    discoverMetrics: (...args: Parameters<typeof ds.discoverMetrics>) =>
-      ds.discoverMetrics(...args),
+    discoverMetrics: () => ds.discoverMetrics(),
     async clear() {
-      for (const table of OTEL_TABLES) {
-        database.exec(`DELETE FROM ${table}`);
-      }
+      database.exec(OTEL_TABLES.map((t) => `DELETE FROM ${t}`).join(";"));
     },
     async stop() {
       await server.close();
