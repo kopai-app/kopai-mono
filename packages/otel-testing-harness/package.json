@@ -1,0 +1,73 @@
+{
+  "name": "@kopai/otel-testing-harness",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Vladimir Adamic",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kopai-app/kopai-mono.git",
+    "directory": "packages/otel-testing-harness"
+  },
+  "homepage": "https://github.com/kopai-app/kopai-mono/tree/main/packages/otel-testing-harness#readme",
+  "bugs": {
+    "url": "https://github.com/kopai-app/kopai-mono/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "lint": "eslint src",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run && pnpm test:examples:vitest && pnpm test:examples:jest && pnpm test:examples:tap && pnpm test:examples:node-test",
+    "test:examples:vitest": "vitest run --config examples/vitest/vitest.config.ts",
+    "test:examples:jest": "pnpm build && cd examples/jest && NODE_OPTIONS='--experimental-vm-modules' npx jest",
+    "test:examples:tap": "tsx examples/tap/harness-tap.test.ts",
+    "test:examples:node-test": "node --import tsx examples/node-test/harness-node-test.ts",
+    "test:smoke": "node test/smoke-esm.mjs && node test/smoke-cjs.cjs"
+  },
+  "dependencies": {
+    "@kopai/collector": "workspace:*",
+    "@kopai/core": "workspace:*",
+    "@kopai/sqlite-datasource": "workspace:*",
+    "fastify": "^5.8.2",
+    "fastify-type-provider-zod": "^6.1.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@jest/globals": "^30.3.0",
+    "@kopai/tsconfig": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": "^0.213.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "^0.213.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-metrics-otlp-proto": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.213.0",
+    "@opentelemetry/resources": "^2.6.0",
+    "@opentelemetry/sdk-logs": "^0.213.0",
+    "@opentelemetry/sdk-metrics": "^2.6.0",
+    "@opentelemetry/sdk-trace-base": "^2.6.0",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
+    "@tapjs/tsx": "^3.4.2",
+    "@types/node": "^25.4.0",
+    "jest": "^30.3.0",
+    "tap": "^21.6.2",
+    "ts-jest": "^29.4.6",
+    "tsdown": "^0.21.2",
+    "tsx": "^4.21.0"
+  }
+}
