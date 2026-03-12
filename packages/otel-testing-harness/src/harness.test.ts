@@ -49,6 +49,9 @@ describe("lifecycle", () => {
     const port = harness.port;
     await harness.stop();
 
+    // Brief delay to allow OS to release the TCP socket
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     // Should be able to bind the same port again
     const harness2 = await createOtelTestingHarness({ port });
     try {

@@ -44,7 +44,7 @@ export async function createOtelTestingHarness(
   const host = opts?.host ?? "localhost";
 
   const database: DatabaseSync = initializeDatabase(":memory:");
-  const ds = new DbDatasource(database);
+  const ds: datasource.TelemetryDatasource = new DbDatasource(database);
 
   const server = fastify({ logger: false });
   server.register(collectorRoutes, {
@@ -78,7 +78,8 @@ export async function createOtelTestingHarness(
     getTraces: (filter) => ds.getTraces(filter),
     getLogs: (filter) => ds.getLogs(filter),
     getMetrics: (filter) => ds.getMetrics(filter),
-    discoverMetrics: () => ds.discoverMetrics(),
+    discoverMetrics: (options) => ds.discoverMetrics(options),
+    // Kept async for API consistency; body is synchronous (node:sqlite is sync)
     async clear() {
       database.exec(OTEL_TABLES.map((t) => `DELETE FROM ${t}`).join(";"));
     },

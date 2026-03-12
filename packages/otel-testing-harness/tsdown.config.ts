@@ -5,5 +5,11 @@ export default defineConfig({
   format: ["esm", "cjs"],
   dts: true,
   clean: true,
-  external: ["zod", "fastify"],
+  external: [
+    "zod",
+    "fastify",
+    "@kopai/collector",
+    "@kopai/core",
+    "@kopai/sqlite-datasource",
+  ],
 });
