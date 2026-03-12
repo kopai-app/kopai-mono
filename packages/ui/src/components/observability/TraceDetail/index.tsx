@@ -5,7 +5,6 @@ import type { SpanNode } from "../types.js";
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 
 export interface TraceDetailProps {
-  service: string;
   traceId: string;
   rows: OtelTracesRow[];
   isLoading?: boolean;
@@ -16,7 +15,6 @@ export interface TraceDetailProps {
 }
 
 export function TraceDetail({
-  service,
   traceId,
   rows,
   isLoading,
@@ -33,7 +31,7 @@ export function TraceDetail({
           onClick={onBack}
           className="hover:text-foreground transition-colors"
         >
-          Services / {service}
+          Services
         </button>
         <span>/</span>
         <span className="text-foreground font-mono text-xs">

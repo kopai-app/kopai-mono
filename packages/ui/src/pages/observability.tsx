@@ -19,9 +19,9 @@ import {
   LogTimeline,
   LogFilter,
   TabBar,
-  ServiceList,
   TraceSearch,
   TraceDetail,
+  TraceComparison,
   KeyboardShortcutsProvider,
   useRegisterShortcuts,
   DynamicDashboard,
@@ -54,9 +54,28 @@ const TABS: { key: Tab; label: string; shortcutKey: string }[] = [
 
 interface URLState {
   tab: Tab;
+  // Services tab search params
   service: string | null;
+  operation: string | null;
+  tags: string | null;
+  lookback: string | null;
+  tsMin: string | null;
+  tsMax: string | null;
+  minDuration: string | null;
+  maxDuration: string | null;
+  limit: number | null;
+  sort: string | null;
+  // Trace detail
   trace: string | null;
   span: string | null;
+  view: string | null;
+  uiFind: string | null;
+  // Comparison
+  compare: string | null;
+  // Minimap (phase 8)
+  viewStart: string | null;
+  viewEnd: string | null;
+  // Existing
   dashboardId: string | null;
 }
 
@@ -72,24 +91,79 @@ function readURLState(): URLState {
     : rawTab === "logs" || rawTab === "metrics"
       ? rawTab
       : "services";
-  return { tab, service, trace, span, dashboardId };
+  const rawLimit = params.get("limit");
+  const limit = rawLimit ? parseInt(rawLimit, 10) : null;
+  return {
+    tab,
+    service,
+    operation: params.get("operation"),
+    tags: params.get("tags"),
+    lookback: params.get("lookback"),
+    tsMin: params.get("tsMin"),
+    tsMax: params.get("tsMax"),
+    minDuration: params.get("minDuration"),
+    maxDuration: params.get("maxDuration"),
+    limit: limit !== null && !isNaN(limit) ? limit : null,
+    sort: params.get("sort"),
+    trace,
+    span,
+    view: params.get("view"),
+    uiFind: params.get("uiFind"),
+    compare: params.get("compare"),
+    viewStart: params.get("viewStart"),
+    viewEnd: params.get("viewEnd"),
+    dashboardId,
+  };
 }
 
 function pushURLState(
   state: {
     tab: Tab;
     service?: string | null;
+    operation?: string | null;
+    tags?: string | null;
+    lookback?: string | null;
+    tsMin?: string | null;
+    tsMax?: string | null;
+    minDuration?: string | null;
+    maxDuration?: string | null;
+    limit?: number | null;
+    sort?: string | null;
     trace?: string | null;
     span?: string | null;
+    view?: string | null;
+    uiFind?: string | null;
+    compare?: string | null;
+    viewStart?: string | null;
+    viewEnd?: string | null;
     dashboardId?: string | null;
   },
   { replace = false }: { replace?: boolean } = {}
 ) {
   const params = new URLSearchParams();
   if (state.tab !== "services") params.set("tab", state.tab);
-  if (state.service) params.set("service", state.service);
-  if (state.trace) params.set("trace", state.trace);
-  if (state.span) params.set("span", state.span);
+
+  if (state.tab === "services") {
+    if (state.service) params.set("service", state.service);
+    if (state.operation) params.set("operation", state.operation);
+    if (state.tags) params.set("tags", state.tags);
+    if (state.lookback) params.set("lookback", state.lookback);
+    if (state.tsMin) params.set("tsMin", state.tsMin);
+    if (state.tsMax) params.set("tsMax", state.tsMax);
+    if (state.minDuration) params.set("minDuration", state.minDuration);
+    if (state.maxDuration) params.set("maxDuration", state.maxDuration);
+    if (state.limit != null && state.limit !== 20)
+      params.set("limit", String(state.limit));
+    if (state.sort) params.set("sort", state.sort);
+    if (state.trace) params.set("trace", state.trace);
+    if (state.span) params.set("span", state.span);
+    if (state.view) params.set("view", state.view);
+    if (state.uiFind) params.set("uiFind", state.uiFind);
+    if (state.compare) params.set("compare", state.compare);
+    if (state.viewStart) params.set("viewStart", state.viewStart);
+    if (state.viewEnd) params.set("viewEnd", state.viewEnd);
+  }
+
   // Preserve dashboardId from current URL if not explicitly provided
   const dashboardId =
     state.dashboardId !== undefined
@@ -115,8 +189,22 @@ let _cachedSearch = "";
 let _cachedState: URLState = {
   tab: "services",
   service: null,
+  operation: null,
+  tags: null,
+  lookback: null,
+  tsMin: null,
+  tsMax: null,
+  minDuration: null,
+  maxDuration: null,
+  limit: null,
+  sort: null,
   trace: null,
   span: null,
+  view: null,
+  uiFind: null,
+  compare: null,
+  viewStart: null,
+  viewEnd: null,
   dashboardId: null,
 };
 
@@ -277,6 +365,41 @@ function parseDuration(input: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// Logfmt helpers
+// ---------------------------------------------------------------------------
+
+function parseLogfmt(str: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const re = /(\w+)=(?:"([^"]*)"|([\S]*))/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(str)) !== null) {
+    result[m[1]!] = m[2] ?? m[3] ?? "";
+  }
+  return result;
+}
+
+export function serializeLogfmt(rec: Record<string, string>): string {
+  return Object.entries(rec)
+    .map(([k, v]) => (v.includes(" ") ? `${k}="${v}"` : `${k}=${v}`))
+    .join(" ");
+}
+
+// ---------------------------------------------------------------------------
+// Lookback presets (ms values)
+// ---------------------------------------------------------------------------
+
+const LOOKBACK_MS: Record<string, number> = {
+  "5m": 5 * 60_000,
+  "15m": 15 * 60_000,
+  "30m": 30 * 60_000,
+  "1h": 60 * 60_000,
+  "2h": 2 * 60 * 60_000,
+  "6h": 6 * 60 * 60_000,
+  "12h": 12 * 60 * 60_000,
+  "24h": 24 * 60 * 60_000,
+};
+
+// ---------------------------------------------------------------------------
 // Logs tab (live-tailing)
 // ---------------------------------------------------------------------------
 
@@ -357,209 +480,151 @@ function LogsTab() {
 // Services tab — data-fetching wrappers around extracted UI components
 // ---------------------------------------------------------------------------
 
-const SERVICES_DS: DataSource = {
-  method: "searchTracesPage",
-  params: { limit: 1000, sortOrder: "DESC" },
-};
-
-function ServiceListView({
-  onSelect,
-}: {
-  onSelect: (service: string) => void;
-}) {
-  const { data, loading, error } = useKopaiData<{
-    data: OtelTracesRow[];
-    nextCursor: string | null;
-  }>(SERVICES_DS);
-
-  const services = useMemo(() => {
-    if (!data?.data) return [];
-    const names = new Set<string>();
-    for (const row of data.data) {
-      names.add(row.ServiceName ?? "unknown");
-    }
-    return Array.from(names)
-      .sort()
-      .map((name) => ({ name }));
-  }, [data]);
-
-  return (
-    <ServiceList
-      services={services}
-      isLoading={loading}
-      error={error ?? undefined}
-      onSelect={onSelect}
-    />
-  );
+interface TraceSummaryRow {
+  traceId: string;
+  rootServiceName: string;
+  rootSpanName: string;
+  startTimeNs: string;
+  durationNs: string;
+  spanCount: number;
+  errorCount: number;
+  services: Array<{ name: string; count: number; hasError: boolean }>;
 }
 
 function TraceSearchView({
-  service,
-  onBack,
   onSelectTrace,
 }: {
-  service: string;
-  onBack: () => void;
   onSelectTrace: (traceId: string) => void;
 }) {
-  const [ds, setDs] = useState<DataSource>(() => ({
-    method: "searchTracesPage",
-    params: { serviceName: service, limit: 20, sortOrder: "DESC" as const },
-  }));
+  const urlState = useURLState();
+  const service = urlState.service;
+
+  // Build DataSource from URL state
+  const ds = useMemo<DataSource>(() => {
+    const params: Record<string, unknown> = {
+      limit: urlState.limit ?? 20,
+      sortOrder: "DESC" as const,
+    };
+    if (service) params.serviceName = service;
+    if (urlState.operation) params.spanName = urlState.operation;
+    if (urlState.lookback) {
+      const ms = LOOKBACK_MS[urlState.lookback];
+      if (ms) {
+        params.timestampMin = String((Date.now() - ms) * 1e6);
+      }
+    }
+    if (urlState.tsMin) params.timestampMin = urlState.tsMin;
+    if (urlState.tsMax) params.timestampMax = urlState.tsMax;
+    if (urlState.minDuration) {
+      const parsed = parseDuration(urlState.minDuration);
+      if (parsed) params.durationMin = parsed;
+    }
+    if (urlState.maxDuration) {
+      const parsed = parseDuration(urlState.maxDuration);
+      if (parsed) params.durationMax = parsed;
+    }
+    if (urlState.tags) {
+      const tagMap = parseLogfmt(urlState.tags);
+      if (Object.keys(tagMap).length > 0) params.tags = tagMap;
+    }
+    return {
+      method: "searchTraceSummariesPage",
+      params,
+    } as DataSource;
+  }, [
+    service,
+    urlState.operation,
+    urlState.lookback,
+    urlState.tsMin,
+    urlState.tsMax,
+    urlState.minDuration,
+    urlState.maxDuration,
+    urlState.limit,
+    urlState.tags,
+  ]);
 
   const handleSearch = useCallback(
     (filters: TraceSearchFilters) => {
-      const params: Record<string, unknown> = {
-        serviceName: service,
+      pushURLState({
+        tab: "services",
+        service: filters.service ?? service,
+        operation: filters.operation ?? null,
+        tags: filters.tags ?? null,
+        lookback: filters.lookback ?? null,
+        minDuration: filters.minDuration ?? null,
+        maxDuration: filters.maxDuration ?? null,
         limit: filters.limit,
-        sortOrder: "DESC",
-      };
-      if (filters.operation) params.spanName = filters.operation;
-      if (filters.lookbackMs) {
-        params.timestampMin = String((Date.now() - filters.lookbackMs) * 1e6);
-      }
-      if (filters.minDuration) {
-        const parsed = parseDuration(filters.minDuration);
-        if (parsed) params.durationMin = parsed;
-      }
-      if (filters.maxDuration) {
-        const parsed = parseDuration(filters.maxDuration);
-        if (parsed) params.durationMax = parsed;
-      }
-      setDs({
-        method: "searchTracesPage",
-        params,
-      } as DataSource);
+      });
     },
     [service]
   );
 
+  // Fetch trace summaries
   const { data, loading, error } = useKopaiData<{
-    data: OtelTracesRow[];
+    data: TraceSummaryRow[];
     nextCursor: string | null;
   }>(ds);
 
-  // Fetch full traces for each unique traceId so service breakdown is complete
-  const client = useKopaiSDK();
-  const [fullTraces, setFullTraces] = useState<Map<string, OtelTracesRow[]>>(
-    () => new Map()
+  // Fetch services list
+  const serviceDs = useMemo<DataSource>(
+    () => ({ method: "getServices" as const }),
+    []
   );
+  const { data: servicesData } = useKopaiData<{ services: string[] }>(
+    serviceDs
+  );
+  const _services = servicesData?.services ?? [];
 
-  useEffect(() => {
-    if (!data?.data?.length) {
-      setFullTraces(new Map());
-      return;
-    }
-    const traceIds = [...new Set(data.data.map((r) => r.TraceId))];
-    const ac = new AbortController();
+  // Fetch operations for selected service
+  const operationDs = useMemo<DataSource | undefined>(
+    () =>
+      service
+        ? { method: "getOperations" as const, params: { serviceName: service } }
+        : undefined,
+    [service]
+  );
+  const { data: opsData } = useKopaiData<{ operations: string[] }>(operationDs);
+  const operations = opsData?.operations ?? [];
 
-    Promise.allSettled(
-      traceIds.map((tid) =>
-        client
-          .getTrace(tid, { signal: ac.signal })
-          .then((spans) => [tid, spans] as const)
-      )
-    )
-      .then((results) => {
-        if (!ac.signal.aborted) {
-          const entries = results
-            .filter(
-              (
-                r
-              ): r is PromiseFulfilledResult<
-                readonly [string, OtelTracesRow[]]
-              > => r.status === "fulfilled"
-            )
-            .map((r) => r.value);
-          setFullTraces(new Map(entries));
-        }
-      })
-      .catch((err) => {
-        if (!ac.signal.aborted)
-          console.error("Failed to fetch full traces", err);
-      });
-
-    return () => ac.abort();
-  }, [data, client]);
-
-  // Derive unique operations for filter dropdown
-  const operations = useMemo(() => {
-    if (!data?.data) return [];
-    const set = new Set<string>();
-    for (const row of data.data) {
-      if (row.SpanName) set.add(row.SpanName);
-    }
-    return Array.from(set).sort();
-  }, [data]);
-
+  // Map TraceSummaryRow → TraceSummary
   const traces = useMemo<TraceSummary[]>(() => {
     if (!data?.data) return [];
-    const grouped = new Map<string, OtelTracesRow[]>();
-    for (const row of data.data) {
-      const tid = row.TraceId;
-      if (!grouped.has(tid)) grouped.set(tid, []);
-      grouped.get(tid)!.push(row);
-    }
+    return data.data.map((row) => ({
+      traceId: row.traceId,
+      rootSpanName: row.rootSpanName,
+      serviceName: row.rootServiceName,
+      durationMs: parseInt(row.durationNs, 10) / 1e6,
+      statusCode: row.errorCount > 0 ? "ERROR" : "OK",
+      timestampMs: parseInt(row.startTimeNs, 10) / 1e6,
+      spanCount: row.spanCount,
+      services: row.services,
+      errorCount: row.errorCount,
+    }));
+  }, [data]);
 
-    return Array.from(grouped.entries()).map(([traceId, searchSpans]) => {
-      const fullSpans = fullTraces.get(traceId);
-      const spans = fullSpans ?? searchSpans;
-
-      const root = spans.find((s) => !s.ParentSpanId) ?? spans[0]!;
-      const durationNs = root.Duration ? parseInt(root.Duration, 10) : 0;
-
-      const svcMap = new Map<string, { count: number; hasError: boolean }>();
-      let errorCount = 0;
-      for (const s of spans) {
-        const svcName = s.ServiceName ?? "unknown";
-        const entry = svcMap.get(svcName) ?? { count: 0, hasError: false };
-        entry.count++;
-        if (s.StatusCode === "ERROR") {
-          entry.hasError = true;
-          errorCount++;
-        }
-        svcMap.set(svcName, entry);
-      }
-      const services = Array.from(svcMap.entries())
-        .map(([name, v]) => ({ name, count: v.count, hasError: v.hasError }))
-        .sort((a, b) => b.count - a.count);
-
-      return {
-        traceId,
-        rootSpanName: root.SpanName ?? "unknown",
-        serviceName: root.ServiceName ?? "unknown",
-        durationMs: durationNs / 1e6,
-        statusCode: root.StatusCode ?? "UNSET",
-        timestampMs: parseInt(root.Timestamp, 10) / 1e6,
-        spanCount: spans.length,
-        services,
-        errorCount,
-      };
-    });
-  }, [data, fullTraces]);
+  // Auto-execute on mount — the ds is already built from URL state,
+  // so useKopaiData fires automatically. No extra effect needed.
 
   return (
     <TraceSearch
-      service={service}
+      services={_services}
+      service={service ?? ""}
       traces={traces}
       operations={operations}
       isLoading={loading}
       error={error ?? undefined}
       onSelectTrace={onSelectTrace}
-      onBack={onBack}
       onSearch={handleSearch}
     />
   );
 }
 
 function TraceDetailView({
-  service,
   traceId,
   selectedSpanId,
   onSelectSpan,
   onBack,
 }: {
-  service: string;
   traceId: string;
   selectedSpanId: string | null;
   onSelectSpan: (spanId: string) => void;
@@ -577,7 +642,6 @@ function TraceDetailView({
 
   return (
     <TraceDetail
-      service={service}
       traceId={traceId}
       rows={data ?? []}
       isLoading={loading}
@@ -590,31 +654,25 @@ function TraceDetailView({
 }
 
 function ServicesTab({
-  selectedService,
   selectedTraceId,
   selectedSpanId,
-  onSelectService,
+  compareParam,
   onSelectTrace,
   onSelectSpan,
-  onBackToServices,
-  onBackToTraceList,
+  onBack,
 }: {
-  selectedService: string | null;
   selectedTraceId: string | null;
   selectedSpanId: string | null;
-  onSelectService: (service: string) => void;
+  compareParam: string | null;
   onSelectTrace: (traceId: string) => void;
   onSelectSpan: (spanId: string) => void;
-  onBackToServices: () => void;
-  onBackToTraceList: () => void;
+  onBack: () => void;
 }) {
   useRegisterShortcuts("services-tab", SERVICES_SHORTCUTS);
 
-  // Backspace → navigate back based on drill-down depth
-  const backToServicesRef = useRef(onBackToServices);
-  backToServicesRef.current = onBackToServices;
-  const backToTraceListRef = useRef(onBackToTraceList);
-  backToTraceListRef.current = onBackToTraceList;
+  // Backspace → navigate back
+  const backRef = useRef(onBack);
+  backRef.current = onBack;
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -625,38 +683,40 @@ function ServicesTab({
         return;
       if (e.key === "Backspace") {
         e.preventDefault();
-        if (selectedTraceId && selectedService) {
-          backToTraceListRef.current();
-        } else if (selectedService) {
-          backToServicesRef.current();
-        }
+        backRef.current();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedService, selectedTraceId]);
+  }, []);
 
-  if (selectedTraceId && selectedService) {
+  // Comparison view
+  if (compareParam) {
+    const [traceIdA, traceIdB] = compareParam.split(",");
+    if (traceIdA && traceIdB) {
+      return (
+        <TraceComparison
+          traceIdA={traceIdA}
+          traceIdB={traceIdB}
+          onBack={onBack}
+        />
+      );
+    }
+  }
+
+  if (selectedTraceId) {
     return (
       <TraceDetailView
-        service={selectedService}
         traceId={selectedTraceId}
         selectedSpanId={selectedSpanId}
         onSelectSpan={onSelectSpan}
-        onBack={onBackToTraceList}
+        onBack={onBack}
       />
     );
   }
-  if (selectedService) {
-    return (
-      <TraceSearchView
-        service={selectedService}
-        onBack={onBackToServices}
-        onSelectTrace={onSelectTrace}
-      />
-    );
-  }
-  return <ServiceListView onSelect={onSelectService} />;
+
+  // Default: TraceSearchView directly
+  return <TraceSearchView onSelectTrace={onSelectTrace} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -776,54 +836,56 @@ interface ObservabilityPageProps {
 
 export default function ObservabilityPage({ client }: ObservabilityPageProps) {
   const activeClient = client ?? getDefaultClient();
+  const urlState = useURLState();
   const {
     tab: activeTab,
-    service: selectedService,
     trace: selectedTraceId,
     span: selectedSpanId,
-  } = useURLState();
+    compare: compareParam,
+  } = urlState;
 
   const handleTabChange = useCallback((tab: Tab) => {
     pushURLState({ tab });
   }, []);
 
-  const handleSelectService = useCallback((service: string) => {
-    pushURLState({ tab: "services", service });
-  }, []);
-
   const handleSelectTrace = useCallback(
     (traceId: string) => {
       pushURLState({
+        ...urlState,
         tab: "services",
-        service: selectedService,
         trace: traceId,
       });
     },
-    [selectedService]
+    [urlState]
   );
 
   const handleSelectSpan = useCallback(
     (spanId: string) => {
       pushURLState(
         {
+          ...urlState,
           tab: "services",
-          service: selectedService,
-          trace: selectedTraceId,
           span: spanId,
         },
         { replace: true }
       );
     },
-    [selectedService, selectedTraceId]
+    [urlState]
   );
 
-  const handleBackToServices = useCallback(() => {
-    pushURLState({ tab: "services" });
-  }, []);
-
-  const handleBackToTraceList = useCallback(() => {
-    pushURLState({ tab: "services", service: selectedService });
-  }, [selectedService]);
+  const handleBack = useCallback(() => {
+    pushURLState({
+      ...urlState,
+      tab: "services",
+      trace: null,
+      span: null,
+      view: null,
+      uiFind: null,
+      viewStart: null,
+      viewEnd: null,
+      compare: null,
+    });
+  }, [urlState]);
 
   return (
     <KopaiSDKProvider client={activeClient}>
@@ -841,14 +903,12 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
           {activeTab === "logs" && <LogsTab />}
           {activeTab === "services" && (
             <ServicesTab
-              selectedService={selectedService}
               selectedTraceId={selectedTraceId}
               selectedSpanId={selectedSpanId}
-              onSelectService={handleSelectService}
+              compareParam={compareParam}
               onSelectTrace={handleSelectTrace}
               onSelectSpan={handleSelectSpan}
-              onBackToServices={handleBackToServices}
-              onBackToTraceList={handleBackToTraceList}
+              onBack={handleBack}
             />
           )}
           {activeTab === "metrics" && <MetricsTab />}

@@ -266,3 +266,40 @@ export const metricsDataFilterSchema = z.object({
 });
 
 export type MetricsDataFilter = z.infer<typeof metricsDataFilterSchema>;
+
+// --- Trace summaries (Jaeger-like search) ---
+
+export const traceSummariesFilterSchema = z.object({
+  serviceName: z.string().optional(),
+  spanName: z.string().optional(),
+  timestampMin: z.string().optional(),
+  timestampMax: z.string().optional(),
+  durationMin: z.string().optional(),
+  durationMax: z.string().optional(),
+  spanAttributes: z.record(z.string(), z.string()).optional(),
+  resourceAttributes: z.record(z.string(), z.string()).optional(),
+  limit: z.number().int().min(1).max(1000).default(20),
+  cursor: z.string().optional(),
+  sortOrder: z.enum(["ASC", "DESC"]).default("DESC"),
+});
+
+export type TraceSummariesFilter = z.infer<typeof traceSummariesFilterSchema>;
+
+export const traceSummaryServiceSchema = z.object({
+  name: z.string(),
+  count: z.number(),
+  hasError: z.boolean(),
+});
+
+export const traceSummaryRowSchema = z.object({
+  traceId: z.string(),
+  rootServiceName: z.string(),
+  rootSpanName: z.string(),
+  startTimeNs: z.string(),
+  durationNs: z.string(),
+  spanCount: z.number(),
+  errorCount: z.number(),
+  services: z.array(traceSummaryServiceSchema),
+});
+
+export type TraceSummaryRow = z.infer<typeof traceSummaryRowSchema>;

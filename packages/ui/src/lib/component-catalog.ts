@@ -29,6 +29,21 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
     params: z.object({}).optional(),
     refetchIntervalMs: z.number().optional(),
   }),
+  z.object({
+    method: z.literal("getServices"),
+    params: z.object({}).optional(),
+    refetchIntervalMs: z.number().optional(),
+  }),
+  z.object({
+    method: z.literal("getOperations"),
+    params: z.object({ serviceName: z.string() }),
+    refetchIntervalMs: z.number().optional(),
+  }),
+  z.object({
+    method: z.literal("searchTraceSummariesPage"),
+    params: dataFilterSchemas.traceSummariesFilterSchema,
+    refetchIntervalMs: z.number().optional(),
+  }),
 ]);
 
 export type DataSource = z.infer<typeof dataSourceSchema>;

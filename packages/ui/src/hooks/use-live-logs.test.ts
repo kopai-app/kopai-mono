@@ -22,6 +22,9 @@ const createMockClient = () => ({
   getTrace: vi.fn(),
   discoverMetrics: vi.fn(),
   getDashboard: vi.fn(),
+  getServices: vi.fn(),
+  getOperations: vi.fn(),
+  searchTraceSummariesPage: vi.fn(),
 });
 
 function wrapper(client: KopaiClient) {

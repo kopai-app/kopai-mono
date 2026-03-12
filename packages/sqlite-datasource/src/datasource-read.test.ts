@@ -2117,6 +2117,430 @@ describe("OptimizedDatasource", () => {
       expect(tagsValue).not.toBe("[object Object]");
     });
   });
+
+  describe("getServices", () => {
+    let testConnection: DatabaseSync;
+    let ds: OptimizedDatasource;
+    let readDs: datasource.ReadTelemetryDatasource;
+    let insertSpan: ReturnType<typeof createInsertSpan>;
+
+    beforeEach(async () => {
+      testConnection = initializeDatabase(":memory:");
+      ds = createOptimizedDatasource(testConnection);
+      readDs = ds;
+      insertSpan = createInsertSpan(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("returns empty array when no traces", async () => {
+      const result = await readDs.getServices();
+      expect(result.services).toEqual([]);
+    });
+
+    it("returns distinct service names sorted alphabetically", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        serviceName: "beta-svc",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s2",
+        serviceName: "alpha-svc",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+      // duplicate service
+      await insertSpan({
+        traceId: "t3",
+        spanId: "s3",
+        serviceName: "beta-svc",
+        startTimeNanos: "3000000000000000",
+        endTimeNanos: "3001000000000000",
+      });
+
+      const result = await readDs.getServices();
+      expect(result.services).toEqual(["alpha-svc", "beta-svc"]);
+    });
+
+    it("returns services from multiple traces", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        serviceName: "svc-a",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s2",
+        serviceName: "svc-b",
+        parentSpanId: "s1",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s3",
+        serviceName: "svc-c",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+
+      const result = await readDs.getServices();
+      expect(result.services).toEqual(["svc-a", "svc-b", "svc-c"]);
+    });
+  });
+
+  describe("getOperations", () => {
+    let testConnection: DatabaseSync;
+    let ds: OptimizedDatasource;
+    let readDs: datasource.ReadTelemetryDatasource;
+    let insertSpan: ReturnType<typeof createInsertSpan>;
+
+    beforeEach(async () => {
+      testConnection = initializeDatabase(":memory:");
+      ds = createOptimizedDatasource(testConnection);
+      readDs = ds;
+      insertSpan = createInsertSpan(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("returns empty array when service has no spans", async () => {
+      const result = await readDs.getOperations({
+        serviceName: "nonexistent",
+      });
+      expect(result.operations).toEqual([]);
+    });
+
+    it("returns distinct span names for a specific service, sorted", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        serviceName: "my-svc",
+        spanName: "POST /api",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s2",
+        serviceName: "my-svc",
+        spanName: "GET /api",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+      // duplicate operation
+      await insertSpan({
+        traceId: "t3",
+        spanId: "s3",
+        serviceName: "my-svc",
+        spanName: "GET /api",
+        startTimeNanos: "3000000000000000",
+        endTimeNanos: "3001000000000000",
+      });
+
+      const result = await readDs.getOperations({ serviceName: "my-svc" });
+      expect(result.operations).toEqual(["GET /api", "POST /api"]);
+    });
+
+    it("does not return operations from other services", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        serviceName: "svc-a",
+        spanName: "op-a",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s2",
+        serviceName: "svc-b",
+        spanName: "op-b",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+
+      const result = await readDs.getOperations({ serviceName: "svc-a" });
+      expect(result.operations).toEqual(["op-a"]);
+    });
+  });
+
+  describe("getTraceSummaries", () => {
+    let testConnection: DatabaseSync;
+    let ds: OptimizedDatasource;
+    let readDs: datasource.ReadTelemetryDatasource;
+    let insertSpan: ReturnType<typeof createInsertSpan>;
+
+    beforeEach(async () => {
+      testConnection = initializeDatabase(":memory:");
+      ds = createOptimizedDatasource(testConnection);
+      readDs = ds;
+      insertSpan = createInsertSpan(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("returns empty array when no traces match", async () => {
+      const result = await readDs.getTraceSummaries({
+        serviceName: "nonexistent",
+        limit: 20,
+        sortOrder: "DESC",
+      });
+      expect(result.data).toEqual([]);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("returns trace summaries with correct aggregation", async () => {
+      // Root span
+      await insertSpan({
+        traceId: "trace1",
+        spanId: "root-span",
+        serviceName: "frontend",
+        spanName: "GET /page",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1000000500000000", // 500ms duration
+      });
+      // Child span - different service
+      await insertSpan({
+        traceId: "trace1",
+        spanId: "child-span-1",
+        parentSpanId: "root-span",
+        serviceName: "backend",
+        spanName: "db.query",
+        startTimeNanos: "1000000100000000",
+        endTimeNanos: "1000000400000000", // 300ms duration
+      });
+      // Child span - error
+      await insertSpan({
+        traceId: "trace1",
+        spanId: "child-span-2",
+        parentSpanId: "root-span",
+        serviceName: "backend",
+        spanName: "cache.get",
+        statusCode: otlp.StatusCode.STATUS_CODE_ERROR,
+        startTimeNanos: "1000000050000000",
+        endTimeNanos: "1000000150000000",
+      });
+
+      const result = await readDs.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const summary = result.data[0];
+      assertDefined(summary);
+      expect(summary.traceId).toBe("trace1");
+      expect(summary.rootServiceName).toBe("frontend");
+      expect(summary.rootSpanName).toBe("GET /page");
+      expect(summary.spanCount).toBe(3);
+      expect(summary.errorCount).toBe(1);
+      // startTimeNs = min timestamp across all spans
+      expect(summary.startTimeNs).toBe("1000000000000000");
+      // durationNs = max(end) - min(start) = 1000000500000000 - 1000000000000000 = 500000000
+      expect(summary.durationNs).toBe("500000000");
+      // services breakdown
+      expect(summary.services).toHaveLength(2);
+      const frontend = summary.services.find((s) => s.name === "frontend");
+      assertDefined(frontend);
+      expect(frontend.count).toBe(1);
+      expect(frontend.hasError).toBe(false);
+      const backend = summary.services.find((s) => s.name === "backend");
+      assertDefined(backend);
+      expect(backend.count).toBe(2);
+      expect(backend.hasError).toBe(true);
+    });
+
+    it("filters by serviceName", async () => {
+      await insertSpan({
+        traceId: "trace1",
+        spanId: "s1",
+        serviceName: "svc-a",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "trace2",
+        spanId: "s2",
+        serviceName: "svc-b",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+
+      const result = await readDs.getTraceSummaries({
+        serviceName: "svc-a",
+        limit: 20,
+        sortOrder: "DESC",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const summary = result.data[0];
+      assertDefined(summary);
+      expect(summary.traceId).toBe("trace1");
+    });
+
+    it("filters by spanName", async () => {
+      await insertSpan({
+        traceId: "trace1",
+        spanId: "s1",
+        serviceName: "svc",
+        spanName: "GET /users",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "trace2",
+        spanId: "s2",
+        serviceName: "svc",
+        spanName: "POST /users",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+
+      const result = await readDs.getTraceSummaries({
+        spanName: "GET /users",
+        limit: 20,
+        sortOrder: "DESC",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const summary = result.data[0];
+      assertDefined(summary);
+      expect(summary.traceId).toBe("trace1");
+    });
+
+    it("filters by time range (timestampMin/timestampMax)", async () => {
+      await insertSpan({
+        traceId: "trace1",
+        spanId: "s1",
+        serviceName: "svc",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "trace2",
+        spanId: "s2",
+        serviceName: "svc",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+      await insertSpan({
+        traceId: "trace3",
+        spanId: "s3",
+        serviceName: "svc",
+        startTimeNanos: "3000000000000000",
+        endTimeNanos: "3001000000000000",
+      });
+
+      const result = await readDs.getTraceSummaries({
+        timestampMin: "1500000000000000",
+        timestampMax: "2500000000000000",
+        limit: 20,
+        sortOrder: "DESC",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const summary = result.data[0];
+      assertDefined(summary);
+      expect(summary.traceId).toBe("trace2");
+    });
+
+    it("cursor pagination works (limit + nextCursor + fetching next page)", async () => {
+      for (let i = 0; i < 5; i++) {
+        await insertSpan({
+          traceId: `trace${i}`,
+          spanId: `span${i}`,
+          serviceName: "svc",
+          startTimeNanos: `${(i + 1) * 1000000000000000}`,
+          endTimeNanos: `${(i + 1) * 1000000000000000 + 1000000000000}`,
+        });
+      }
+
+      // Page 1 (DESC)
+      const page1 = await readDs.getTraceSummaries({
+        limit: 2,
+        sortOrder: "DESC",
+      });
+      expect(page1.data).toHaveLength(2);
+      const p1r0 = page1.data[0];
+      assertDefined(p1r0);
+      expect(p1r0.traceId).toBe("trace4");
+      const p1r1 = page1.data[1];
+      assertDefined(p1r1);
+      expect(p1r1.traceId).toBe("trace3");
+      expect(page1.nextCursor).not.toBeNull();
+
+      // Page 2
+      assertDefined(page1.nextCursor);
+      const page2 = await readDs.getTraceSummaries({
+        limit: 2,
+        sortOrder: "DESC",
+        cursor: page1.nextCursor,
+      });
+      expect(page2.data).toHaveLength(2);
+      const p2r0 = page2.data[0];
+      assertDefined(p2r0);
+      expect(p2r0.traceId).toBe("trace2");
+      const p2r1 = page2.data[1];
+      assertDefined(p2r1);
+      expect(p2r1.traceId).toBe("trace1");
+
+      // Page 3 — last item
+      assertDefined(page2.nextCursor);
+      const page3 = await readDs.getTraceSummaries({
+        limit: 2,
+        sortOrder: "DESC",
+        cursor: page2.nextCursor,
+      });
+      expect(page3.data).toHaveLength(1);
+      expect(page3.nextCursor).toBeNull();
+    });
+
+    it("sortOrder ASC/DESC works", async () => {
+      await insertSpan({
+        traceId: "trace-old",
+        spanId: "s1",
+        serviceName: "svc",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "trace-new",
+        spanId: "s2",
+        serviceName: "svc",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+
+      const descResult = await readDs.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+      });
+      const d0 = descResult.data[0];
+      assertDefined(d0);
+      expect(d0.traceId).toBe("trace-new");
+
+      const ascResult = await readDs.getTraceSummaries({
+        limit: 20,
+        sortOrder: "ASC",
+      });
+      const a0 = ascResult.data[0];
+      assertDefined(a0);
+      expect(a0.traceId).toBe("trace-old");
+    });
+  });
 });
 
 function createInsertSpan(
@@ -2132,6 +2556,7 @@ function createInsertSpan(
     scopeName?: string;
     startTimeNanos: string;
     endTimeNanos: string;
+    parentSpanId?: string;
     spanAttributes?: Record<string, string>;
     resourceAttributes?: Record<string, string>;
     events?: { name: string; timeUnixNano: string }[];
@@ -2170,6 +2595,7 @@ function createInsertSpan(
                 {
                   traceId: opts.traceId,
                   spanId: opts.spanId,
+                  parentSpanId: opts.parentSpanId,
                   name: opts.spanName ?? "test-span",
                   kind: opts.spanKind,
                   startTimeUnixNano: opts.startTimeNanos,

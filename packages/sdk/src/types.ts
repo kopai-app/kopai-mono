@@ -13,6 +13,9 @@ export type TracesDataFilter = dataFilterSchemas.TracesDataFilter;
 export type LogsDataFilter = dataFilterSchemas.LogsDataFilter;
 export type MetricsDataFilter = dataFilterSchemas.MetricsDataFilter;
 
+export type TraceSummariesFilter = dataFilterSchemas.TraceSummariesFilter;
+export type TraceSummaryRow = dataFilterSchemas.TraceSummaryRow;
+
 export type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 export type OtelLogsRow = denormalizedSignals.OtelLogsRow;
 export type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;

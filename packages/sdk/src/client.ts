@@ -20,6 +20,8 @@ import type {
   Dashboard,
   CreateDashboardParams,
   SearchDashboardsFilter,
+  TraceSummariesFilter,
+  TraceSummaryRow,
 } from "./types.js";
 
 const DEFAULT_TIMEOUT = 30_000;
@@ -44,6 +46,19 @@ const dashboardResponseSchema = dashboardDatasource.dashboardSchema;
 
 const dashboardSearchResponseSchema = z.object({
   data: z.array(dashboardDatasource.dashboardSchema),
+  nextCursor: z.string().nullable(),
+});
+
+const servicesResponseSchema = z.object({
+  services: z.array(z.string()),
+});
+
+const operationsResponseSchema = z.object({
+  operations: z.array(z.string()),
+});
+
+const traceSummariesResponseSchema = z.object({
+  data: z.array(dataFilterSchemas.traceSummaryRowSchema),
   nextCursor: z.string().nullable(),
 });
 
@@ -317,5 +332,62 @@ export class KopaiClient {
       fetchFn: this.fetchFn,
       defaultTimeout: this.defaultTimeout,
     });
+  }
+
+  /**
+   * List distinct service names.
+   */
+  async getServices(opts?: RequestOptions): Promise<{ services: string[] }> {
+    return request(`${this.baseUrl}/signals/services`, servicesResponseSchema, {
+      method: "GET",
+      ...opts,
+      baseHeaders: this.baseHeaders,
+      fetchFn: this.fetchFn,
+      defaultTimeout: this.defaultTimeout,
+    });
+  }
+
+  /**
+   * List distinct operations for a service.
+   */
+  async getOperations(
+    serviceName: string,
+    opts?: RequestOptions
+  ): Promise<{ operations: string[] }> {
+    const params = new URLSearchParams({ serviceName });
+    return request(
+      `${this.baseUrl}/signals/traces/operations?${params}`,
+      operationsResponseSchema,
+      {
+        method: "GET",
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Search trace summaries for a single page.
+   */
+  async searchTraceSummariesPage(
+    filter: TraceSummariesFilter,
+    opts?: RequestOptions
+  ): Promise<SearchResult<TraceSummaryRow>> {
+    const validatedFilter =
+      dataFilterSchemas.traceSummariesFilterSchema.parse(filter);
+    return request(
+      `${this.baseUrl}/signals/traces/summaries`,
+      traceSummariesResponseSchema,
+      {
+        method: "POST",
+        body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
   }
 }

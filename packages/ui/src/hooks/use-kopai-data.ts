@@ -34,6 +34,17 @@ function fetchForDataSource(
       return client.getTrace(dataSource.params.traceId, { signal });
     case "discoverMetrics":
       return client.discoverMetrics({ signal });
+    case "getServices":
+      return client.getServices({ signal });
+    case "getOperations":
+      return client.getOperations(dataSource.params.serviceName, { signal });
+    case "searchTraceSummariesPage":
+      return client.searchTraceSummariesPage(
+        dataSource.params as Parameters<
+          typeof client.searchTraceSummariesPage
+        >[0],
+        { signal }
+      );
     default: {
       const exhaustiveCheck: never = dataSource;
       throw new Error(

@@ -11,7 +11,12 @@ import {
   type Logger,
   type ClickHouseRequestContext,
 } from "./types.js";
-import { buildTracesQuery } from "./query-traces.js";
+import {
+  buildTracesQuery,
+  buildServicesQuery,
+  buildOperationsQuery,
+  buildTraceSummariesQuery,
+} from "./query-traces.js";
 import { buildLogsQuery } from "./query-logs.js";
 import {
   buildMetricsQuery,
@@ -304,6 +309,240 @@ export class ClickHouseReadDatasource
       "query complete"
     );
     return { data, nextCursor };
+  }
+
+  async getServices(opts?: {
+    requestContext?: unknown;
+  }): Promise<{ services: string[] }> {
+    assertClickHouseRequestContext(opts?.requestContext);
+    const { database, username, password } = opts.requestContext;
+    const log = getLogger(opts.requestContext);
+    const start = performance.now();
+
+    let chNode: string | undefined;
+    try {
+      const { query, params } = buildServicesQuery();
+
+      const resultSet = await this.client.query({
+        query,
+        query_params: params,
+        format: "JSONEachRow",
+        auth: { username, password },
+        http_headers: { "X-ClickHouse-Database": database },
+      });
+      chNode = getChNode(resultSet);
+
+      const services: string[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json() as { ServiceName: string };
+          services.push(json.ServiceName);
+        }
+      }
+
+      const durationMs = Math.round(performance.now() - start);
+      log.info(
+        {
+          database,
+          username,
+          method: "getServices",
+          durationMs,
+          rowCount: services.length,
+          chNode,
+        },
+        "query complete"
+      );
+      return { services };
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        {
+          database,
+          username,
+          method: "getServices",
+          durationMs,
+          chNode,
+          err,
+        },
+        "query failed"
+      );
+      throw err;
+    }
+  }
+
+  async getOperations(filter: {
+    serviceName: string;
+    requestContext?: unknown;
+  }): Promise<{ operations: string[] }> {
+    assertClickHouseRequestContext(filter.requestContext);
+    const { database, username, password } = filter.requestContext;
+    const log = getLogger(filter.requestContext);
+    const start = performance.now();
+
+    let chNode: string | undefined;
+    try {
+      const { query, params } = buildOperationsQuery(filter);
+
+      const resultSet = await this.client.query({
+        query,
+        query_params: params,
+        format: "JSONEachRow",
+        auth: { username, password },
+        http_headers: { "X-ClickHouse-Database": database },
+      });
+      chNode = getChNode(resultSet);
+
+      const operations: string[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json() as { SpanName: string };
+          operations.push(json.SpanName);
+        }
+      }
+
+      const durationMs = Math.round(performance.now() - start);
+      log.info(
+        {
+          database,
+          username,
+          method: "getOperations",
+          durationMs,
+          rowCount: operations.length,
+          chNode,
+        },
+        "query complete"
+      );
+      return { operations };
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        {
+          database,
+          username,
+          method: "getOperations",
+          durationMs,
+          chNode,
+          err,
+        },
+        "query failed"
+      );
+      throw err;
+    }
+  }
+
+  async getTraceSummaries(
+    filter: dataFilterSchemas.TraceSummariesFilter & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
+    data: dataFilterSchemas.TraceSummaryRow[];
+    nextCursor: string | null;
+  }> {
+    assertClickHouseRequestContext(filter.requestContext);
+    const { database, username, password } = filter.requestContext;
+    const log = getLogger(filter.requestContext);
+    const start = performance.now();
+
+    let chNode: string | undefined;
+    try {
+      const { query, params } = buildTraceSummariesQuery(filter);
+
+      const resultSet = await this.client.query({
+        query,
+        query_params: params,
+        format: "JSONEachRow",
+        auth: { username, password },
+        http_headers: { "X-ClickHouse-Database": database },
+      });
+      chNode = getChNode(resultSet);
+
+      const rawRows: Array<{
+        TraceId: string;
+        rootServiceName: string;
+        rootSpanName: string;
+        startTimeNs: string;
+        durationNs: string;
+        spanCount: number;
+        errorCount: number;
+        _serviceData: Array<[string, string]>;
+      }> = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          rawRows.push(row.json() as (typeof rawRows)[number]);
+        }
+      }
+
+      const limit = filter.limit ?? 20;
+      const hasMore = rawRows.length > limit;
+      const items = hasMore ? rawRows.slice(0, limit) : rawRows;
+
+      const data: dataFilterSchemas.TraceSummaryRow[] = items.map((r) => {
+        // Aggregate per-service breakdown from _serviceData tuples
+        const serviceMap = new Map<
+          string,
+          { count: number; hasError: boolean }
+        >();
+        for (const [svcName, statusCode] of r._serviceData) {
+          const existing = serviceMap.get(svcName);
+          if (existing) {
+            existing.count++;
+            if (statusCode === "STATUS_CODE_ERROR") existing.hasError = true;
+          } else {
+            serviceMap.set(svcName, {
+              count: 1,
+              hasError: statusCode === "STATUS_CODE_ERROR",
+            });
+          }
+        }
+
+        return {
+          traceId: r.TraceId,
+          rootServiceName: r.rootServiceName || "",
+          rootSpanName: r.rootSpanName || "",
+          startTimeNs: r.startTimeNs,
+          durationNs: r.durationNs,
+          spanCount: r.spanCount,
+          errorCount: r.errorCount,
+          services: Array.from(serviceMap.entries()).map(([name, s]) => ({
+            name,
+            count: s.count,
+            hasError: s.hasError,
+          })),
+        };
+      });
+
+      const lastRow = items[items.length - 1];
+      const nextCursor =
+        hasMore && lastRow ? `${lastRow.startTimeNs}:${lastRow.TraceId}` : null;
+
+      const durationMs = Math.round(performance.now() - start);
+      log.info(
+        {
+          database,
+          username,
+          method: "getTraceSummaries",
+          durationMs,
+          rowCount: rawRows.length,
+          chNode,
+        },
+        "query complete"
+      );
+      return { data, nextCursor };
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        {
+          database,
+          username,
+          method: "getTraceSummaries",
+          durationMs,
+          chNode,
+          err,
+        },
+        "query failed"
+      );
+      throw err;
+    }
   }
 
   async discoverMetrics(options?: {

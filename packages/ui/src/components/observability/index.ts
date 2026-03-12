@@ -12,6 +12,18 @@ export type {
   TraceSummary,
 } from "./TraceSearch/index.js";
 
+export { SearchForm } from "./TraceSearch/SearchForm.js";
+export type { SearchFormProps } from "./TraceSearch/SearchForm.js";
+
+export { ScatterPlot } from "./TraceSearch/ScatterPlot.js";
+export type { ScatterPlotProps } from "./TraceSearch/ScatterPlot.js";
+
+export { SortDropdown } from "./TraceSearch/SortDropdown.js";
+export type { SortDropdownProps } from "./TraceSearch/SortDropdown.js";
+
+export { DurationBar } from "./TraceSearch/DurationBar.js";
+export type { DurationBarProps } from "./TraceSearch/DurationBar.js";
+
 export { TraceDetail } from "./TraceDetail/index.js";
 export type { TraceDetailProps } from "./TraceDetail/index.js";
 
@@ -53,6 +65,9 @@ export type {
 
 export { DynamicDashboard } from "./DynamicDashboard/index.js";
 export type { DynamicDashboardProps } from "./DynamicDashboard/index.js";
+
+export { TraceComparison } from "./TraceComparison/index.js";
+export type { TraceComparisonProps } from "./TraceComparison/index.js";
 
 // Types
 export type {

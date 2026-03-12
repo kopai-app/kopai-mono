@@ -113,6 +113,25 @@ export class OptimizedDatasource implements datasource.TelemetryDatasource {
     return this.dbDatasource.getLogs(filter);
   }
 
+  async getServices(): Promise<{ services: string[] }> {
+    return this.dbDatasource.getServices();
+  }
+
+  async getOperations(filter: {
+    serviceName: string;
+  }): Promise<{ operations: string[] }> {
+    return this.dbDatasource.getOperations(filter);
+  }
+
+  async getTraceSummaries(
+    filter: dataFilterSchemas.TraceSummariesFilter
+  ): Promise<{
+    data: dataFilterSchemas.TraceSummaryRow[];
+    nextCursor: string | null;
+  }> {
+    return this.dbDatasource.getTraceSummaries(filter);
+  }
+
   async discoverMetrics(): Promise<datasource.MetricsDiscoveryResult> {
     // Return from in-memory state (O(1))
     const metrics: datasource.DiscoveredMetric[] = [];

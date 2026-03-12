@@ -18,6 +18,8 @@ export type {
   Dashboard,
   CreateDashboardParams,
   SearchDashboardsFilter,
+  TraceSummariesFilter,
+  TraceSummaryRow,
 } from "./types.js";
 
 // Errors

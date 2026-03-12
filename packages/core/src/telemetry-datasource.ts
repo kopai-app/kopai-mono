@@ -2,6 +2,8 @@ import type {
   logsDataFilterSchema,
   metricsDataFilterSchema,
   tracesDataFilterSchema,
+  TraceSummariesFilter,
+  TraceSummaryRow,
 } from "./data-filters-zod.js";
 import {
   otelLogsSchema,
@@ -112,9 +114,30 @@ export interface WriteLogsDatasource {
   writeLogs(logsData: LogsData): Promise<LogsPartialSuccess>;
 }
 
+export interface ReadTracesMetaDatasource {
+  getServices(opts?: {
+    requestContext?: unknown;
+  }): Promise<{ services: string[] }>;
+
+  getOperations(filter: {
+    serviceName: string;
+    requestContext?: unknown;
+  }): Promise<{ operations: string[] }>;
+
+  getTraceSummaries(
+    filter: TraceSummariesFilter & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
+    data: TraceSummaryRow[];
+    nextCursor: string | null;
+  }>;
+}
+
 export type ReadTelemetryDatasource = ReadTracesDatasource &
   ReadLogsDatasource &
-  ReadMetricsDatasource;
+  ReadMetricsDatasource &
+  ReadTracesMetaDatasource;
 
 export type WriteTelemetryDatasource = WriteMetricsDatasource &
   WriteTracesDatasource &

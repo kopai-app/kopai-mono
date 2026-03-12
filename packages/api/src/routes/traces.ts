@@ -8,7 +8,8 @@ import {
 import { problemDetailsSchema } from "./error-schema-zod.js";
 
 export const tracesRoutes: FastifyPluginAsyncZod<{
-  readTracesDatasource: datasource.ReadTracesDatasource;
+  readTracesDatasource: datasource.ReadTracesDatasource &
+    datasource.ReadTracesMetaDatasource;
 }> = async function (fastify, opts) {
   fastify.route({
     method: "GET",
@@ -52,6 +53,70 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
     },
     handler: async (req, res) => {
       const result = await opts.readTracesDatasource.getTraces({
+        ...req.body,
+        requestContext: req.requestContext,
+      });
+      res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "GET",
+    url: "/signals/services",
+    schema: {
+      description: "List distinct service names",
+      response: {
+        200: z.object({ services: z.array(z.string()) }),
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async (req, res) => {
+      const result = await opts.readTracesDatasource.getServices({
+        requestContext: req.requestContext,
+      });
+      res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "GET",
+    url: "/signals/traces/operations",
+    schema: {
+      description: "List distinct operations for a service",
+      querystring: z.object({ serviceName: z.string() }),
+      response: {
+        200: z.object({ operations: z.array(z.string()) }),
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async (req, res) => {
+      const result = await opts.readTracesDatasource.getOperations({
+        serviceName: req.query.serviceName,
+        requestContext: req.requestContext,
+      });
+      res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "POST",
+    url: "/signals/traces/summaries",
+    schema: {
+      description: "Search trace summaries",
+      body: dataFilterSchemas.traceSummariesFilterSchema,
+      response: {
+        200: z.object({
+          data: z.array(dataFilterSchemas.traceSummaryRowSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async (req, res) => {
+      const result = await opts.readTracesDatasource.getTraceSummaries({
         ...req.body,
         requestContext: req.requestContext,
       });

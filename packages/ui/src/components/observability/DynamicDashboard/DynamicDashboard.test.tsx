@@ -28,6 +28,11 @@ function createMockClient(): MockClient {
       .fn()
       .mockResolvedValue({ data: [], nextCursor: null }),
     searchDashboards: vi.fn().mockReturnValue((async function* () {})()),
+    getServices: vi.fn().mockResolvedValue({ services: [] }),
+    getOperations: vi.fn().mockResolvedValue({ operations: [] }),
+    searchTraceSummariesPage: vi
+      .fn()
+      .mockResolvedValue({ data: [], nextCursor: null }),
   };
 }
 
