@@ -72,14 +72,14 @@
     "@kopai/tsconfig": "workspace:*",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.1.0",
-    "@vitejs/plugin-react": "^5.1.4",
+    "@vitejs/plugin-react": "^6.0.1",
     "@tailwindcss/postcss": "^4.2.1",
     "postcss": "^8.5.8",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tailwindcss": "^4.2.1",
-    "tsdown": "^0.21.1",
+    "tsdown": "^0.21.2",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^8.0.0"
   }
 }
