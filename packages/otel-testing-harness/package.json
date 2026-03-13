@@ -63,7 +63,7 @@
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@tapjs/tsx": "^3.4.2",
-    "@types/node": "^25.4.0",
+    "@types/node": "^25.5.0",
     "jest": "^30.3.0",
     "tap": "^21.6.2",
     "ts-jest": "^29.4.6",
