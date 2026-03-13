@@ -623,11 +623,13 @@ function TraceDetailView({
   traceId,
   selectedSpanId,
   onSelectSpan,
+  onDeselectSpan,
   onBack,
 }: {
   traceId: string;
   selectedSpanId: string | null;
   onSelectSpan: (spanId: string) => void;
+  onDeselectSpan: () => void;
   onBack: () => void;
 }) {
   const ds = useMemo<DataSource>(
@@ -648,6 +650,7 @@ function TraceDetailView({
       error={error ?? undefined}
       selectedSpanId={selectedSpanId ?? undefined}
       onSpanClick={(span) => onSelectSpan(span.spanId)}
+      onSpanDeselect={onDeselectSpan}
       onBack={onBack}
     />
   );
@@ -659,6 +662,7 @@ function ServicesTab({
   compareParam,
   onSelectTrace,
   onSelectSpan,
+  onDeselectSpan,
   onBack,
 }: {
   selectedTraceId: string | null;
@@ -666,6 +670,7 @@ function ServicesTab({
   compareParam: string | null;
   onSelectTrace: (traceId: string) => void;
   onSelectSpan: (spanId: string) => void;
+  onDeselectSpan: () => void;
   onBack: () => void;
 }) {
   useRegisterShortcuts("services-tab", SERVICES_SHORTCUTS);
@@ -710,6 +715,7 @@ function ServicesTab({
         traceId={selectedTraceId}
         selectedSpanId={selectedSpanId}
         onSelectSpan={onSelectSpan}
+        onDeselectSpan={onDeselectSpan}
         onBack={onBack}
       />
     );
@@ -873,6 +879,16 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
     [urlState]
   );
 
+  const handleDeselectSpan = useCallback(() => {
+    pushURLState(
+      {
+        ...urlState,
+        span: null,
+      },
+      { replace: true }
+    );
+  }, [urlState]);
+
   const handleBack = useCallback(() => {
     pushURLState({
       ...urlState,
@@ -908,6 +924,7 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
               compareParam={compareParam}
               onSelectTrace={handleSelectTrace}
               onSelectSpan={handleSelectSpan}
+              onDeselectSpan={handleDeselectSpan}
               onBack={handleBack}
             />
           )}

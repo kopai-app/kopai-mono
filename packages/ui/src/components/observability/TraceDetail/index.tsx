@@ -11,6 +11,7 @@ export interface TraceDetailProps {
   error?: Error;
   selectedSpanId?: string;
   onSpanClick?: (span: SpanNode) => void;
+  onSpanDeselect?: () => void;
   onBack: () => void;
 }
 
@@ -21,6 +22,7 @@ export function TraceDetail({
   error,
   selectedSpanId,
   onSpanClick,
+  onSpanDeselect,
   onBack,
 }: TraceDetailProps) {
   return (
@@ -45,6 +47,7 @@ export function TraceDetail({
         error={error}
         selectedSpanId={selectedSpanId}
         onSpanClick={onSpanClick}
+        onSpanDeselect={onSpanDeselect}
       />
     </div>
   );

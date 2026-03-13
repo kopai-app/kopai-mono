@@ -4,7 +4,6 @@
  */
 
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import type { denormalizedSignals } from "@kopai/core";
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 import type { SpanNode, ParsedTrace } from "../types.js";
@@ -16,7 +15,7 @@ import {
 } from "../utils/time.js";
 import { TraceHeader } from "./TraceHeader.js";
 import { SpanRow } from "./SpanRow.js";
-import { DetailPane } from "./DetailPane/index.js";
+import { SpanDetailInline } from "./SpanDetailInline.js";
 import { LoadingSkeleton } from "../shared/LoadingSkeleton.js";
 import { useRegisterShortcuts } from "../../KeyboardShortcuts/index.js";
 import { TRACE_VIEWER_SHORTCUTS } from "./shortcuts.js";
@@ -31,6 +30,7 @@ import { Minimap } from "./Minimap.js";
 export interface TraceTimelineProps {
   rows: OtelTracesRow[];
   onSpanClick?: (span: SpanNode) => void;
+  onSpanDeselect?: () => void;
   selectedSpanId?: string;
   isLoading?: boolean;
   error?: Error;
@@ -187,6 +187,7 @@ function collectServices(rootSpans: SpanNode[]): string[] {
 export function TraceTimeline({
   rows,
   onSpanClick,
+  onSpanDeselect,
   selectedSpanId: externalSelectedSpanId,
   isLoading,
   error,
@@ -239,13 +240,6 @@ export function TraceTimeline({
       .filter((idx) => idx !== -1);
   }, [flattenedSpans, uiFind]);
 
-  const virtualizer = useVirtualizer({
-    count: flattenedSpans.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 32,
-    overscan: 5,
-  });
-
   const handleToggleCollapse = (spanId: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
@@ -255,15 +249,25 @@ export function TraceTimeline({
     });
   };
 
+  const handleDeselect = useCallback(() => {
+    setInternalSelectedSpanId(null);
+    onSpanDeselect?.();
+  }, [onSpanDeselect]);
+
   const handleSpanClick = useCallback(
     (span: SpanNode) => {
-      setInternalSelectedSpanId(span.spanId);
-      onSpanClick?.(span);
-      if (announcementRef.current) {
-        announcementRef.current.textContent = `Selected span: ${span.name}, duration: ${formatDuration(span.durationMs)}`;
+      const isAlreadySelected = selectedSpanId === span.spanId;
+      if (isAlreadySelected) {
+        handleDeselect();
+      } else {
+        setInternalSelectedSpanId(span.spanId);
+        onSpanClick?.(span);
+        if (announcementRef.current) {
+          announcementRef.current.textContent = `Selected span: ${span.name}, duration: ${formatDuration(span.durationMs)}`;
+        }
       }
     },
-    [onSpanClick]
+    [onSpanClick, selectedSpanId, handleDeselect]
   );
 
   const handleExpandAll = useCallback(() => {
@@ -323,10 +327,6 @@ export function TraceTimeline({
     [selectedSpanId, flattenedSpans]
   );
 
-  const handleDeselect = useCallback(() => {
-    setInternalSelectedSpanId(null);
-  }, []);
-
   const handleViewChange = useCallback(
     (view: string) => {
       if (onViewChange) onViewChange(view);
@@ -355,23 +355,24 @@ export function TraceTimeline({
     [onViewRangeChange]
   );
 
+  const scrollToSpan = useCallback((spanId: string) => {
+    const el = scrollRef.current?.querySelector(`[data-span-id="${spanId}"]`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, []);
+
   const handleSearchNext = useCallback(() => {
     if (matchingIndices.length === 0) return;
     const next = (currentMatchIndex + 1) % matchingIndices.length;
     setCurrentMatchIndex(next);
     const idx = matchingIndices[next];
     if (idx !== undefined) {
-      virtualizer.scrollToIndex(idx, { align: "center", behavior: "smooth" });
       const item = flattenedSpans[idx];
-      if (item) handleSpanClick(item.span);
+      if (item) {
+        handleSpanClick(item.span);
+        scrollToSpan(item.span.spanId);
+      }
     }
-  }, [
-    matchingIndices,
-    currentMatchIndex,
-    virtualizer,
-    flattenedSpans,
-    handleSpanClick,
-  ]);
+  }, [matchingIndices, currentMatchIndex, flattenedSpans, handleSpanClick, scrollToSpan]);
 
   const handleSearchPrev = useCallback(() => {
     if (matchingIndices.length === 0) return;
@@ -380,33 +381,28 @@ export function TraceTimeline({
     setCurrentMatchIndex(prev);
     const idx = matchingIndices[prev];
     if (idx !== undefined) {
-      virtualizer.scrollToIndex(idx, { align: "center", behavior: "smooth" });
       const item = flattenedSpans[idx];
-      if (item) handleSpanClick(item.span);
+      if (item) {
+        handleSpanClick(item.span);
+        scrollToSpan(item.span.spanId);
+      }
     }
-  }, [
-    matchingIndices,
-    currentMatchIndex,
-    virtualizer,
-    flattenedSpans,
-    handleSpanClick,
-  ]);
+  }, [matchingIndices, currentMatchIndex, flattenedSpans, handleSpanClick, scrollToSpan]);
 
   useEffect(() => {
     if (!selectedSpanId) return;
-    const selectedIndex = flattenedSpans.findIndex(
-      (item) => item.span.spanId === selectedSpanId
-    );
-    if (selectedIndex !== -1) {
-      virtualizer.scrollToIndex(selectedIndex, {
-        align: "center",
-        behavior: "smooth",
-      });
-    }
-  }, [selectedSpanId, flattenedSpans, virtualizer]);
+    scrollToSpan(selectedSpanId);
+  }, [selectedSpanId, scrollToSpan]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape always deselects when a span is selected
+      if (e.key === "Escape" && selectedSpanId) {
+        e.preventDefault();
+        handleDeselect();
+        return;
+      }
+
       const timelineElement = scrollRef.current?.parentElement;
       if (!timelineElement?.contains(document.activeElement)) return;
 
@@ -432,8 +428,7 @@ export function TraceTimeline({
           handleCollapseExpand(false);
           break;
         case "Escape":
-          e.preventDefault();
-          handleDeselect();
+          // handled above, before focus check
           break;
         case "Enter": {
           if (selectedSpanId) {
@@ -507,10 +502,6 @@ export function TraceTimeline({
   }
 
   const totalDurationMs = parsedTrace.maxTimeMs - parsedTrace.minTimeMs;
-  const selectedSpan =
-    selectedSpanId && flattenedSpans.length > 0
-      ? flattenedSpans.find((item) => item.span.spanId === selectedSpanId)?.span
-      : null;
 
   return (
     <div className="flex h-full bg-background">
@@ -573,89 +564,62 @@ export function TraceTimeline({
               aria-label="Trace timeline"
               tabIndex={0}
             >
-              <div
-                style={{
-                  height: `${virtualizer.getTotalSize()}px`,
-                  width: "100%",
-                  position: "relative",
-                }}
-              >
-                {virtualizer.getVirtualItems().map((virtualItem) => {
-                  const item = flattenedSpans[virtualItem.index];
-                  if (!item) return null;
+              {flattenedSpans.map((item) => {
+                const { span, level } = item;
+                const isCollapsed = collapsedIds.has(span.spanId);
+                const isSelected = span.spanId === selectedSpanId;
+                const isHovered = span.spanId === hoveredSpanId;
+                const isParentOfHovered = hoveredSpanId
+                  ? isSpanAncestorOf(span, hoveredSpanId, flattenedSpans)
+                  : false;
 
-                  const { span, level } = item;
-                  const isCollapsed = collapsedIds.has(span.spanId);
-                  const isSelected = span.spanId === selectedSpanId;
-                  const isHovered = span.spanId === hoveredSpanId;
-                  const isParentOfHovered = hoveredSpanId
-                    ? isSpanAncestorOf(span, hoveredSpanId, flattenedSpans)
-                    : false;
+                const viewRange = viewEnd - viewStart;
+                const relativeStart =
+                  (calculateRelativeTime(
+                    span.startTimeUnixMs,
+                    parsedTrace.minTimeMs,
+                    parsedTrace.maxTimeMs
+                  ) -
+                    viewStart) /
+                  viewRange;
+                const relativeDuration =
+                  calculateRelativeDuration(
+                    span.durationMs,
+                    totalDurationMs
+                  ) / viewRange;
 
-                  // Map span position to viewport range
-                  const viewRange = viewEnd - viewStart;
-                  const relativeStart =
-                    (calculateRelativeTime(
-                      span.startTimeUnixMs,
-                      parsedTrace.minTimeMs,
-                      parsedTrace.maxTimeMs
-                    ) -
-                      viewStart) /
-                    viewRange;
-                  const relativeDuration =
-                    calculateRelativeDuration(
-                      span.durationMs,
-                      totalDurationMs
-                    ) / viewRange;
-
-                  return (
-                    <div
-                      key={span.spanId}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: `${virtualItem.size}px`,
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                    >
-                      <SpanRow
+                return (
+                  <div key={span.spanId} data-span-id={span.spanId}>
+                    <SpanRow
+                      span={span}
+                      level={level}
+                      isCollapsed={isCollapsed}
+                      isSelected={isSelected}
+                      isHovered={isHovered}
+                      isParentOfHovered={isParentOfHovered}
+                      relativeStart={relativeStart}
+                      relativeDuration={relativeDuration}
+                      onClick={() => handleSpanClick(span)}
+                      onToggleCollapse={() =>
+                        handleToggleCollapse(span.spanId)
+                      }
+                      onMouseEnter={() => setHoveredSpanId(span.spanId)}
+                      onMouseLeave={() => setHoveredSpanId(null)}
+                      uiFind={uiFind || undefined}
+                    />
+                    {isSelected && (
+                      <SpanDetailInline
                         span={span}
-                        level={level}
-                        isCollapsed={isCollapsed}
-                        isSelected={isSelected}
-                        isHovered={isHovered}
-                        isParentOfHovered={isParentOfHovered}
-                        relativeStart={relativeStart}
-                        relativeDuration={relativeDuration}
-                        onClick={() => handleSpanClick(span)}
-                        onToggleCollapse={() =>
-                          handleToggleCollapse(span.spanId)
-                        }
-                        onMouseEnter={() => setHoveredSpanId(span.spanId)}
-                        onMouseLeave={() => setHoveredSpanId(null)}
-                        uiFind={uiFind || undefined}
+                        traceStartMs={parsedTrace.minTimeMs}
                       />
-                    </div>
-                  );
-                })}
-              </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
       </div>
-
-      {selectedSpan && (
-        <div className="w-96 h-full flex-shrink-0">
-          <DetailPane
-            span={selectedSpan}
-            onClose={handleDeselect}
-            // TODO: wire up cross-trace navigation
-            onLinkClick={undefined}
-          />
-        </div>
-      )}
     </div>
   );
 }
