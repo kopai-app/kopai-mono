@@ -16,11 +16,8 @@ export const dashboardsRoutes: FastifyPluginAsyncZod<{
         "Get UI tree schema as markdown prompt instructions for AI agents",
       produces: ["text/markdown"],
       response: {
-        200: { type: "string", description: "Markdown prompt instructions" },
-        404: {
-          type: "string",
-          description: "Prompt instructions not configured",
-        },
+        200: z.string().describe("Markdown prompt instructions"),
+        404: z.string().describe("Prompt instructions not configured"),
       },
     },
     handler: async (_req, reply) => {
