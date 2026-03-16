@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { formatTimestamp } from "../utils/time.js";
 import { getServiceColor } from "../utils/colors.js";
 import { SearchForm } from "./SearchForm.js";
+import type { SearchFormValues } from "./SearchForm.js";
 import { ScatterPlot } from "./ScatterPlot.js";
 import { SortDropdown } from "./SortDropdown.js";
 import { DurationBar } from "./DurationBar.js";
@@ -88,16 +89,6 @@ export function TraceSearch({
   sort: controlledSort,
   onSortChange,
 }: TraceSearchProps) {
-  // Form state
-  const [formService, setFormService] = useState(service);
-  useEffect(() => setFormService(service), [service]);
-  const [operation, setOperation] = useState("");
-  const [tags, setTags] = useState("");
-  const [lookback, setLookback] = useState("");
-  const [minDuration, setMinDuration] = useState("");
-  const [maxDuration, setMaxDuration] = useState("");
-  const [limit, setLimit] = useState(20);
-
   // Sort state (internal fallback if not controlled)
   const [internalSort, setInternalSort] = useState("recent");
   const currentSort = controlledSort ?? internalSort;
@@ -123,15 +114,15 @@ export function TraceSearch({
     });
   };
 
-  const handleSubmit = () => {
+  const handleFormSubmit = (values: SearchFormValues) => {
     onSearch?.({
-      service: formService || undefined,
-      operation: operation || undefined,
-      tags: tags || undefined,
-      lookback: lookback || undefined,
-      minDuration: minDuration || undefined,
-      maxDuration: maxDuration || undefined,
-      limit,
+      service: values.service || undefined,
+      operation: values.operation || undefined,
+      tags: values.tags || undefined,
+      lookback: values.lookback || undefined,
+      minDuration: values.minDuration || undefined,
+      maxDuration: values.maxDuration || undefined,
+      limit: values.limit,
     });
   };
 
@@ -155,21 +146,8 @@ export function TraceSearch({
           <SearchForm
             services={services}
             operations={operations}
-            service={formService}
-            operation={operation}
-            tags={tags}
-            lookback={lookback}
-            minDuration={minDuration}
-            maxDuration={maxDuration}
-            limit={limit}
-            onServiceChange={setFormService}
-            onOperationChange={setOperation}
-            onTagsChange={setTags}
-            onLookbackChange={setLookback}
-            onMinDurationChange={setMinDuration}
-            onMaxDurationChange={setMaxDuration}
-            onLimitChange={setLimit}
-            onSubmit={handleSubmit}
+            initialValues={{ service }}
+            onSubmit={handleFormSubmit}
             isLoading={isLoading}
           />
         </div>

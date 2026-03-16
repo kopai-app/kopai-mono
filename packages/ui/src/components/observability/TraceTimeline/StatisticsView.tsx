@@ -135,8 +135,10 @@ export function StatisticsView({ trace }: StatisticsViewProps) {
       let cmp: number;
       if (typeof aVal === "string" && typeof bVal === "string") {
         cmp = aVal.localeCompare(bVal);
+      } else if (typeof aVal === "number" && typeof bVal === "number") {
+        cmp = aVal - bVal;
       } else {
-        cmp = (aVal as number) - (bVal as number);
+        cmp = 0;
       }
       return sortAsc ? cmp : -cmp;
     });

@@ -38,6 +38,9 @@ const queryBuilder = new Kysely<DB>({
   },
 });
 
+/** Default lookback for services/operations discovery (7 days in ms). */
+const DISCOVERY_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
+
 export class DbDatasource implements datasource.TelemetryDatasource {
   constructor(private sqliteConnection: DatabaseSync) {}
 
@@ -910,10 +913,12 @@ export class DbDatasource implements datasource.TelemetryDatasource {
 
   async getServices(): Promise<{ services: string[] }> {
     try {
+      const tsMin = BigInt((Date.now() - DISCOVERY_LOOKBACK_MS) * 1e6);
       const { sql, parameters } = queryBuilder
         .selectFrom("otel_traces")
         .select("ServiceName")
         .distinct()
+        .where("Timestamp", ">=", tsMin)
         .orderBy("ServiceName", "asc")
         .compile();
 
@@ -935,11 +940,13 @@ export class DbDatasource implements datasource.TelemetryDatasource {
     serviceName: string;
   }): Promise<{ operations: string[] }> {
     try {
+      const tsMin = BigInt((Date.now() - DISCOVERY_LOOKBACK_MS) * 1e6);
       const { sql, parameters } = queryBuilder
         .selectFrom("otel_traces")
         .select("SpanName")
         .distinct()
         .where("ServiceName", "=", filter.serviceName)
+        .where("Timestamp", ">=", tsMin)
         .orderBy("SpanName", "asc")
         .compile();
 
@@ -1090,102 +1097,88 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           ? `${lastTraceRow.Start}:${lastTraceRow.TraceId}`
           : null;
 
-      // Step 2: Get all spans for the matched trace IDs
+      // Step 2: Aggregate spans per trace in SQL (1 row per trace)
       const traceIds = pageTraceRows.map((r) => r.TraceId);
       const placeholders = traceIds.map(() => "?").join(",");
-      const spansSql = `
-        SELECT TraceId, SpanId, ParentSpanId, ServiceName, SpanName,
-               StatusCode, Timestamp, Duration
+
+      const aggSql = `
+        SELECT
+          TraceId,
+          COALESCE(MIN(CASE WHEN ParentSpanId = '' THEN ServiceName END), MIN(ServiceName)) as rootServiceName,
+          COALESCE(MIN(CASE WHEN ParentSpanId = '' THEN SpanName END), MIN(SpanName)) as rootSpanName,
+          CAST(MIN(Timestamp) AS TEXT) as startTimeNs,
+          CAST(MAX(Timestamp + Duration) - MIN(Timestamp) AS TEXT) as durationNs,
+          COUNT(*) as spanCount,
+          SUM(CASE WHEN StatusCode = 'STATUS_CODE_ERROR' THEN 1 ELSE 0 END) as errorCount
         FROM otel_traces
         WHERE TraceId IN (${placeholders})
+        GROUP BY TraceId
       `;
-
-      const spansStmt = this.sqliteConnection.prepare(spansSql);
-      spansStmt.setReadBigInts(true);
-      const spanRows = spansStmt.all(...traceIds) as {
+      const aggRows = this.sqliteConnection
+        .prepare(aggSql)
+        .all(...traceIds) as {
         TraceId: string;
-        SpanId: string;
-        ParentSpanId: string;
-        ServiceName: string;
-        SpanName: string;
-        StatusCode: string;
-        Timestamp: bigint;
-        Duration: bigint;
+        rootServiceName: string | null;
+        rootSpanName: string | null;
+        startTimeNs: string;
+        durationNs: string;
+        spanCount: number;
+        errorCount: number;
       }[];
 
-      // Step 3: Aggregate spans into TraceSummaryRow per trace
-      const traceMap = new Map<
-        string,
-        {
-          spans: typeof spanRows;
-        }
-      >();
+      // Step 3: Per-service breakdown (small result: ~traces × avg services)
+      const svcSql = `
+        SELECT TraceId, ServiceName, COUNT(*) as cnt,
+          MAX(CASE WHEN StatusCode = 'STATUS_CODE_ERROR' THEN 1 ELSE 0 END) as hasError
+        FROM otel_traces
+        WHERE TraceId IN (${placeholders})
+        GROUP BY TraceId, ServiceName
+      `;
+      const svcRows = this.sqliteConnection
+        .prepare(svcSql)
+        .all(...traceIds) as {
+        TraceId: string;
+        ServiceName: string;
+        cnt: number;
+        hasError: number;
+      }[];
 
-      for (const span of spanRows) {
-        let entry = traceMap.get(span.TraceId);
-        if (!entry) {
-          entry = { spans: [] };
-          traceMap.set(span.TraceId, entry);
+      const svcMap = new Map<
+        string,
+        { name: string; count: number; hasError: boolean }[]
+      >();
+      for (const row of svcRows) {
+        let arr = svcMap.get(row.TraceId);
+        if (!arr) {
+          arr = [];
+          svcMap.set(row.TraceId, arr);
         }
-        entry.spans.push(span);
+        arr.push({
+          name: row.ServiceName,
+          count: row.cnt,
+          hasError: row.hasError === 1,
+        });
       }
+
+      // Build lookup for aggregate rows
+      const aggMap = new Map(aggRows.map((r) => [r.TraceId, r]));
 
       // Build results in the same order as traceIds
       const data: dataFilterSchemas.TraceSummaryRow[] = [];
 
       for (const traceId of traceIds) {
-        const entry = traceMap.get(traceId);
-        if (!entry || entry.spans.length === 0) continue;
-
-        const spans = entry.spans;
-        const firstSpan = spans[0];
-        if (!firstSpan) continue;
-
-        // Find root span (empty ParentSpanId)
-        const rootSpan = spans.find((s) => !s.ParentSpanId) ?? firstSpan;
-
-        // Compute aggregates
-        let minTimestamp = firstSpan.Timestamp;
-        let maxEnd = firstSpan.Timestamp + firstSpan.Duration;
-        let errorCount = 0;
-        const serviceMap = new Map<
-          string,
-          { count: number; hasError: boolean }
-        >();
-
-        for (const span of spans) {
-          if (span.Timestamp < minTimestamp) minTimestamp = span.Timestamp;
-          const spanEnd = span.Timestamp + span.Duration;
-          if (spanEnd > maxEnd) maxEnd = spanEnd;
-          if (span.StatusCode === "STATUS_CODE_ERROR") errorCount++;
-
-          const svc = serviceMap.get(span.ServiceName);
-          if (svc) {
-            svc.count++;
-            if (span.StatusCode === "STATUS_CODE_ERROR") svc.hasError = true;
-          } else {
-            serviceMap.set(span.ServiceName, {
-              count: 1,
-              hasError: span.StatusCode === "STATUS_CODE_ERROR",
-            });
-          }
-        }
-
-        const durationNs = maxEnd - minTimestamp;
+        const agg = aggMap.get(traceId);
+        if (!agg) continue;
 
         data.push({
           traceId,
-          rootServiceName: rootSpan.ServiceName,
-          rootSpanName: rootSpan.SpanName,
-          startTimeNs: String(minTimestamp),
-          durationNs: String(durationNs),
-          spanCount: spans.length,
-          errorCount,
-          services: Array.from(serviceMap.entries()).map(([name, info]) => ({
-            name,
-            count: info.count,
-            hasError: info.hasError,
-          })),
+          rootServiceName: agg.rootServiceName ?? "",
+          rootSpanName: agg.rootSpanName ?? "",
+          startTimeNs: agg.startTimeNs,
+          durationNs: agg.durationNs,
+          spanCount: agg.spanCount,
+          errorCount: agg.errorCount,
+          services: svcMap.get(traceId) ?? [],
         });
       }
 

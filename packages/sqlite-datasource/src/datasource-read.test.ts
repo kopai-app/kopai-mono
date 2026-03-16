@@ -2123,6 +2123,9 @@ describe("OptimizedDatasource", () => {
     let ds: OptimizedDatasource;
     let readDs: datasource.ReadTelemetryDatasource;
     let insertSpan: ReturnType<typeof createInsertSpan>;
+    // Recent timestamp (within 7-day lookback window)
+    const recentNs = String(Date.now() * 1e6);
+    const recentEndNs = String(Date.now() * 1e6 + 1_000_000_000);
 
     beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
@@ -2145,23 +2148,23 @@ describe("OptimizedDatasource", () => {
         traceId: "t1",
         spanId: "s1",
         serviceName: "beta-svc",
-        startTimeNanos: "1000000000000000",
-        endTimeNanos: "1001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
       await insertSpan({
         traceId: "t2",
         spanId: "s2",
         serviceName: "alpha-svc",
-        startTimeNanos: "2000000000000000",
-        endTimeNanos: "2001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
       // duplicate service
       await insertSpan({
         traceId: "t3",
         spanId: "s3",
         serviceName: "beta-svc",
-        startTimeNanos: "3000000000000000",
-        endTimeNanos: "3001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
 
       const result = await readDs.getServices();
@@ -2173,23 +2176,23 @@ describe("OptimizedDatasource", () => {
         traceId: "t1",
         spanId: "s1",
         serviceName: "svc-a",
-        startTimeNanos: "1000000000000000",
-        endTimeNanos: "1001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
       await insertSpan({
         traceId: "t1",
         spanId: "s2",
         serviceName: "svc-b",
         parentSpanId: "s1",
-        startTimeNanos: "1000000000000000",
-        endTimeNanos: "1001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
       await insertSpan({
         traceId: "t2",
         spanId: "s3",
         serviceName: "svc-c",
-        startTimeNanos: "2000000000000000",
-        endTimeNanos: "2001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
 
       const result = await readDs.getServices();
@@ -2202,6 +2205,8 @@ describe("OptimizedDatasource", () => {
     let ds: OptimizedDatasource;
     let readDs: datasource.ReadTelemetryDatasource;
     let insertSpan: ReturnType<typeof createInsertSpan>;
+    const recentNs = String(Date.now() * 1e6);
+    const recentEndNs = String(Date.now() * 1e6 + 1_000_000_000);
 
     beforeEach(async () => {
       testConnection = initializeDatabase(":memory:");
@@ -2227,16 +2232,16 @@ describe("OptimizedDatasource", () => {
         spanId: "s1",
         serviceName: "my-svc",
         spanName: "POST /api",
-        startTimeNanos: "1000000000000000",
-        endTimeNanos: "1001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
       await insertSpan({
         traceId: "t2",
         spanId: "s2",
         serviceName: "my-svc",
         spanName: "GET /api",
-        startTimeNanos: "2000000000000000",
-        endTimeNanos: "2001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
       // duplicate operation
       await insertSpan({
@@ -2244,8 +2249,8 @@ describe("OptimizedDatasource", () => {
         spanId: "s3",
         serviceName: "my-svc",
         spanName: "GET /api",
-        startTimeNanos: "3000000000000000",
-        endTimeNanos: "3001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
 
       const result = await readDs.getOperations({ serviceName: "my-svc" });
@@ -2258,16 +2263,16 @@ describe("OptimizedDatasource", () => {
         spanId: "s1",
         serviceName: "svc-a",
         spanName: "op-a",
-        startTimeNanos: "1000000000000000",
-        endTimeNanos: "1001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
       await insertSpan({
         traceId: "t2",
         spanId: "s2",
         serviceName: "svc-b",
         spanName: "op-b",
-        startTimeNanos: "2000000000000000",
-        endTimeNanos: "2001000000000000",
+        startTimeNanos: recentNs,
+        endTimeNanos: recentEndNs,
       });
 
       const result = await readDs.getOperations({ serviceName: "svc-a" });
@@ -2361,6 +2366,41 @@ describe("OptimizedDatasource", () => {
       assertDefined(backend);
       expect(backend.count).toBe(2);
       expect(backend.hasError).toBe(true);
+    });
+
+    it("falls back to any span when trace has no root span", async () => {
+      // All child spans — no ParentSpanId = ''
+      await insertSpan({
+        traceId: "no-root",
+        spanId: "child-1",
+        parentSpanId: "missing-parent",
+        serviceName: "orphan-svc",
+        spanName: "orphan-op",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1000000200000000",
+      });
+      await insertSpan({
+        traceId: "no-root",
+        spanId: "child-2",
+        parentSpanId: "missing-parent",
+        serviceName: "orphan-svc-2",
+        spanName: "orphan-op-2",
+        startTimeNanos: "1000000050000000",
+        endTimeNanos: "1000000150000000",
+      });
+
+      const result = await readDs.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const summary = result.data[0];
+      assertDefined(summary);
+      expect(summary.traceId).toBe("no-root");
+      expect(summary.rootServiceName).toBeTruthy();
+      expect(summary.rootSpanName).toBeTruthy();
+      expect(summary.spanCount).toBe(2);
     });
 
     it("filters by serviceName", async () => {

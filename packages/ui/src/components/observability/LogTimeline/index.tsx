@@ -269,8 +269,12 @@ export function LogTimeline({
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
         e.target instanceof HTMLSelectElement;
-      if (isFormField && e.key === "Escape") {
-        (e.target as HTMLElement).blur();
+      if (
+        isFormField &&
+        e.key === "Escape" &&
+        e.target instanceof HTMLElement
+      ) {
+        e.target.blur();
         return;
       }
       if (isFormField) return;

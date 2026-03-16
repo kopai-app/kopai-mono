@@ -1,13 +1,17 @@
 import type { dataFilterSchemas } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
+/** Default lookback for services/operations discovery (7 days in ms). */
+const DISCOVERY_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
+
 export function buildServicesQuery(): {
   query: string;
   params: Record<string, unknown>;
 } {
+  const tsMin = String((Date.now() - DISCOVERY_LOOKBACK_MS) * 1e6);
   return {
-    query: `SELECT DISTINCT ServiceName FROM otel_traces ORDER BY ServiceName`,
-    params: {},
+    query: `SELECT DISTINCT ServiceName FROM otel_traces WHERE Timestamp >= {tsMin:DateTime64(9)} ORDER BY ServiceName`,
+    params: { tsMin: nanosToDateTime64(tsMin) },
   };
 }
 
@@ -15,9 +19,13 @@ export function buildOperationsQuery(filter: { serviceName: string }): {
   query: string;
   params: Record<string, unknown>;
 } {
+  const tsMin = String((Date.now() - DISCOVERY_LOOKBACK_MS) * 1e6);
   return {
-    query: `SELECT DISTINCT SpanName FROM otel_traces WHERE ServiceName = {serviceName:String} ORDER BY SpanName`,
-    params: { serviceName: filter.serviceName },
+    query: `SELECT DISTINCT SpanName FROM otel_traces WHERE ServiceName = {serviceName:String} AND Timestamp >= {tsMin:DateTime64(9)} ORDER BY SpanName`,
+    params: {
+      serviceName: filter.serviceName,
+      tsMin: nanosToDateTime64(tsMin),
+    },
   };
 }
 
@@ -119,8 +127,8 @@ export function buildTraceSummariesQuery(
   const query = `
 SELECT
   TraceId,
-  anyIf(ServiceName, ParentSpanId = '') as rootServiceName,
-  anyIf(SpanName, ParentSpanId = '') as rootSpanName,
+  if(anyIf(ServiceName, ParentSpanId = '') != '', anyIf(ServiceName, ParentSpanId = ''), any(ServiceName)) as rootServiceName,
+  if(anyIf(SpanName, ParentSpanId = '') != '', anyIf(SpanName, ParentSpanId = ''), any(SpanName)) as rootSpanName,
   min(Timestamp) as _startTime,
   toString(toUnixTimestamp64Nano(min(Timestamp))) as startTimeNs,
   toString(dateDiff('nanosecond', min(Timestamp), max(Timestamp + toIntervalNanosecond(Duration)))) as durationNs,

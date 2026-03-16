@@ -849,73 +849,49 @@ interface ObservabilityPageProps {
 
 export default function ObservabilityPage({ client }: ObservabilityPageProps) {
   const activeClient = client ?? getDefaultClient();
-  const urlState = useURLState();
   const {
     tab: activeTab,
     trace: selectedTraceId,
     span: selectedSpanId,
     compare: compareParam,
-  } = urlState;
+  } = useURLState();
 
   const handleTabChange = useCallback((tab: Tab) => {
     pushURLState({ tab });
   }, []);
 
-  const handleSelectTrace = useCallback(
-    (traceId: string) => {
-      pushURLState({
-        ...urlState,
-        tab: "services",
-        trace: traceId,
-      });
-    },
-    [urlState]
-  );
+  const handleSelectTrace = useCallback((traceId: string) => {
+    pushURLState({ ...readURLState(), tab: "services", trace: traceId });
+  }, []);
 
-  const handleSelectSpan = useCallback(
-    (spanId: string) => {
-      pushURLState(
-        {
-          ...urlState,
-          tab: "services",
-          span: spanId,
-        },
-        { replace: true }
-      );
-    },
-    [urlState]
-  );
-
-  const handleDeselectSpan = useCallback(() => {
+  const handleSelectSpan = useCallback((spanId: string) => {
     pushURLState(
-      {
-        ...urlState,
-        span: null,
-      },
+      { ...readURLState(), tab: "services", span: spanId },
       { replace: true }
     );
-  }, [urlState]);
+  }, []);
 
-  const handleCompare = useCallback(
-    (traceIds: [string, string]) => {
-      pushURLState({
-        ...urlState,
-        tab: "services",
-        trace: null,
-        span: null,
-        view: null,
-        uiFind: null,
-        viewStart: null,
-        viewEnd: null,
-        compare: traceIds.join(","),
-      });
-    },
-    [urlState]
-  );
+  const handleDeselectSpan = useCallback(() => {
+    pushURLState({ ...readURLState(), span: null }, { replace: true });
+  }, []);
+
+  const handleCompare = useCallback((traceIds: [string, string]) => {
+    pushURLState({
+      ...readURLState(),
+      tab: "services",
+      trace: null,
+      span: null,
+      view: null,
+      uiFind: null,
+      viewStart: null,
+      viewEnd: null,
+      compare: traceIds.join(","),
+    });
+  }, []);
 
   const handleBack = useCallback(() => {
     pushURLState({
-      ...urlState,
+      ...readURLState(),
       tab: "services",
       trace: null,
       span: null,
@@ -925,7 +901,7 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
       viewEnd: null,
       compare: null,
     });
-  }, [urlState]);
+  }, []);
 
   return (
     <KopaiSDKProvider client={activeClient}>

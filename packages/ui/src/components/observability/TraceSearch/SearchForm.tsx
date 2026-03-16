@@ -1,10 +1,11 @@
 /**
  * SearchForm - Jaeger-style sidebar search form for trace filtering.
+ * Owns its own form state; parent only receives values on submit.
  */
 
-export interface SearchFormProps {
-  services: string[];
-  operations: string[];
+import { useState, useEffect } from "react";
+
+export interface SearchFormValues {
   service: string;
   operation: string;
   tags: string;
@@ -12,14 +13,13 @@ export interface SearchFormProps {
   minDuration: string;
   maxDuration: string;
   limit: number;
-  onServiceChange: (service: string) => void;
-  onOperationChange: (operation: string) => void;
-  onTagsChange: (tags: string) => void;
-  onLookbackChange: (lookback: string) => void;
-  onMinDurationChange: (minDuration: string) => void;
-  onMaxDurationChange: (maxDuration: string) => void;
-  onLimitChange: (limit: number) => void;
-  onSubmit: () => void;
+}
+
+export interface SearchFormProps {
+  services: string[];
+  operations: string[];
+  initialValues?: Partial<SearchFormValues>;
+  onSubmit: (values: SearchFormValues) => void;
   isLoading?: boolean;
 }
 
@@ -40,23 +40,39 @@ const inputClass =
 export function SearchForm({
   services,
   operations,
-  service,
-  operation,
-  tags,
-  lookback,
-  minDuration,
-  maxDuration,
-  limit,
-  onServiceChange,
-  onOperationChange,
-  onTagsChange,
-  onLookbackChange,
-  onMinDurationChange,
-  onMaxDurationChange,
-  onLimitChange,
+  initialValues,
   onSubmit,
   isLoading,
 }: SearchFormProps) {
+  const [service, setService] = useState(initialValues?.service ?? "");
+  const [operation, setOperation] = useState(initialValues?.operation ?? "");
+  const [tags, setTags] = useState(initialValues?.tags ?? "");
+  const [lookback, setLookback] = useState(initialValues?.lookback ?? "");
+  const [minDuration, setMinDuration] = useState(
+    initialValues?.minDuration ?? ""
+  );
+  const [maxDuration, setMaxDuration] = useState(
+    initialValues?.maxDuration ?? ""
+  );
+  const [limit, setLimit] = useState(initialValues?.limit ?? 20);
+
+  // Sync service from URL-driven changes
+  useEffect(() => {
+    if (initialValues?.service != null) setService(initialValues.service);
+  }, [initialValues?.service]);
+
+  const handleSubmit = () => {
+    onSubmit({
+      service,
+      operation,
+      tags,
+      lookback,
+      minDuration,
+      maxDuration,
+      limit,
+    });
+  };
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
@@ -68,7 +84,7 @@ export function SearchForm({
         <span className="text-xs text-muted-foreground">Service</span>
         <select
           value={service}
-          onChange={(e) => onServiceChange(e.target.value)}
+          onChange={(e) => setService(e.target.value)}
           className={inputClass}
         >
           <option value="">All Services</option>
@@ -85,7 +101,7 @@ export function SearchForm({
         <span className="text-xs text-muted-foreground">Operation</span>
         <select
           value={operation}
-          onChange={(e) => onOperationChange(e.target.value)}
+          onChange={(e) => setOperation(e.target.value)}
           className={inputClass}
         >
           <option value="">All Operations</option>
@@ -102,7 +118,7 @@ export function SearchForm({
         <span className="text-xs text-muted-foreground">Tags</span>
         <textarea
           value={tags}
-          onChange={(e) => onTagsChange(e.target.value)}
+          onChange={(e) => setTags(e.target.value)}
           placeholder={'key=value key2="quoted value"'}
           rows={3}
           className={`${inputClass} placeholder:text-muted-foreground/50 resize-y`}
@@ -114,7 +130,7 @@ export function SearchForm({
         <span className="text-xs text-muted-foreground">Lookback</span>
         <select
           value={lookback}
-          onChange={(e) => onLookbackChange(e.target.value)}
+          onChange={(e) => setLookback(e.target.value)}
           className={inputClass}
         >
           <option value="">All time</option>
@@ -134,7 +150,7 @@ export function SearchForm({
             type="text"
             placeholder="e.g. 100ms"
             value={minDuration}
-            onChange={(e) => onMinDurationChange(e.target.value)}
+            onChange={(e) => setMinDuration(e.target.value)}
             className={`${inputClass} placeholder:text-muted-foreground/50`}
           />
         </label>
@@ -144,7 +160,7 @@ export function SearchForm({
             type="text"
             placeholder="e.g. 5s"
             value={maxDuration}
-            onChange={(e) => onMaxDurationChange(e.target.value)}
+            onChange={(e) => setMaxDuration(e.target.value)}
             className={`${inputClass} placeholder:text-muted-foreground/50`}
           />
         </label>
@@ -160,9 +176,7 @@ export function SearchForm({
           value={limit}
           onChange={(e) => {
             const n = Number(e.target.value);
-            onLimitChange(
-              Number.isNaN(n) ? 20 : Math.max(1, Math.min(1000, n))
-            );
+            setLimit(Number.isNaN(n) ? 20 : Math.max(1, Math.min(1000, n)));
           }}
           className={inputClass}
         />
@@ -170,7 +184,7 @@ export function SearchForm({
 
       {/* Submit */}
       <button
-        onClick={onSubmit}
+        onClick={handleSubmit}
         disabled={isLoading}
         className="w-full px-4 py-2 text-sm font-medium bg-foreground text-background rounded hover:bg-foreground/90 transition-colors disabled:opacity-50"
       >

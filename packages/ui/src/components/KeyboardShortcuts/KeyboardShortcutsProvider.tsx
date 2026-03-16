@@ -48,12 +48,12 @@ export function KeyboardShortcutsProvider({
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      const target = e.target as HTMLElement;
+      if (!(e.target instanceof HTMLElement)) return;
       if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.tagName === "SELECT" ||
-        target.isContentEditable
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "TEXTAREA" ||
+        e.target.tagName === "SELECT" ||
+        e.target.isContentEditable
       ) {
         return;
       }

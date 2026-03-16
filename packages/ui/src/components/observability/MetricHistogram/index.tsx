@@ -133,7 +133,8 @@ function buildHistogramData(
         };
         buckets.push(bucket);
       }
-      bucket[seriesName] = ((bucket[seriesName] as number) ?? 0) + count;
+      const prev = bucket[seriesName];
+      bucket[seriesName] = (typeof prev === "number" ? prev : 0) + count;
     }
   }
 
