@@ -1294,8 +1294,7 @@ describe("ClickHouseReadDatasource", () => {
       expect(t!.rootServiceName).toBe("order-service");
       expect(t!.rootSpanName).toBe("POST /api/orders");
       expect(t!.spanCount).toBe(1);
-      // Seed data uses "ERROR" not "STATUS_CODE_ERROR", so errorCount = 0
-      expect(t!.errorCount).toBe(0);
+      expect(t!.errorCount).toBe(1);
     });
 
     it("filters by serviceName", async () => {

@@ -315,7 +315,7 @@ export class ClickHouseReadDatasource
     requestContext?: unknown;
   }): Promise<{ services: string[] }> {
     assertClickHouseRequestContext(opts?.requestContext);
-    const { database, username, password } = opts.requestContext;
+    const { database, username, password } = opts!.requestContext;
     const log = getLogger(opts.requestContext);
     const start = performance.now();
 
@@ -486,11 +486,11 @@ export class ClickHouseReadDatasource
           const existing = serviceMap.get(svcName);
           if (existing) {
             existing.count++;
-            if (statusCode === "STATUS_CODE_ERROR") existing.hasError = true;
+            if (statusCode === "ERROR") existing.hasError = true;
           } else {
             serviceMap.set(svcName, {
               count: 1,
-              hasError: statusCode === "STATUS_CODE_ERROR",
+              hasError: statusCode === "ERROR",
             });
           }
         }

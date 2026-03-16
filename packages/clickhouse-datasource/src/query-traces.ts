@@ -133,7 +133,7 @@ SELECT
   toString(toUnixTimestamp64Nano(min(Timestamp))) as startTimeNs,
   toString(dateDiff('nanosecond', min(Timestamp), max(Timestamp + toIntervalNanosecond(Duration)))) as durationNs,
   toUInt32(count()) as spanCount,
-  toUInt32(countIf(StatusCode = 'STATUS_CODE_ERROR')) as errorCount,
+  toUInt32(countIf(StatusCode = 'ERROR')) as errorCount,
   groupArray(tuple(ServiceName, StatusCode)) as _serviceData
 FROM otel_traces
 ${whereClause}

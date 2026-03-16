@@ -15,7 +15,8 @@ export function DurationBar({
   maxDurationMs,
   color,
 }: DurationBarProps) {
-  const widthPct = maxDurationMs > 0 ? (durationMs / maxDurationMs) * 100 : 0;
+  const rawPct = maxDurationMs > 0 ? (durationMs / maxDurationMs) * 100 : 0;
+  const widthPct = durationMs <= 0 ? 0 : Math.min(Math.max(rawPct, 1), 100);
 
   return (
     <div className="flex items-center gap-2">
@@ -23,7 +24,7 @@ export function DurationBar({
         <div
           className="h-full rounded"
           style={{
-            width: `${Math.max(widthPct, 1)}%`,
+            width: `${widthPct}%`,
             backgroundColor: color,
             opacity: 0.7,
           }}

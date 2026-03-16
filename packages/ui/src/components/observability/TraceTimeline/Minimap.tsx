@@ -2,7 +2,7 @@
  * Minimap - Compressed overview of all spans with a draggable viewport.
  */
 
-import { useRef, useCallback, useMemo } from "react";
+import { useRef, useCallback, useMemo, useEffect } from "react";
 import type { ParsedTrace } from "../types.js";
 import { getSpanBarColor } from "../utils/colors.js";
 import { flattenAllSpans } from "../utils/flatten-tree.js";
@@ -35,6 +35,13 @@ export function Minimap({
     origViewStart: number;
     origViewEnd: number;
   } | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      cleanupRef.current?.();
+    };
+  }, []);
 
   const allSpans = useMemo(
     () => flattenAllSpans(trace.rootSpans),
@@ -110,12 +117,14 @@ export function Minimap({
 
       const handleMouseUp = () => {
         dragRef.current = null;
+        cleanupRef.current = null;
         window.removeEventListener("mousemove", handleMouseMove);
         window.removeEventListener("mouseup", handleMouseUp);
       };
 
       window.addEventListener("mousemove", handleMouseMove);
       window.addEventListener("mouseup", handleMouseUp);
+      cleanupRef.current = handleMouseUp;
     },
     [viewStart, viewEnd, onViewChange, clampView]
   );

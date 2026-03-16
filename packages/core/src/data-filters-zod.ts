@@ -283,7 +283,7 @@ export const traceSummariesFilterSchema = z.object({
   sortOrder: z.enum(["ASC", "DESC"]).default("DESC"),
 });
 
-export type TraceSummariesFilter = z.infer<typeof traceSummariesFilterSchema>;
+export type TraceSummariesFilter = z.input<typeof traceSummariesFilterSchema>;
 
 export const traceSummaryServiceSchema = z.object({
   name: z.string(),

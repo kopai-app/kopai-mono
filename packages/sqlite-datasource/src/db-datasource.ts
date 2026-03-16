@@ -1039,8 +1039,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         if (filter.spanAttributes) {
           for (const [key, value] of Object.entries(filter.spanAttributes)) {
             const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+            const safePath = jsonPath.replace(/'/g, "''");
             spanClauses.push(
-              `json_extract(s.SpanAttributes, '${jsonPath}') = ?`
+              `json_extract(s.SpanAttributes, '${safePath}') = ?`
             );
             spanFilterParams.push(value);
           }
@@ -1050,8 +1051,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
             filter.resourceAttributes
           )) {
             const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+            const safePath = jsonPath.replace(/'/g, "''");
             spanClauses.push(
-              `json_extract(s.ResourceAttributes, '${jsonPath}') = ?`
+              `json_extract(s.ResourceAttributes, '${safePath}') = ?`
             );
             spanFilterParams.push(value);
           }

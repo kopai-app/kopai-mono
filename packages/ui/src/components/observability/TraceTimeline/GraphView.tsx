@@ -110,8 +110,10 @@ function layoutNodes(
     roots.push(nodeMap.keys().next().value!);
   }
 
-  // BFS to assign layers
+  // BFS to assign layers (with cycle protection)
   const layerOf = new Map<string, number>();
+  const enqueueCount = new Map<string, number>();
+  const maxEnqueue = nodeMap.size * 2;
   const queue: string[] = [];
   for (const r of roots) {
     layerOf.set(r, 0);
@@ -124,8 +126,10 @@ function layoutNodes(
     if (!kids) continue;
     for (const kid of kids) {
       const prev = layerOf.get(kid);
-      if (prev === undefined || curLayer + 1 > prev) {
+      const count = enqueueCount.get(kid) ?? 0;
+      if ((prev === undefined || curLayer + 1 > prev) && count < maxEnqueue) {
         layerOf.set(kid, curLayer + 1);
+        enqueueCount.set(kid, count + 1);
         queue.push(kid);
       }
     }
