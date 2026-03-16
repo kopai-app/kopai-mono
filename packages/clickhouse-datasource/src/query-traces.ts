@@ -35,41 +35,26 @@ export function buildTraceSummariesQuery(
   query: string;
   params: Record<string, unknown>;
 } {
-  const conditions: string[] = [];
+  const outerConditions: string[] = [];
+  const spanConditions: string[] = [];
   const havingConditions: string[] = [];
   const params: Record<string, unknown> = {};
   const limit = filter.limit ?? 20;
   const sortOrder = filter.sortOrder === "ASC" ? "ASC" : "DESC";
 
+  // Span-level filters — used in subquery to find matching TraceIds
   if (filter.serviceName) {
-    conditions.push("ServiceName = {serviceName:String}");
+    spanConditions.push("ServiceName = {serviceName:String}");
     params.serviceName = filter.serviceName;
   }
   if (filter.spanName) {
-    conditions.push("SpanName = {spanName:String}");
+    spanConditions.push("SpanName = {spanName:String}");
     params.spanName = filter.spanName;
   }
-  if (filter.timestampMin != null) {
-    conditions.push("Timestamp >= {tsMin:DateTime64(9)}");
-    params.tsMin = nanosToDateTime64(filter.timestampMin);
-  }
-  if (filter.timestampMax != null) {
-    conditions.push("Timestamp <= {tsMax:DateTime64(9)}");
-    params.tsMax = nanosToDateTime64(filter.timestampMax);
-  }
-  if (filter.durationMin != null) {
-    conditions.push("Duration >= {durMin:UInt64}");
-    params.durMin = filter.durationMin;
-  }
-  if (filter.durationMax != null) {
-    conditions.push("Duration <= {durMax:UInt64}");
-    params.durMax = filter.durationMax;
-  }
-
   if (filter.spanAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.spanAttributes)) {
-      conditions.push(
+      spanConditions.push(
         `SpanAttributes[{spanAttrKey${String(i)}:String}] = {spanAttrVal${String(i)}:String}`
       );
       params[`spanAttrKey${String(i)}`] = key;
@@ -80,13 +65,46 @@ export function buildTraceSummariesQuery(
   if (filter.resourceAttributes) {
     let i = 0;
     for (const [key, value] of Object.entries(filter.resourceAttributes)) {
-      conditions.push(
+      spanConditions.push(
         `ResourceAttributes[{resAttrKey${String(i)}:String}] = {resAttrVal${String(i)}:String}`
       );
       params[`resAttrKey${String(i)}`] = key;
       params[`resAttrVal${String(i)}`] = value;
       i++;
     }
+  }
+
+  // Time range — applied to both outer query and span subquery
+  if (filter.timestampMin != null) {
+    outerConditions.push("Timestamp >= {tsMin:DateTime64(9)}");
+    spanConditions.push("Timestamp >= {tsMin:DateTime64(9)}");
+    params.tsMin = nanosToDateTime64(filter.timestampMin);
+  }
+  if (filter.timestampMax != null) {
+    outerConditions.push("Timestamp <= {tsMax:DateTime64(9)}");
+    spanConditions.push("Timestamp <= {tsMax:DateTime64(9)}");
+    params.tsMax = nanosToDateTime64(filter.timestampMax);
+  }
+
+  // Restrict to matching TraceIds when span-level filters are present
+  if (spanConditions.length > 0) {
+    outerConditions.push(
+      `TraceId IN (SELECT DISTINCT TraceId FROM otel_traces WHERE ${spanConditions.join(" AND ")})`
+    );
+  }
+
+  // Duration filters — trace-level, applied as HAVING on aggregated duration
+  if (filter.durationMin != null) {
+    havingConditions.push(
+      "dateDiff('nanosecond', min(Timestamp), max(Timestamp + toIntervalNanosecond(Duration))) >= {durMin:UInt64}"
+    );
+    params.durMin = filter.durationMin;
+  }
+  if (filter.durationMax != null) {
+    havingConditions.push(
+      "dateDiff('nanosecond', min(Timestamp), max(Timestamp + toIntervalNanosecond(Duration))) <= {durMax:UInt64}"
+    );
+    params.durMax = filter.durationMax;
   }
 
   // Cursor pagination on (startTimeNs, TraceId) — applied as HAVING since startTimeNs is aggregate
@@ -118,7 +136,7 @@ export function buildTraceSummariesQuery(
   }
 
   const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    outerConditions.length > 0 ? `WHERE ${outerConditions.join(" AND ")}` : "";
   const havingClause =
     havingConditions.length > 0
       ? `HAVING ${havingConditions.join(" AND ")}`

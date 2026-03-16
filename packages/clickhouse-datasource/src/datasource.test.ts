@@ -562,6 +562,24 @@ async function seedTraces(client: ClickHouseClient) {
         "Links.TraceState": [""],
         "Links.Attributes": [{ "link.type": "follows_from" }],
       },
+      // Multi-service trace: order-service root + payment-service child
+      makeSpan({
+        Timestamp: "2024-01-01 00:00:04.000000000",
+        TraceId: "trace-003",
+        SpanId: "span-004",
+        SpanName: "POST /api/checkout",
+        ServiceName: "order-service",
+        Duration: 20000000,
+      }),
+      makeSpan({
+        Timestamp: "2024-01-01 00:00:04.500000000",
+        TraceId: "trace-003",
+        SpanId: "span-005",
+        ParentSpanId: "span-004",
+        SpanName: "charge",
+        ServiceName: "payment-service",
+        Duration: 10000000,
+      }),
     ],
     format: "JSONEachRow",
   });
@@ -1012,8 +1030,8 @@ describe("ClickHouseReadDatasource", () => {
     it("returns all traces with no filters", async () => {
       const result = await ds.getTraces({ requestContext: requestContext() });
 
-      // 3 original + 2 recent-timestamp spans seeded for getServices/getOperations
-      expect(result.data.length).toBe(5);
+      // 5 original + 2 recent-timestamp spans seeded for getServices/getOperations
+      expect(result.data.length).toBe(7);
       expect(result.nextCursor).toBeNull();
     });
 
@@ -1035,8 +1053,8 @@ describe("ClickHouseReadDatasource", () => {
         requestContext: requestContext(),
       });
 
-      // 1 original + 1 recent-timestamp span
-      expect(result.data.length).toBe(2);
+      // 2 original (trace-002 + trace-003) + 1 recent-timestamp span
+      expect(result.data.length).toBe(3);
       expect(result.data.every((r) => r.ServiceName === "order-service")).toBe(
         true
       );
@@ -1297,7 +1315,7 @@ describe("ClickHouseReadDatasource", () => {
       expect(t!.errorCount).toBe(1);
     });
 
-    it("filters by serviceName", async () => {
+    it("filters by serviceName and preserves full trace", async () => {
       const result = await ds.getTraceSummaries({
         serviceName: "order-service",
         limit: 20,
@@ -1310,6 +1328,15 @@ describe("ClickHouseReadDatasource", () => {
           r.services.some((s) => s.name === "order-service")
         )
       ).toBe(true);
+
+      // Multi-service trace-003 should include all spans/services, not just order-service
+      const multi = result.data.find((r) => r.traceId === "trace-003");
+      expect(multi).toBeDefined();
+      expect(multi!.spanCount).toBe(2);
+      expect(multi!.services.map((s) => s.name).sort()).toEqual([
+        "order-service",
+        "payment-service",
+      ]);
     });
 
     it("sorts DESC by default", async () => {
@@ -1950,8 +1977,8 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: tenantBRequestContext(),
       });
 
-      // Tenant A has 3 original + 2 recent-timestamp traces, tenant B has 1 + 1
-      expect(tenantA.data.length).toBe(5);
+      // Tenant A has 5 original + 2 recent-timestamp traces, tenant B has 1 + 1
+      expect(tenantA.data.length).toBe(7);
       expect(tenantB.data.length).toBe(2);
 
       // No cross-contamination

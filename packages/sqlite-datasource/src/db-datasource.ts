@@ -1012,11 +1012,19 @@ export class DbDatasource implements datasource.TelemetryDatasource {
 
       // If we have span-level filters, we need to restrict trace IDs to those
       // containing matching spans
+      // Duration filters apply at trace level (End - Start), not span level
+      if (filter.durationMin != null) {
+        traceIdClauses.push("(t.End - t.Start) >= ?");
+        traceIdParams.push(BigInt(filter.durationMin));
+      }
+      if (filter.durationMax != null) {
+        traceIdClauses.push("(t.End - t.Start) <= ?");
+        traceIdParams.push(BigInt(filter.durationMax));
+      }
+
       const hasSpanFilters =
         filter.serviceName ||
         filter.spanName ||
-        filter.durationMin != null ||
-        filter.durationMax != null ||
         filter.spanAttributes ||
         filter.resourceAttributes;
 
@@ -1032,14 +1040,6 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         if (filter.spanName) {
           spanClauses.push("s.SpanName = ?");
           spanFilterParams.push(filter.spanName);
-        }
-        if (filter.durationMin != null) {
-          spanClauses.push("s.Duration >= ?");
-          spanFilterParams.push(BigInt(filter.durationMin));
-        }
-        if (filter.durationMax != null) {
-          spanClauses.push("s.Duration <= ?");
-          spanFilterParams.push(BigInt(filter.durationMax));
         }
         if (filter.spanAttributes) {
           for (const [key, value] of Object.entries(filter.spanAttributes)) {

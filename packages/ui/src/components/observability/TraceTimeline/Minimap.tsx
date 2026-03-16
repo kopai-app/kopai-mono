@@ -54,6 +54,7 @@ export function Minimap({
     const el = containerRef.current;
     if (!el) return 0;
     const rect = el.getBoundingClientRect();
+    if (!rect.width) return 0;
     return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   }, []);
 
@@ -87,6 +88,7 @@ export function Minimap({
         if (!drag || !containerRef.current) return;
 
         const rect = containerRef.current.getBoundingClientRect();
+        if (!rect.width) return;
         const deltaFrac = (ev.clientX - drag.startX) / rect.width;
 
         let newStart: number;
@@ -133,6 +135,7 @@ export function Minimap({
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent) => {
       if (dragRef.current) return;
+      if (e.target !== e.currentTarget) return;
       const frac = getFraction(e.clientX);
       const width = viewEnd - viewStart;
       const half = width / 2;
@@ -140,6 +143,25 @@ export function Minimap({
       onViewChange(s, eVal);
     },
     [viewStart, viewEnd, onViewChange, getFraction, clampView]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const step = 0.05;
+      const width = viewEnd - viewStart;
+      let newStart: number;
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        newStart = viewStart - step;
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        newStart = viewStart + step;
+      } else {
+        return;
+      }
+      e.preventDefault();
+      const [s, eVal] = clampView(newStart, newStart + width);
+      onViewChange(s, eVal);
+    },
+    [viewStart, viewEnd, onViewChange, clampView]
   );
 
   const viewStartPct = viewStart * 100;
@@ -160,7 +182,9 @@ export function Minimap({
       className="relative w-full border-b border-border bg-muted/30 select-none"
       style={{ height: MINIMAP_HEIGHT }}
       onClick={handleBackgroundClick}
+      onKeyDown={handleKeyDown}
       role="slider"
+      tabIndex={0}
       aria-label="Trace minimap viewport"
       aria-valuemin={0}
       aria-valuemax={100}

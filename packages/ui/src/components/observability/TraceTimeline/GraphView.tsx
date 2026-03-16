@@ -132,7 +132,7 @@ function layoutNodes(
     for (const kid of kids) {
       const prev = layerOf.get(kid);
       const count = enqueueCount.get(kid) ?? 0;
-      if ((prev === undefined || curLayer + 1 > prev) && count < maxEnqueue) {
+      if (prev === undefined && count < maxEnqueue) {
         layerOf.set(kid, curLayer + 1);
         enqueueCount.set(kid, count + 1);
         queue.push(kid);
