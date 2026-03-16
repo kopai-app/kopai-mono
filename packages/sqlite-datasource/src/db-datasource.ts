@@ -989,6 +989,11 @@ export class DbDatasource implements datasource.TelemetryDatasource {
 
       if (filter.cursor) {
         const colonIdx = filter.cursor.indexOf(":");
+        if (colonIdx === -1) {
+          throw new SqliteDatasourceQueryError(
+            "Invalid cursor format: expected '{timestamp}:{id}'"
+          );
+        }
         const cursorTs = BigInt(filter.cursor.slice(0, colonIdx));
         const cursorTraceId = filter.cursor.slice(colonIdx + 1);
 
@@ -1062,13 +1067,12 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         spanFilterJoin = `AND t.TraceId IN (SELECT DISTINCT TraceId FROM otel_traces s WHERE ${spanClauses.join(" AND ")})`;
       }
 
-      const orderDir = sortOrder === "ASC" ? "ASC" : "DESC";
       const traceIdSql = `
         SELECT t.TraceId, t.Start
         FROM otel_traces_trace_id_ts t
         WHERE ${traceIdClauses.join(" AND ")}
         ${spanFilterJoin}
-        ORDER BY t.Start ${orderDir}, t.TraceId ${orderDir}
+        ORDER BY t.Start ${sortOrder}, t.TraceId ${sortOrder}
         LIMIT ?
       `;
 

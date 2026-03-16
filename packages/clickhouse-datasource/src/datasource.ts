@@ -316,7 +316,7 @@ export class ClickHouseReadDatasource
   }): Promise<{ services: string[] }> {
     assertClickHouseRequestContext(opts?.requestContext);
     const { database, username, password } = opts!.requestContext;
-    const log = getLogger(opts.requestContext);
+    const log = getLogger(opts!.requestContext);
     const start = performance.now();
 
     let chNode: string | undefined;

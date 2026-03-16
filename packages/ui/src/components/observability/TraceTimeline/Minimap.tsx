@@ -74,6 +74,7 @@ export function Minimap({
     (e: React.MouseEvent, mode: DragMode) => {
       e.preventDefault();
       e.stopPropagation();
+      cleanupRef.current?.();
       dragRef.current = {
         mode,
         startX: e.clientX,

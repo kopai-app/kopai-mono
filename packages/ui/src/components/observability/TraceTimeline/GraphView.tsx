@@ -174,14 +174,6 @@ function layoutNodes(
   return nodes;
 }
 
-// ── Brightness check ──
-
-function isLightColor(hslStr: string): boolean {
-  const match = hslStr.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
-  if (!match) return false;
-  return parseInt(match[3]!, 10) > 55;
-}
-
 // ── Component ──
 
 export function GraphView({ trace }: GraphViewProps) {
@@ -274,7 +266,7 @@ export function GraphView({ trace }: GraphViewProps) {
         {nodes.map((node) => {
           const color = getServiceColor(node.name);
           const hasError = node.errorCount > 0;
-          const textColor = isLightColor(color) ? "#1e293b" : "#f8fafc";
+          const textColor = "#f8fafc";
           const nx = padding + node.x;
           const ny = padding + node.y;
 
