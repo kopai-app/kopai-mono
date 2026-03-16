@@ -448,6 +448,60 @@ describe("E2E: OTEL Collector → ClickHouse → ReadDatasource", () => {
     });
   });
 
+  describe("getServices", () => {
+    it("returns at least TEST_SERVICE_NAME", async () => {
+      const result = await ds.getServices({
+        requestContext: requestContext(),
+      });
+
+      expect(result.services).toContain(TEST_SERVICE_NAME);
+    });
+  });
+
+  describe("getOperations", () => {
+    it("returns operations for TEST_SERVICE_NAME", async () => {
+      const result = await ds.getOperations({
+        serviceName: TEST_SERVICE_NAME,
+        requestContext: requestContext(),
+      });
+
+      expect(result.operations).toContain("GET /api/e2e-test");
+      expect(result.operations).toContain("DB query");
+    });
+  });
+
+  describe("getTraceSummaries", () => {
+    it("returns summaries with data", async () => {
+      const result = await ds.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      expect(result.data.length).toBeGreaterThan(0);
+      const summary = result.data[0]!;
+      expect(summary.traceId).toBeDefined();
+      expect(summary.spanCount).toBeGreaterThan(0);
+      expect(summary.services.length).toBeGreaterThan(0);
+    });
+
+    it("filters by serviceName", async () => {
+      const result = await ds.getTraceSummaries({
+        serviceName: TEST_SERVICE_NAME,
+        limit: 20,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      expect(result.data.length).toBeGreaterThan(0);
+      expect(
+        result.data.every((r) =>
+          r.services.some((s) => s.name === TEST_SERVICE_NAME)
+        )
+      ).toBe(true);
+    });
+  });
+
   describe("discoverMetrics", () => {
     beforeAll(async () => {
       const schema = getDiscoverMVSchema(CH_DATABASE);

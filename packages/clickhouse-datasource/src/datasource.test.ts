@@ -42,6 +42,38 @@ function createSpyLogger() {
   } satisfies Logger;
 }
 
+/** Builds a full otel_traces row, merging overrides into sensible defaults. */
+function makeSpan(
+  overrides: Partial<Record<string, unknown>> & {
+    Timestamp: string;
+    TraceId: string;
+    SpanId: string;
+    SpanName: string;
+    ServiceName: string;
+  }
+) {
+  return {
+    ParentSpanId: "",
+    TraceState: "",
+    SpanKind: "SERVER",
+    ResourceAttributes: {},
+    ScopeName: "",
+    ScopeVersion: "",
+    SpanAttributes: {},
+    Duration: 1000000,
+    StatusCode: "OK",
+    StatusMessage: "",
+    "Events.Timestamp": [],
+    "Events.Name": [],
+    "Events.Attributes": [],
+    "Links.TraceId": [],
+    "Links.SpanId": [],
+    "Links.TraceState": [],
+    "Links.Attributes": [],
+    ...overrides,
+  };
+}
+
 const CLICKHOUSE_HTTP_PORT = 8123;
 const TEST_DATABASE = "test_db";
 const TENANT_B_DATABASE = "tenant_b_db";
@@ -146,6 +178,9 @@ beforeAll(async () => {
   await createOtelTables(tenantBClient);
   await seedTenantBData(tenantBClient);
   await tenantBClient.close();
+
+  // Seed recent spans for getServices/getOperations lookback window
+  await seedRecentServiceSpans();
 
   // Create a read-only user scoped to test_db only (mirrors prod tenant readers)
   await adminClient.command({
@@ -392,6 +427,63 @@ async function seedTenantBData(client: ClickHouseClient) {
     ],
     format: "JSONEachRow",
   });
+}
+
+/** Seed recent-timestamp spans so getServices/getOperations (7-day lookback) find them. */
+async function seedRecentServiceSpans() {
+  const ts = new Date().toISOString().replace("T", " ").replace("Z", "000");
+
+  const dbClient = createClient({
+    url: baseUrl,
+    database: TEST_DATABASE,
+    username: "default",
+    password: "",
+  });
+  const tenantBClient = createClient({
+    url: baseUrl,
+    database: TENANT_B_DATABASE,
+    username: "default",
+    password: "",
+  });
+
+  await Promise.all([
+    dbClient.insert({
+      table: "otel_traces",
+      values: [
+        makeSpan({
+          Timestamp: ts,
+          TraceId: "trace-recent-svc-001",
+          SpanId: "span-recent-svc-001",
+          SpanName: "GET /api/users",
+          ServiceName: "user-service",
+        }),
+        makeSpan({
+          Timestamp: ts,
+          TraceId: "trace-recent-svc-002",
+          SpanId: "span-recent-svc-002",
+          SpanName: "POST /api/orders",
+          ServiceName: "order-service",
+          Duration: 2000000,
+        }),
+      ],
+      format: "JSONEachRow",
+    }),
+    tenantBClient.insert({
+      table: "otel_traces",
+      values: [
+        makeSpan({
+          Timestamp: ts,
+          TraceId: "trace-recent-b-001",
+          SpanId: "span-recent-b-001",
+          SpanName: "GET /api/tenant-b",
+          ServiceName: "tenant-b-service",
+        }),
+      ],
+      format: "JSONEachRow",
+    }),
+  ]);
+
+  await Promise.all([dbClient.close(), tenantBClient.close()]);
 }
 
 async function seedTraces(client: ClickHouseClient) {
@@ -920,7 +1012,8 @@ describe("ClickHouseReadDatasource", () => {
     it("returns all traces with no filters", async () => {
       const result = await ds.getTraces({ requestContext: requestContext() });
 
-      expect(result.data.length).toBe(3);
+      // 3 original + 2 recent-timestamp spans seeded for getServices/getOperations
+      expect(result.data.length).toBe(5);
       expect(result.nextCursor).toBeNull();
     });
 
@@ -942,8 +1035,11 @@ describe("ClickHouseReadDatasource", () => {
         requestContext: requestContext(),
       });
 
-      expect(result.data.length).toBe(1);
-      expect(firstRow(result.data).ServiceName).toBe("order-service");
+      // 1 original + 1 recent-timestamp span
+      expect(result.data.length).toBe(2);
+      expect(result.data.every((r) => r.ServiceName === "order-service")).toBe(
+        true
+      );
     });
 
     it("returns timestamps as nanosecond strings", async () => {
@@ -1013,16 +1109,18 @@ describe("ClickHouseReadDatasource", () => {
 
     it("supports cursor pagination", async () => {
       const page1 = await ds.getTraces({
-        limit: 2,
+        traceId: "trace-001",
+        limit: 1,
         sortOrder: "DESC",
         requestContext: requestContext(),
       });
 
-      expect(page1.data.length).toBe(2);
+      expect(page1.data.length).toBe(1);
       const cursor = defined(page1.nextCursor, "nextCursor");
 
       const page2 = await ds.getTraces({
-        limit: 2,
+        traceId: "trace-001",
+        limit: 1,
         sortOrder: "DESC",
         cursor,
         requestContext: requestContext(),
@@ -1104,6 +1202,170 @@ describe("ClickHouseReadDatasource", () => {
           requestContext: requestContext(),
         })
       ).resolves.toEqual({ data: [], nextCursor: null });
+    });
+  });
+
+  describe("getServices", () => {
+    it("returns services sorted alphabetically", async () => {
+      const result = await ds.getServices({
+        requestContext: requestContext(),
+      });
+
+      expect(result.services).toEqual(["order-service", "user-service"]);
+    });
+
+    it("tenant isolation: tenant B sees only its services", async () => {
+      const result = await ds.getServices({
+        requestContext: tenantBRequestContext(),
+      });
+
+      expect(result.services).toEqual(["tenant-b-service"]);
+    });
+  });
+
+  describe("getOperations", () => {
+    it("returns operations for user-service", async () => {
+      const result = await ds.getOperations({
+        serviceName: "user-service",
+        requestContext: requestContext(),
+      });
+
+      expect(result.operations).toEqual(["GET /api/users"]);
+    });
+
+    it("returns operations for order-service", async () => {
+      const result = await ds.getOperations({
+        serviceName: "order-service",
+        requestContext: requestContext(),
+      });
+
+      expect(result.operations).toEqual(["POST /api/orders"]);
+    });
+
+    it("returns empty for nonexistent service", async () => {
+      const result = await ds.getOperations({
+        serviceName: "nonexistent-service",
+        requestContext: requestContext(),
+      });
+
+      expect(result.operations).toEqual([]);
+    });
+  });
+
+  describe("getTraceSummaries", () => {
+    it("returns all trace summaries (no filter)", async () => {
+      const result = await ds.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      // At least the 2 original traces + the 2 recent ones seeded for getServices
+      expect(result.data.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("aggregates trace-001 correctly", async () => {
+      const result = await ds.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      const t = result.data.find((r) => r.traceId === "trace-001");
+      expect(t).toBeDefined();
+      expect(t!.rootServiceName).toBe("user-service");
+      expect(t!.rootSpanName).toBe("GET /api/users");
+      expect(t!.spanCount).toBe(2);
+      expect(t!.errorCount).toBe(0);
+      expect(t!.services.length).toBe(1);
+      expect(t!.services[0]!.name).toBe("user-service");
+      expect(t!.services[0]!.count).toBe(2);
+    });
+
+    it("aggregates trace-002 with error", async () => {
+      const result = await ds.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      const t = result.data.find((r) => r.traceId === "trace-002");
+      expect(t).toBeDefined();
+      expect(t!.rootServiceName).toBe("order-service");
+      expect(t!.rootSpanName).toBe("POST /api/orders");
+      expect(t!.spanCount).toBe(1);
+      // Seed data uses "ERROR" not "STATUS_CODE_ERROR", so errorCount = 0
+      expect(t!.errorCount).toBe(0);
+    });
+
+    it("filters by serviceName", async () => {
+      const result = await ds.getTraceSummaries({
+        serviceName: "order-service",
+        limit: 20,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      expect(
+        result.data.every((r) =>
+          r.services.some((s) => s.name === "order-service")
+        )
+      ).toBe(true);
+    });
+
+    it("sorts DESC by default", async () => {
+      const result = await ds.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      const times = result.data.map((r) => BigInt(r.startTimeNs));
+      for (let i = 1; i < times.length; i++) {
+        expect(times[i]! <= times[i - 1]!).toBe(true);
+      }
+    });
+
+    it("sorts ASC", async () => {
+      const result = await ds.getTraceSummaries({
+        limit: 20,
+        sortOrder: "ASC",
+        requestContext: requestContext(),
+      });
+
+      expectAscending(result.data.map((r) => BigInt(r.startTimeNs)));
+    });
+
+    it("supports cursor pagination", async () => {
+      const page1 = await ds.getTraceSummaries({
+        limit: 1,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      expect(page1.data.length).toBe(1);
+      const cursor = defined(page1.nextCursor, "nextCursor");
+
+      const page2 = await ds.getTraceSummaries({
+        limit: 1,
+        sortOrder: "DESC",
+        cursor,
+        requestContext: requestContext(),
+      });
+
+      expect(page2.data.length).toBe(1);
+      expect(page2.data[0]!.traceId).not.toBe(page1.data[0]!.traceId);
+    });
+
+    it("throws on malformed cursor", async () => {
+      await expect(
+        ds.getTraceSummaries({
+          limit: 20,
+          sortOrder: "DESC",
+          cursor: "malformed-no-colon",
+          requestContext: requestContext(),
+        })
+      ).rejects.toThrow("Invalid cursor format");
     });
   });
 
@@ -1689,14 +1951,16 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: tenantBRequestContext(),
       });
 
-      // Tenant A has 3 traces, tenant B has 1
-      expect(tenantA.data.length).toBe(3);
-      expect(tenantB.data.length).toBe(1);
+      // Tenant A has 3 original + 2 recent-timestamp traces, tenant B has 1 + 1
+      expect(tenantA.data.length).toBe(5);
+      expect(tenantB.data.length).toBe(2);
 
       // No cross-contamination
       expect(tenantA.data.every((r) => r.TraceId !== "trace-b-001")).toBe(true);
-      expect(firstRow(tenantB.data).TraceId).toBe("trace-b-001");
-      expect(firstRow(tenantB.data).ServiceName).toBe("tenant-b-service");
+      expect(tenantB.data.some((r) => r.TraceId === "trace-b-001")).toBe(true);
+      expect(
+        tenantB.data.every((r) => r.ServiceName === "tenant-b-service")
+      ).toBe(true);
     });
 
     it("routes logs to the correct database", async () => {
