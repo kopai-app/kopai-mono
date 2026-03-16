@@ -64,10 +64,13 @@ function computeStats(trace: ParsedTrace): SpanStats[] {
     const totalDuration = durations.reduce((a, b) => a + b, 0);
     const selfTimeTotal = selfTimes.reduce((a, b) => a + b, 0);
 
+    const firstSpan = spans[0];
+    if (!firstSpan) continue;
+
     stats.push({
       key,
-      serviceName: spans[0]!.serviceName,
-      spanName: spans[0]!.name,
+      serviceName: firstSpan.serviceName,
+      spanName: firstSpan.name,
       count,
       totalDuration,
       avgDuration: totalDuration / count,

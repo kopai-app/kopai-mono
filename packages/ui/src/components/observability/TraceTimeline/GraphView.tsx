@@ -63,7 +63,8 @@ function buildDAG(trace: ParsedTrace) {
       }
       if (!childServices.has(parentService))
         childServices.set(parentService, new Set());
-      childServices.get(parentService)!.add(svc);
+      const parentChildren = childServices.get(parentService);
+      if (parentChildren) parentChildren.add(svc);
     }
 
     for (const child of span.children) {
@@ -100,14 +101,16 @@ function layoutNodes(
   const hasParent = new Set<string>();
   for (const e of edges) {
     if (!children.has(e.from)) children.set(e.from, new Set());
-    children.get(e.from)!.add(e.to);
+    const fromChildren = children.get(e.from);
+    if (fromChildren) fromChildren.add(e.to);
     hasParent.add(e.to);
   }
 
   // Root services = no incoming edges
   const roots = [...nodeMap.keys()].filter((s) => !hasParent.has(s));
   if (roots.length === 0 && nodeMap.size > 0) {
-    roots.push(nodeMap.keys().next().value!);
+    const firstKey = nodeMap.keys().next().value;
+    if (firstKey !== undefined) roots.push(firstKey);
   }
 
   // BFS to assign layers (with cycle protection)
@@ -120,8 +123,10 @@ function layoutNodes(
     queue.push(r);
   }
   while (queue.length > 0) {
-    const cur = queue.shift()!;
-    const curLayer = layerOf.get(cur)!;
+    const cur = queue.shift();
+    if (!cur) continue;
+    const curLayer = layerOf.get(cur);
+    if (curLayer === undefined) continue;
     const kids = children.get(cur);
     if (!kids) continue;
     for (const kid of kids) {
@@ -144,7 +149,8 @@ function layoutNodes(
   const layers = new Map<number, string[]>();
   for (const [name, layer] of layerOf) {
     if (!layers.has(layer)) layers.set(layer, []);
-    layers.get(layer)!.push(name);
+    const layerNames = layers.get(layer);
+    if (layerNames) layerNames.push(name);
   }
 
   // Position
@@ -159,7 +165,8 @@ function layoutNodes(
     const layerWidth = names.length * (NODE_W + NODE_GAP_X) - NODE_GAP_X;
     const offsetX = (totalWidth - layerWidth) / 2;
     names.forEach((name, i) => {
-      const meta = nodeMap.get(name)!;
+      const meta = nodeMap.get(name);
+      if (!meta) return;
       nodes.push({
         name,
         spanCount: meta.spanCount,

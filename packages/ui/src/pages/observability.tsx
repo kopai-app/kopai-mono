@@ -373,7 +373,8 @@ function parseLogfmt(str: string): Record<string, string> {
   const re = /(\w+)=(?:"([^"]*)"|([\S]*))/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(str)) !== null) {
-    result[m[1]!] = m[2] ?? m[3] ?? "";
+    const key = m[1];
+    if (key) result[key] = m[2] ?? m[3] ?? "";
   }
   return result;
 }
