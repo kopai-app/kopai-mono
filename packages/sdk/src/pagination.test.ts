@@ -96,7 +96,6 @@ describe("paginate", () => {
       nextCursor: null,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     for await (const _item of paginate(fetcher, controller.signal)) {
       // empty
     }
