@@ -1,5 +1,11 @@
 # @kopai/core
 
+## 0.8.0
+
+### Minor Changes
+
+- 5aea6c3: Add new trace-related API methods
+
 ## 0.7.0
 
 ### Minor Changes

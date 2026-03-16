@@ -1,5 +1,16 @@
 # @kopai/sqlite-datasource
 
+## 0.10.0
+
+### Minor Changes
+
+- 5aea6c3: Add new trace-related API methods
+
+### Patch Changes
+
+- Updated dependencies [5aea6c3]
+  - @kopai/core@0.8.0
+
 ## 0.9.0
 
 ### Minor Changes
