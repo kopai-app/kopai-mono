@@ -8,7 +8,7 @@ const GENERAL_GROUP: ShortcutGroup = {
   name: "General",
   shortcuts: [
     { keys: ["Shift", "?"], description: "Toggle shortcuts help" },
-    { keys: ["Shift", "S"], description: "Services tab" },
+    { keys: ["Shift", "T"], description: "Traces tab" },
     { keys: ["Shift", "L"], description: "Logs tab" },
     { keys: ["Shift", "M"], description: "Metrics tab" },
   ],
@@ -70,7 +70,7 @@ export function KeyboardShortcutsProvider({
         return;
       }
 
-      if (e.shiftKey && e.key === "S") {
+      if (e.shiftKey && e.key === "T") {
         e.preventDefault();
         onNavigateServices();
         return;

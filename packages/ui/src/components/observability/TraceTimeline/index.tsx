@@ -372,7 +372,13 @@ export function TraceTimeline({
         scrollToSpan(item.span.spanId);
       }
     }
-  }, [matchingIndices, currentMatchIndex, flattenedSpans, handleSpanClick, scrollToSpan]);
+  }, [
+    matchingIndices,
+    currentMatchIndex,
+    flattenedSpans,
+    handleSpanClick,
+    scrollToSpan,
+  ]);
 
   const handleSearchPrev = useCallback(() => {
     if (matchingIndices.length === 0) return;
@@ -387,7 +393,13 @@ export function TraceTimeline({
         scrollToSpan(item.span.spanId);
       }
     }
-  }, [matchingIndices, currentMatchIndex, flattenedSpans, handleSpanClick, scrollToSpan]);
+  }, [
+    matchingIndices,
+    currentMatchIndex,
+    flattenedSpans,
+    handleSpanClick,
+    scrollToSpan,
+  ]);
 
   useEffect(() => {
     if (!selectedSpanId) return;
@@ -583,10 +595,8 @@ export function TraceTimeline({
                     viewStart) /
                   viewRange;
                 const relativeDuration =
-                  calculateRelativeDuration(
-                    span.durationMs,
-                    totalDurationMs
-                  ) / viewRange;
+                  calculateRelativeDuration(span.durationMs, totalDurationMs) /
+                  viewRange;
 
                 return (
                   <div key={span.spanId} data-span-id={span.spanId}>
@@ -600,9 +610,7 @@ export function TraceTimeline({
                       relativeStart={relativeStart}
                       relativeDuration={relativeDuration}
                       onClick={() => handleSpanClick(span)}
-                      onToggleCollapse={() =>
-                        handleToggleCollapse(span.spanId)
-                      }
+                      onToggleCollapse={() => handleToggleCollapse(span.spanId)}
                       onMouseEnter={() => setHoveredSpanId(span.spanId)}
                       onMouseLeave={() => setHoveredSpanId(null)}
                       uiFind={uiFind || undefined}

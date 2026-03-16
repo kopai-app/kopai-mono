@@ -15,7 +15,11 @@ interface CollapsibleSectionProps {
   children: React.ReactNode;
 }
 
-function CollapsibleSection({ title, count, children }: CollapsibleSectionProps) {
+function CollapsibleSection({
+  title,
+  count,
+  children,
+}: CollapsibleSectionProps) {
   const [open, setOpen] = useState(false);
 
   if (count === 0) return null;
@@ -55,7 +59,10 @@ function formatRelativeTime(eventTimeMs: number, spanStartMs: number): string {
   return `${prefix}${formatDuration(Math.abs(relativeMs))}`;
 }
 
-export function SpanDetailInline({ span, traceStartMs }: SpanDetailInlineProps) {
+export function SpanDetailInline({
+  span,
+  traceStartMs,
+}: SpanDetailInlineProps) {
   const [copiedId, setCopiedId] = useState(false);
   const serviceColor = getServiceColor(span.serviceName);
   const relativeStartMs = span.startTimeUnixMs - traceStartMs;
@@ -65,7 +72,9 @@ export function SpanDetailInline({ span, traceStartMs }: SpanDetailInlineProps) 
       await navigator.clipboard.writeText(span.spanId);
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
-    } catch {}
+    } catch {
+      /* clipboard unavailable */
+    }
   }, [span.spanId]);
 
   const spanAttrs = Object.entries(span.attributes).sort(([a], [b]) =>
@@ -108,9 +117,7 @@ export function SpanDetailInline({ span, traceStartMs }: SpanDetailInlineProps) 
               Status:{" "}
               <span
                 className={
-                  span.status === "ERROR"
-                    ? "text-red-500"
-                    : "text-foreground"
+                  span.status === "ERROR" ? "text-red-500" : "text-foreground"
                 }
               >
                 {span.status}
@@ -144,7 +151,9 @@ export function SpanDetailInline({ span, traceStartMs }: SpanDetailInlineProps) 
                 <span className="font-mono text-muted-foreground flex-shrink-0">
                   {formatRelativeTime(event.timeUnixMs, span.startTimeUnixMs)}
                 </span>
-                <span className="font-medium text-foreground">{event.name}</span>
+                <span className="font-medium text-foreground">
+                  {event.name}
+                </span>
               </div>
               {Object.entries(event.attributes).map(([k, v]) => (
                 <KeyValueRow key={k} k={k} v={v} />
@@ -158,8 +167,7 @@ export function SpanDetailInline({ span, traceStartMs }: SpanDetailInlineProps) 
             <div key={i} className="text-xs font-mono py-0.5">
               <span className="text-muted-foreground">trace:</span>{" "}
               {link.traceId}{" "}
-              <span className="text-muted-foreground">span:</span>{" "}
-              {link.spanId}
+              <span className="text-muted-foreground">span:</span> {link.spanId}
             </div>
           ))}
         </CollapsibleSection>

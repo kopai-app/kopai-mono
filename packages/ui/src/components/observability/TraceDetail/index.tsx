@@ -33,7 +33,7 @@ export function TraceDetail({
           onClick={onBack}
           className="hover:text-foreground transition-colors"
         >
-          Services
+          Traces
         </button>
         <span>/</span>
         <span className="text-foreground font-mono text-xs">

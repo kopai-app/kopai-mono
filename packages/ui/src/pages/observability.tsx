@@ -43,7 +43,7 @@ type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 type Tab = "logs" | "services" | "metrics";
 
 const TABS: { key: Tab; label: string; shortcutKey: string }[] = [
-  { key: "services", label: "Services", shortcutKey: "S" },
+  { key: "services", label: "Traces", shortcutKey: "T" },
   { key: "logs", label: "Logs", shortcutKey: "L" },
   { key: "metrics", label: "Metrics", shortcutKey: "M" },
 ];
@@ -493,8 +493,10 @@ interface TraceSummaryRow {
 
 function TraceSearchView({
   onSelectTrace,
+  onCompare,
 }: {
   onSelectTrace: (traceId: string) => void;
+  onCompare: (traceIds: [string, string]) => void;
 }) {
   const urlState = useURLState();
   const service = urlState.service;
@@ -614,6 +616,7 @@ function TraceSearchView({
       isLoading={loading}
       error={error ?? undefined}
       onSelectTrace={onSelectTrace}
+      onCompare={onCompare}
       onSearch={handleSearch}
     />
   );
@@ -664,6 +667,7 @@ function ServicesTab({
   onSelectSpan,
   onDeselectSpan,
   onBack,
+  onCompare,
 }: {
   selectedTraceId: string | null;
   selectedSpanId: string | null;
@@ -672,6 +676,7 @@ function ServicesTab({
   onSelectSpan: (spanId: string) => void;
   onDeselectSpan: () => void;
   onBack: () => void;
+  onCompare: (traceIds: [string, string]) => void;
 }) {
   useRegisterShortcuts("services-tab", SERVICES_SHORTCUTS);
 
@@ -722,7 +727,9 @@ function ServicesTab({
   }
 
   // Default: TraceSearchView directly
-  return <TraceSearchView onSelectTrace={onSelectTrace} />;
+  return (
+    <TraceSearchView onSelectTrace={onSelectTrace} onCompare={onCompare} />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -889,6 +896,17 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
     );
   }, [urlState]);
 
+  const handleCompare = useCallback(
+    (traceIds: [string, string]) => {
+      pushURLState({
+        ...urlState,
+        tab: "services",
+        compare: traceIds.join(","),
+      });
+    },
+    [urlState]
+  );
+
   const handleBack = useCallback(() => {
     pushURLState({
       ...urlState,
@@ -926,6 +944,7 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
               onSelectSpan={handleSelectSpan}
               onDeselectSpan={handleDeselectSpan}
               onBack={handleBack}
+              onCompare={handleCompare}
             />
           )}
           {activeTab === "metrics" && <MetricsTab />}
