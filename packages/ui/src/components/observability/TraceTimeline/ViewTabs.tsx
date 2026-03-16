@@ -1,9 +1,10 @@
-export interface ViewTabsProps {
-  activeView: string;
-  onChange: (view: string) => void;
-}
+export const VIEWS = ["timeline", "graph", "statistics", "flamegraph"] as const;
+export type ViewName = (typeof VIEWS)[number];
 
-const VIEWS = ["timeline", "graph", "statistics", "flamegraph"] as const;
+export interface ViewTabsProps {
+  activeView: ViewName;
+  onChange: (view: ViewName) => void;
+}
 
 const VIEW_LABELS: Record<string, string> = {
   timeline: "Timeline",

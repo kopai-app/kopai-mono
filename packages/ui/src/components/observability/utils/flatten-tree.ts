@@ -40,6 +40,21 @@ export function getAllDescendantIds(span: SpanNode): string[] {
   return ids;
 }
 
+/** Flatten all spans (ignoring collapse state) with depth. */
+export function flattenAllSpans(rootSpans: SpanNode[]): FlattenedSpan[] {
+  return flattenTree(rootSpans, new Set());
+}
+
+export function spanMatchesSearch(span: SpanNode, query: string): boolean {
+  const q = query.toLowerCase();
+  if (span.name.toLowerCase().includes(q)) return true;
+  if (span.serviceName.toLowerCase().includes(q)) return true;
+  for (const val of Object.values(span.attributes)) {
+    if (String(val).toLowerCase().includes(q)) return true;
+  }
+  return false;
+}
+
 export function getAllSpanIds(rootSpans: SpanNode[]): string[] {
   const ids: string[] = [];
 

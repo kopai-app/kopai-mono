@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ParsedTrace, SpanNode } from "../types.js";
 import { formatDuration } from "../utils/time.js";
+import { flattenAllSpans } from "../utils/flatten-tree.js";
 
 interface StatisticsViewProps {
   trace: ParsedTrace;
@@ -33,16 +34,6 @@ type SortField =
   | "selfMin"
   | "selfMax";
 
-function flattenAllSpans(rootSpans: SpanNode[]): SpanNode[] {
-  const result: SpanNode[] = [];
-  function walk(span: SpanNode) {
-    result.push(span);
-    span.children.forEach(walk);
-  }
-  rootSpans.forEach(walk);
-  return result;
-}
-
 function computeSelfTime(span: SpanNode): number {
   const childrenTotal = span.children.reduce(
     (sum, child) => sum + child.durationMs,
@@ -52,10 +43,10 @@ function computeSelfTime(span: SpanNode): number {
 }
 
 function computeStats(trace: ParsedTrace): SpanStats[] {
-  const allSpans = flattenAllSpans(trace.rootSpans);
+  const allFlattened = flattenAllSpans(trace.rootSpans);
   const groups = new Map<string, { spans: SpanNode[]; selfTimes: number[] }>();
 
-  for (const span of allSpans) {
+  for (const { span } of allFlattened) {
     const key = `${span.serviceName}:${span.name}`;
     let group = groups.get(key);
     if (!group) {

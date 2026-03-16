@@ -3,6 +3,7 @@ import type { SpanNode } from "../types.js";
 import { TimelineBar } from "./TimelineBar.js";
 import { formatDuration } from "../utils/time.js";
 import { getServiceColor } from "../utils/colors.js";
+import { spanMatchesSearch } from "../utils/flatten-tree.js";
 
 export interface SpanRowProps {
   span: SpanNode;
@@ -18,16 +19,6 @@ export interface SpanRowProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   uiFind?: string;
-}
-
-function spanMatchesSearch(span: SpanNode, query: string): boolean {
-  const q = query.toLowerCase();
-  if (span.name.toLowerCase().includes(q)) return true;
-  if (span.serviceName.toLowerCase().includes(q)) return true;
-  for (const val of Object.values(span.attributes)) {
-    if (String(val).toLowerCase().includes(q)) return true;
-  }
-  return false;
 }
 
 export const SpanRow = memo(function SpanRow({

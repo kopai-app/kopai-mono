@@ -1,16 +1,10 @@
 import { useState } from "react";
 import type { SpanNode } from "../../types.js";
-import { formatDuration } from "../../utils/time.js";
+import { formatRelativeTime } from "../../utils/time.js";
 import { formatAttributeValue } from "../../utils/attributes.js";
 
 export interface EventsTabProps {
   span: SpanNode;
-}
-
-function formatRelativeTime(eventTimeMs: number, spanStartMs: number): string {
-  const relativeMs = eventTimeMs - spanStartMs;
-  const prefix = relativeMs < 0 ? "-" : "+";
-  return `${prefix}${formatDuration(Math.abs(relativeMs))}`;
 }
 
 export function EventsTab({ span }: EventsTabProps) {

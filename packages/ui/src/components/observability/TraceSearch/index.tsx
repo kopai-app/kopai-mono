@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { formatTimestamp } from "../utils/time.js";
 import { getServiceColor } from "../utils/colors.js";
 import { SearchForm } from "./SearchForm.js";
@@ -90,6 +90,7 @@ export function TraceSearch({
 }: TraceSearchProps) {
   // Form state
   const [formService, setFormService] = useState(service);
+  useEffect(() => setFormService(service), [service]);
   const [operation, setOperation] = useState("");
   const [tags, setTags] = useState("");
   const [lookback, setLookback] = useState("");
@@ -189,9 +190,7 @@ export function TraceSearch({
           <div className="flex items-center gap-2">
             {onCompare && selected.size === 2 && (
               <button
-                onClick={() =>
-                  onCompare(selectedArr as unknown as [string, string])
-                }
+                onClick={() => onCompare(selectedArr as [string, string])}
                 className="px-3 py-1.5 text-xs font-medium bg-foreground text-background rounded hover:bg-foreground/90 transition-colors"
               >
                 Compare

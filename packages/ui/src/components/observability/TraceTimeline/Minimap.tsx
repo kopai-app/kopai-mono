@@ -3,29 +3,15 @@
  */
 
 import { useRef, useCallback, useMemo } from "react";
-import type { ParsedTrace, SpanNode } from "../types.js";
+import type { ParsedTrace } from "../types.js";
 import { getSpanBarColor } from "../utils/colors.js";
+import { flattenAllSpans } from "../utils/flatten-tree.js";
 
 export interface MinimapProps {
   trace: ParsedTrace;
   viewStart: number; // 0-1 fraction
   viewEnd: number; // 0-1 fraction
   onViewChange: (viewStart: number, viewEnd: number) => void;
-}
-
-interface FlatSpan {
-  span: SpanNode;
-  depth: number;
-}
-
-function flattenAllSpans(rootSpans: SpanNode[]): FlatSpan[] {
-  const result: FlatSpan[] = [];
-  function walk(span: SpanNode, depth: number) {
-    result.push({ span, depth });
-    for (const child of span.children) walk(child, depth + 1);
-  }
-  for (const root of rootSpans) walk(root, 0);
-  return result;
 }
 
 const MINIMAP_HEIGHT = 40;

@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback } from "react";
 import type { ParsedTrace, SpanNode } from "../types.js";
 import { getServiceColor } from "../utils/colors.js";
 import { formatDuration } from "../utils/time.js";
+import { flattenAllSpans } from "../utils/flatten-tree.js";
 
 interface FlamegraphViewProps {
   trace: ParsedTrace;
@@ -9,28 +10,9 @@ interface FlamegraphViewProps {
   selectedSpanId?: string;
 }
 
-interface FlatSpan {
-  span: SpanNode;
-  depth: number;
-}
-
 const ROW_HEIGHT = 24;
 const MIN_WIDTH = 1;
 const LABEL_MIN_WIDTH = 40;
-
-function flattenWithDepth(rootSpans: SpanNode[], baseDepth = 0): FlatSpan[] {
-  const result: FlatSpan[] = [];
-  function walk(span: SpanNode, depth: number) {
-    result.push({ span, depth });
-    for (const child of span.children) {
-      walk(child, depth + 1);
-    }
-  }
-  for (const root of rootSpans) {
-    walk(root, baseDepth);
-  }
-  return result;
-}
 
 function findSpanById(rootSpans: SpanNode[], spanId: string): SpanNode | null {
   for (const root of rootSpans) {
@@ -86,7 +68,14 @@ export function FlamegraphView({
   const viewMaxTime = zoomRoot ? zoomRoot.endTimeUnixMs : trace.maxTimeMs;
   const viewDuration = viewMaxTime - viewMinTime;
 
-  const flatSpans = useMemo(() => flattenWithDepth(viewRoots), [viewRoots]);
+  const flatSpans = useMemo(
+    () =>
+      flattenAllSpans(viewRoots).map((fs) => ({
+        span: fs.span,
+        depth: fs.level,
+      })),
+    [viewRoots]
+  );
 
   const maxDepth = useMemo(
     () => flatSpans.reduce((max, fs) => Math.max(max, fs.depth), 0) + 1,

@@ -27,6 +27,15 @@ export function formatTimestamp(timestampMs: number): string {
   });
 }
 
+export function formatRelativeTime(
+  eventTimeMs: number,
+  spanStartMs: number
+): string {
+  const relativeMs = eventTimeMs - spanStartMs;
+  const prefix = relativeMs < 0 ? "-" : "+";
+  return `${prefix}${formatDuration(Math.abs(relativeMs))}`;
+}
+
 export function calculateRelativeTime(
   timeMs: number,
   minTimeMs: number,

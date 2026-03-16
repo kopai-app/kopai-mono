@@ -7,7 +7,11 @@ import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import type { denormalizedSignals } from "@kopai/core";
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 import type { SpanNode, ParsedTrace } from "../types.js";
-import { flattenTree, getAllSpanIds } from "../utils/flatten-tree.js";
+import {
+  flattenTree,
+  getAllSpanIds,
+  spanMatchesSearch,
+} from "../utils/flatten-tree.js";
 import {
   calculateRelativeTime,
   calculateRelativeDuration,
@@ -21,7 +25,7 @@ import { useRegisterShortcuts } from "../../KeyboardShortcuts/index.js";
 import { TRACE_VIEWER_SHORTCUTS } from "./shortcuts.js";
 import { TimeRuler } from "./TimeRuler.js";
 import { SpanSearch } from "./SpanSearch.js";
-import { ViewTabs } from "./ViewTabs.js";
+import { ViewTabs, type ViewName } from "./ViewTabs.js";
 import { GraphView } from "./GraphView.js";
 import { StatisticsView } from "./StatisticsView.js";
 import { FlamegraphView } from "./FlamegraphView.js";
@@ -34,8 +38,8 @@ export interface TraceTimelineProps {
   selectedSpanId?: string;
   isLoading?: boolean;
   error?: Error;
-  view?: string;
-  onViewChange?: (view: string) => void;
+  view?: ViewName;
+  onViewChange?: (view: ViewName) => void;
   uiFind?: string;
   onUiFindChange?: (value: string) => void;
   viewStart?: number;
@@ -164,16 +168,6 @@ function isSpanAncestorOf(
   return false;
 }
 
-function spanMatchesSearch(span: SpanNode, query: string): boolean {
-  const q = query.toLowerCase();
-  if (span.name.toLowerCase().includes(q)) return true;
-  if (span.serviceName.toLowerCase().includes(q)) return true;
-  for (const val of Object.values(span.attributes)) {
-    if (String(val).toLowerCase().includes(q)) return true;
-  }
-  return false;
-}
-
 function collectServices(rootSpans: SpanNode[]): string[] {
   const set = new Set<string>();
   function walk(span: SpanNode) {
@@ -206,7 +200,7 @@ export function TraceTimeline({
     string | null
   >(null);
   const [hoveredSpanId, setHoveredSpanId] = useState<string | null>(null);
-  const [internalView, setInternalView] = useState("timeline");
+  const [internalView, setInternalView] = useState<ViewName>("timeline");
   const [internalUiFind, setInternalUiFind] = useState("");
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
@@ -328,7 +322,7 @@ export function TraceTimeline({
   );
 
   const handleViewChange = useCallback(
-    (view: string) => {
+    (view: ViewName) => {
       if (onViewChange) onViewChange(view);
       else setInternalView(view);
     },
@@ -551,11 +545,6 @@ export function TraceTimeline({
             onSpanClick={handleSpanClick}
             selectedSpanId={selectedSpanId ?? undefined}
           />
-        ) : activeView !== "timeline" ? (
-          <div className="flex items-center justify-center flex-1 text-muted-foreground">
-            {activeView.charAt(0).toUpperCase() + activeView.slice(1)} view
-            coming soon
-          </div>
         ) : (
           <>
             <Minimap

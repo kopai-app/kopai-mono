@@ -901,6 +901,12 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
       pushURLState({
         ...urlState,
         tab: "services",
+        trace: null,
+        span: null,
+        view: null,
+        uiFind: null,
+        viewStart: null,
+        viewEnd: null,
         compare: traceIds.join(","),
       });
     },

@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { SpanNode } from "../types.js";
-import { formatDuration } from "../utils/time.js";
+import { formatDuration, formatRelativeTime } from "../utils/time.js";
 import { formatAttributeValue } from "../utils/attributes.js";
 import { getServiceColor } from "../utils/colors.js";
 
@@ -51,12 +51,6 @@ function KeyValueRow({ k, v }: { k: string; v: unknown }) {
       <span className="text-foreground break-all">{formatted}</span>
     </div>
   );
-}
-
-function formatRelativeTime(eventTimeMs: number, spanStartMs: number): string {
-  const relativeMs = eventTimeMs - spanStartMs;
-  const prefix = relativeMs < 0 ? "-" : "+";
-  return `${prefix}${formatDuration(Math.abs(relativeMs))}`;
 }
 
 export function SpanDetailInline({
