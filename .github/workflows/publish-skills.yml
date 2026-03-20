@@ -10,33 +10,23 @@ on:
     paths:
       - "skills/**"
 
+concurrency:
+  group: publish-skills-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  publish-create-dashboard:
+  publish-skill:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        skill:
+          - create-dashboard
+          - otel-instrumentation
+          - root-cause-analysis
     steps:
       - uses: actions/checkout@v6
       - uses: tesslio/publish@main
         with:
           token: ${{ secrets.TESSL_API_TOKEN }}
-          path: "./skills/create-dashboard"
-          review-threshold: "50"
-
-  publish-otel-instrumentation:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: tesslio/publish@main
-        with:
-          token: ${{ secrets.TESSL_API_TOKEN }}
-          path: "./skills/otel-instrumentation"
-          review-threshold: "50"
-
-  publish-root-cause-analysis:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: tesslio/publish@main
-        with:
-          token: ${{ secrets.TESSL_API_TOKEN }}
-          path: "./skills/root-cause-analysis"
+          path: "./skills/${{ matrix.skill }}"
           review-threshold: "50"
