@@ -16,6 +16,7 @@ import type {
   OtelTracesRow,
   OtelLogsRow,
   OtelMetricsRow,
+  AggregatedMetricRow,
   MetricsDiscoveryResult,
   Dashboard,
   CreateDashboardParams,
@@ -40,6 +41,11 @@ const logsResponseSchema = z.object({
 const metricsResponseSchema = z.object({
   data: z.array(denormalizedSignals.otelMetricsSchema),
   nextCursor: z.string().nullable(),
+});
+
+const aggregatedMetricsResponseSchema = z.object({
+  data: z.array(denormalizedSignals.aggregatedMetricSchema),
+  nextCursor: z.null(),
 });
 
 const dashboardResponseSchema = dashboardDatasource.dashboardSchema;
@@ -232,6 +238,31 @@ export class KopaiClient {
     return request(
       `${this.baseUrl}/signals/metrics/search`,
       metricsResponseSchema,
+      {
+        method: "POST",
+        body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Search aggregated metrics (requires aggregate in filter).
+   * Returns grouped/aggregated values instead of raw data points.
+   */
+  async searchAggregatedMetrics(
+    filter: MetricsDataFilter,
+    opts?: RequestOptions
+  ): Promise<{ data: AggregatedMetricRow[]; nextCursor: null }> {
+    const validatedFilter =
+      dataFilterSchemas.metricsDataFilterSchema.parse(filter);
+
+    return request(
+      `${this.baseUrl}/signals/metrics/search`,
+      aggregatedMetricsResponseSchema,
       {
         method: "POST",
         body: validatedFilter,

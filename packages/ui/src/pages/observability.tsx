@@ -743,7 +743,14 @@ const METRICS_TREE = {
     root: {
       key: "root",
       type: "Stack" as const,
-      children: ["heading", "description", "discovery-card"],
+      children: [
+        "heading",
+        "ingestion-heading",
+        "ingestion-grid",
+        "discovery-heading",
+        "description",
+        "discovery-card",
+      ],
       parentKey: "",
       props: {
         direction: "vertical" as const,
@@ -757,6 +764,81 @@ const METRICS_TREE = {
       children: [],
       parentKey: "root",
       props: { text: "Metrics", level: "h2" as const },
+    },
+    "ingestion-heading": {
+      key: "ingestion-heading",
+      type: "Heading" as const,
+      children: [],
+      parentKey: "root",
+      props: { text: "OTEL Ingestion", level: "h3" as const },
+    },
+    "ingestion-grid": {
+      key: "ingestion-grid",
+      type: "Grid" as const,
+      children: ["card-bytes", "card-requests"],
+      parentKey: "root",
+      props: { columns: 2, gap: "md" as const },
+    },
+    "card-bytes": {
+      key: "card-bytes",
+      type: "Card" as const,
+      children: ["stat-bytes"],
+      parentKey: "ingestion-grid",
+      props: {
+        title: "Total Bytes Ingested",
+        description: null,
+        padding: null,
+      },
+    },
+    "stat-bytes": {
+      key: "stat-bytes",
+      type: "MetricStat" as const,
+      children: [],
+      parentKey: "card-bytes",
+      dataSource: {
+        method: "searchMetricsPage" as const,
+        params: {
+          metricType: "Sum" as const,
+          metricName: "kopai.ingestion.bytes",
+          aggregate: "sum" as const,
+        },
+        refetchIntervalMs: 10_000,
+      },
+      props: { label: "Bytes", showSparkline: false },
+    },
+    "card-requests": {
+      key: "card-requests",
+      type: "Card" as const,
+      children: ["stat-requests"],
+      parentKey: "ingestion-grid",
+      props: {
+        title: "Total Requests",
+        description: null,
+        padding: null,
+      },
+    },
+    "stat-requests": {
+      key: "stat-requests",
+      type: "MetricStat" as const,
+      children: [],
+      parentKey: "card-requests",
+      dataSource: {
+        method: "searchMetricsPage" as const,
+        params: {
+          metricType: "Sum" as const,
+          metricName: "kopai.ingestion.requests",
+          aggregate: "sum" as const,
+        },
+        refetchIntervalMs: 10_000,
+      },
+      props: { label: "Requests", showSparkline: false },
+    },
+    "discovery-heading": {
+      key: "discovery-heading",
+      type: "Heading" as const,
+      children: [],
+      parentKey: "root",
+      props: { text: "Discovered Metrics", level: "h3" as const },
     },
     description: {
       key: "description",

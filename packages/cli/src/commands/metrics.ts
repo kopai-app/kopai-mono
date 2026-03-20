@@ -110,7 +110,9 @@ export function createMetricsCommand(): Command {
           opts.groupBy && opts.groupBy.length > 0 ? opts.groupBy : undefined,
       };
 
-      const result = await client.searchMetricsPage(filter);
+      const result = filter.aggregate
+        ? await client.searchAggregatedMetrics(filter)
+        : await client.searchMetricsPage(filter);
       output(result.data, { format, fields });
     } catch (err) {
       outputError(err, format === "json");
