@@ -33,19 +33,11 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
       },
     },
     handler: async (req, res) => {
-      if (req.body.aggregate) {
-        const result = await opts.readMetricsDatasource.getAggregatedMetrics({
-          ...req.body,
-          requestContext: req.requestContext,
-        });
-        res.send(result);
-      } else {
-        const result = await opts.readMetricsDatasource.getMetrics({
-          ...req.body,
-          requestContext: req.requestContext,
-        });
-        res.send(result);
-      }
+      const params = { ...req.body, requestContext: req.requestContext };
+      const result = req.body.aggregate
+        ? await opts.readMetricsDatasource.getAggregatedMetrics(params)
+        : await opts.readMetricsDatasource.getMetrics(params);
+      res.send(result);
     },
   });
 

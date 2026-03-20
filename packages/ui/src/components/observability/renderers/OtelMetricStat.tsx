@@ -5,24 +5,16 @@ import { formatOtelValue } from "../utils/units.js";
 import type { denormalizedSignals } from "@kopai/core";
 
 type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
+type AggregatedMetricRow = denormalizedSignals.AggregatedMetricRow;
 
 type Props = RendererComponentProps<
   typeof observabilityCatalog.components.MetricStat
 >;
 
-interface AggregatedRow {
-  groups: Record<string, unknown>;
-  value: number;
-}
-
-function isAggregatedResponse(
-  data: unknown
-): data is { data: AggregatedRow[] } {
-  if (typeof data !== "object" || data === null) return false;
-  const obj = data as Record<string, unknown>;
-  if (!Array.isArray(obj.data) || obj.data.length === 0) return false;
-  const first = obj.data[0] as Record<string, unknown> | undefined;
-  return first !== undefined && "groups" in first && "value" in first;
+function isAggregatedRequest(props: Props & { hasData: true }): boolean {
+  const ds = props.element.dataSource;
+  if (!ds || ds.method !== "searchMetricsPage" || !ds.params) return false;
+  return !!ds.params.aggregate;
 }
 
 export function OtelMetricStat(props: Props) {
@@ -32,8 +24,9 @@ export function OtelMetricStat(props: Props) {
     );
   }
 
-  if (isAggregatedResponse(props.data)) {
-    const firstRow = props.data.data[0] as AggregatedRow | undefined;
+  if (isAggregatedRequest(props)) {
+    const response = props.data as { data: AggregatedMetricRow[] } | null;
+    const firstRow = response?.data[0];
     return (
       <MetricStat
         rows={[]}
