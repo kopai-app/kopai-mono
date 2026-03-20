@@ -1,0 +1,8 @@
+{
+  "name": "kopai/create-dashboard",
+  "version": "1.0.0",
+  "private": false,
+  "skills": {
+    "create-dashboard": "./SKILL.md"
+  }
+}

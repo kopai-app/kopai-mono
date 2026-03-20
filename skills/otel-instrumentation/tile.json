@@ -1,0 +1,8 @@
+{
+  "name": "kopai/otel-instrumentation",
+  "version": "1.0.0",
+  "private": false,
+  "skills": {
+    "otel-instrumentation": "./SKILL.md"
+  }
+}

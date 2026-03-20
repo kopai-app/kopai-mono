@@ -1,0 +1,8 @@
+{
+  "name": "kopai/root-cause-analysis",
+  "version": "1.0.0",
+  "private": false,
+  "skills": {
+    "root-cause-analysis": "./SKILL.md"
+  }
+}
