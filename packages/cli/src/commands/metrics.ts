@@ -22,6 +22,8 @@ interface MetricsSearchOptions extends ClientOptions {
   resourceAttr?: string[];
   scopeAttr?: string[];
   sort?: string;
+  aggregate?: string;
+  groupBy?: string[];
 }
 
 interface MetricsDiscoverOptions extends ClientOptions {
@@ -69,6 +71,16 @@ export function createMetricsCommand(): Command {
         []
       )
       .option("--sort <order>", "Sort order (ASC|DESC)")
+      .option(
+        "--aggregate <fn>",
+        "Aggregation function (sum|avg|min|max|count)"
+      )
+      .option(
+        "--group-by <attr>",
+        "Group by attribute key (repeatable)",
+        collect,
+        []
+      )
   ).action(async (opts: MetricsSearchOptions) => {
     const format = detectFormat(opts.json, opts.table);
     const fields = parseFields(opts.fields);
@@ -93,6 +105,9 @@ export function createMetricsCommand(): Command {
         scopeAttributes: parseAttributes(opts.scopeAttr),
         limit,
         sortOrder: opts.sort as "ASC" | "DESC" | undefined,
+        aggregate: toAggregateFn(opts.aggregate),
+        groupBy:
+          opts.groupBy && opts.groupBy.length > 0 ? opts.groupBy : undefined,
       };
 
       const result = await client.searchMetricsPage(filter);
@@ -128,4 +143,22 @@ export function createMetricsCommand(): Command {
 
 function collect(value: string, previous: string[]): string[] {
   return previous.concat([value]);
+}
+
+type AggregateFn = "sum" | "avg" | "min" | "max" | "count";
+
+function isAggregateFn(value: string): value is AggregateFn {
+  return (
+    value === "sum" ||
+    value === "avg" ||
+    value === "min" ||
+    value === "max" ||
+    value === "count"
+  );
+}
+
+function toAggregateFn(value: string | undefined): AggregateFn | undefined {
+  if (value === undefined) return undefined;
+  if (isAggregateFn(value)) return value;
+  throw new Error(`Invalid aggregate function: ${value}`);
 }

@@ -106,6 +106,15 @@ export class OptimizedDatasource implements datasource.TelemetryDatasource {
     return this.dbDatasource.getMetrics(filter);
   }
 
+  async getAggregatedMetrics(
+    filter: dataFilterSchemas.MetricsDataFilter
+  ): Promise<{
+    data: denormalizedSignals.AggregatedMetricRow[];
+    nextCursor: null;
+  }> {
+    return this.dbDatasource.getAggregatedMetrics(filter);
+  }
+
   async getLogs(filter: dataFilterSchemas.LogsDataFilter): Promise<{
     data: denormalizedSignals.OtelLogsRow[];
     nextCursor: string | null;

@@ -38,6 +38,19 @@ const queryBuilder = new Kysely<DB>({
   },
 });
 
+/** Type predicate: narrows unknown to a string-keyed record. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Escape a key for use in a SQLite json_extract path (e.g. $."key").
+ *  SQLite JSON paths use backslash to escape double quotes inside quoted keys.
+ *  The result should be passed via a bound parameter (not kyselySql.lit)
+ *  to avoid double-escaping of single quotes. */
+function escapeJsonPath(key: string): string {
+  return `$."${key.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 /** Default lookback for services/operations discovery (7 days in ms). */
 const DISCOVERY_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
 
@@ -365,9 +378,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       // Attribute filters (JSON extract - path must be literal, not parameter)
       if (filter.spanAttributes) {
         for (const [key, value] of Object.entries(filter.spanAttributes)) {
-          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          const jsonPath = escapeJsonPath(key);
           query = query.where(
-            kyselySql`json_extract(SpanAttributes, ${kyselySql.lit(jsonPath)})`,
+            kyselySql`json_extract(SpanAttributes, ${jsonPath})`,
             "=",
             value
           );
@@ -375,9 +388,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       }
       if (filter.resourceAttributes) {
         for (const [key, value] of Object.entries(filter.resourceAttributes)) {
-          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          const jsonPath = escapeJsonPath(key);
           query = query.where(
-            kyselySql`json_extract(ResourceAttributes, ${kyselySql.lit(jsonPath)})`,
+            kyselySql`json_extract(ResourceAttributes, ${jsonPath})`,
             "=",
             value
           );
@@ -559,9 +572,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       // Attribute filters (JSON extract)
       if (filter.attributes) {
         for (const [key, value] of Object.entries(filter.attributes)) {
-          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          const jsonPath = escapeJsonPath(key);
           query = query.where(
-            kyselySql`json_extract(Attributes, ${kyselySql.lit(jsonPath)})`,
+            kyselySql`json_extract(Attributes, ${jsonPath})`,
             "=",
             value
           );
@@ -569,9 +582,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       }
       if (filter.resourceAttributes) {
         for (const [key, value] of Object.entries(filter.resourceAttributes)) {
-          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          const jsonPath = escapeJsonPath(key);
           query = query.where(
-            kyselySql`json_extract(ResourceAttributes, ${kyselySql.lit(jsonPath)})`,
+            kyselySql`json_extract(ResourceAttributes, ${jsonPath})`,
             "=",
             value
           );
@@ -579,9 +592,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       }
       if (filter.scopeAttributes) {
         for (const [key, value] of Object.entries(filter.scopeAttributes)) {
-          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          const jsonPath = escapeJsonPath(key);
           query = query.where(
-            kyselySql`json_extract(ScopeAttributes, ${kyselySql.lit(jsonPath)})`,
+            kyselySql`json_extract(ScopeAttributes, ${jsonPath})`,
             "=",
             value
           );
@@ -619,6 +632,144 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       throw new SqliteDatasourceQueryError("Failed to query metrics", {
         cause: error,
       });
+    }
+  }
+
+  async getAggregatedMetrics(
+    filter: dataFilterSchemas.MetricsDataFilter
+  ): Promise<{
+    data: denormalizedSignals.AggregatedMetricRow[];
+    nextCursor: null;
+  }> {
+    try {
+      const limit = filter.limit ?? 100;
+      const metricType = filter.metricType;
+      if (metricType !== "Gauge" && metricType !== "Sum") {
+        throw new Error(`aggregate is not supported for ${metricType}`);
+      }
+
+      const tableMap = {
+        Gauge: "otel_metrics_gauge",
+        Sum: "otel_metrics_sum",
+      } as const;
+
+      const table = tableMap[metricType];
+      const aggFnSql: Record<string, ReturnType<typeof kyselySql>> = {
+        sum: kyselySql`SUM(Value)`,
+        avg: kyselySql`AVG(Value)`,
+        min: kyselySql`MIN(Value)`,
+        max: kyselySql`MAX(Value)`,
+        count: kyselySql`COUNT(Value)`,
+      };
+      const aggKey = filter.aggregate ?? "sum";
+      const aggExpr = aggFnSql[aggKey];
+      if (!aggExpr) {
+        throw new Error(`Unknown aggregate function: ${aggKey}`);
+      }
+      const groupByKeys = filter.groupBy ?? [];
+
+      // Build query using Kysely query builder + kyselySql for dynamic parts
+      let query = queryBuilder.selectFrom(table).select(aggExpr.as("value"));
+
+      // Group-by columns: json_extract(Attributes, path) AS group_N
+      for (const [i, groupKey] of groupByKeys.entries()) {
+        const jsonPath = escapeJsonPath(groupKey);
+        query = query.select(
+          kyselySql`json_extract(Attributes, ${jsonPath})`.as(
+            `group_${String(i)}`
+          )
+        );
+      }
+
+      // Exact match filters
+      if (filter.metricName)
+        query = query.where("MetricName", "=", filter.metricName);
+      if (filter.serviceName)
+        query = query.where("ServiceName", "=", filter.serviceName);
+      if (filter.scopeName)
+        query = query.where("ScopeName", "=", filter.scopeName);
+
+      // Implicit Delta filter for Sum
+      if (metricType === "Sum") {
+        query = query.where(
+          "AggregationTemporality",
+          "=",
+          "AGGREGATION_TEMPORALITY_DELTA"
+        );
+      }
+
+      // Time range
+      if (filter.timeUnixMin != null)
+        query = query.where("TimeUnix", ">=", BigInt(filter.timeUnixMin));
+      if (filter.timeUnixMax != null)
+        query = query.where("TimeUnix", "<=", BigInt(filter.timeUnixMax));
+
+      // Attribute filters (same pattern as getMetrics)
+      if (filter.attributes) {
+        for (const [key, value] of Object.entries(filter.attributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(Attributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.resourceAttributes) {
+        for (const [key, value] of Object.entries(filter.resourceAttributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(ResourceAttributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.scopeAttributes) {
+        for (const [key, value] of Object.entries(filter.scopeAttributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(ScopeAttributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+
+      // GROUP BY
+      for (const [i] of groupByKeys.entries()) {
+        query = query.groupBy(kyselySql.ref(`group_${String(i)}`));
+      }
+
+      // ORDER BY value DESC, LIMIT
+      query = query.orderBy(kyselySql`value`, "desc").limit(limit);
+
+      // Execute
+      const { sql, parameters } = query.compile();
+      const stmt = this.sqliteConnection.prepare(sql);
+      stmt.setReadBigInts(true);
+      const rawRows = stmt.all(
+        ...(parameters as (string | number | bigint | null)[])
+      );
+      const rows = rawRows.filter(isRecord);
+
+      const data: denormalizedSignals.AggregatedMetricRow[] = rows.map(
+        (row) => {
+          const groups: Record<string, string> = {};
+          for (const [i, groupKey] of groupByKeys.entries()) {
+            groups[groupKey] = String(row[`group_${String(i)}`] ?? "");
+          }
+          return { groups, value: Number(row.value) };
+        }
+      );
+
+      return { data, nextCursor: null };
+    } catch (error) {
+      if (error instanceof SqliteDatasourceQueryError) throw error;
+      throw new SqliteDatasourceQueryError(
+        "Failed to query aggregated metrics",
+        { cause: error }
+      );
     }
   }
 
@@ -714,9 +865,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       // Attribute filters (JSON extract)
       if (filter.logAttributes) {
         for (const [key, value] of Object.entries(filter.logAttributes)) {
-          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          const jsonPath = escapeJsonPath(key);
           query = query.where(
-            kyselySql`json_extract(LogAttributes, ${kyselySql.lit(jsonPath)})`,
+            kyselySql`json_extract(LogAttributes, ${jsonPath})`,
             "=",
             value
           );
@@ -724,9 +875,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       }
       if (filter.resourceAttributes) {
         for (const [key, value] of Object.entries(filter.resourceAttributes)) {
-          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          const jsonPath = escapeJsonPath(key);
           query = query.where(
-            kyselySql`json_extract(ResourceAttributes, ${kyselySql.lit(jsonPath)})`,
+            kyselySql`json_extract(ResourceAttributes, ${jsonPath})`,
             "=",
             value
           );
@@ -734,9 +885,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       }
       if (filter.scopeAttributes) {
         for (const [key, value] of Object.entries(filter.scopeAttributes)) {
-          const jsonPath = `$."${key.replace(/"/g, '""')}"`;
+          const jsonPath = escapeJsonPath(key);
           query = query.where(
-            kyselySql`json_extract(ScopeAttributes, ${kyselySql.lit(jsonPath)})`,
+            kyselySql`json_extract(ScopeAttributes, ${jsonPath})`,
             "=",
             value
           );
@@ -1043,11 +1194,8 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         }
         if (filter.spanAttributes) {
           for (const [key, value] of Object.entries(filter.spanAttributes)) {
-            const jsonPath = `$."${key.replace(/"/g, '""')}"`;
-            const safePath = jsonPath.replace(/'/g, "''");
-            spanClauses.push(
-              `json_extract(s.SpanAttributes, '${safePath}') = ?`
-            );
+            spanClauses.push(`json_extract(s.SpanAttributes, ?) = ?`);
+            spanFilterParams.push(escapeJsonPath(key));
             spanFilterParams.push(value);
           }
         }
@@ -1055,11 +1203,8 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           for (const [key, value] of Object.entries(
             filter.resourceAttributes
           )) {
-            const jsonPath = `$."${key.replace(/"/g, '""')}"`;
-            const safePath = jsonPath.replace(/'/g, "''");
-            spanClauses.push(
-              `json_extract(s.ResourceAttributes, '${safePath}') = ?`
-            );
+            spanClauses.push(`json_extract(s.ResourceAttributes, ?) = ?`);
+            spanFilterParams.push(escapeJsonPath(key));
             spanFilterParams.push(value);
           }
         }

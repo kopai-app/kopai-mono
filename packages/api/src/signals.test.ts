@@ -20,6 +20,9 @@ describe("signalsRoutes", () => {
   let getMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>
   >;
+  let getAggregatedMetricsSpy: ReturnType<
+    typeof vi.fn<datasource.ReadMetricsDatasource["getAggregatedMetrics"]>
+  >;
   let discoverMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>
   >;
@@ -37,6 +40,8 @@ describe("signalsRoutes", () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     getLogsSpy = vi.fn<datasource.ReadLogsDatasource["getLogs"]>();
     getMetricsSpy = vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>();
+    getAggregatedMetricsSpy =
+      vi.fn<datasource.ReadMetricsDatasource["getAggregatedMetrics"]>();
     discoverMetricsSpy =
       vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>();
     getServicesSpy =
@@ -51,6 +56,7 @@ describe("signalsRoutes", () => {
         getTraces: getTracesSpy,
         getLogs: getLogsSpy,
         getMetrics: getMetricsSpy,
+        getAggregatedMetrics: getAggregatedMetricsSpy,
         discoverMetrics: discoverMetricsSpy,
         getServices: getServicesSpy,
         getOperations: getOperationsSpy,
@@ -287,6 +293,79 @@ describe("signalsRoutes", () => {
         status: 500,
         title: "Internal server error",
       });
+    });
+
+    it("calls getAggregatedMetrics when aggregate is set", async () => {
+      const aggregatedResult = {
+        data: [{ groups: { signal: "/v1/traces" }, value: 1024 }],
+        nextCursor: null,
+      };
+      getAggregatedMetricsSpy.mockResolvedValue(aggregatedResult);
+
+      const filter = {
+        metricType: "Sum" as const,
+        metricName: "kopai.ingestion.bytes",
+        aggregate: "sum" as const,
+        groupBy: ["signal"],
+      };
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: filter,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(aggregatedResult);
+      expect(getAggregatedMetricsSpy).toHaveBeenCalled();
+      expect(getMetricsSpy).not.toHaveBeenCalled();
+    });
+
+    it("calls getMetrics (not getAggregatedMetrics) when aggregate is absent", async () => {
+      getMetricsSpy.mockResolvedValue({ data: [mockMetric], nextCursor: null });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: { metricType: "Gauge" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(getMetricsSpy).toHaveBeenCalled();
+      expect(getAggregatedMetricsSpy).not.toHaveBeenCalled();
+    });
+
+    it("rejects groupBy without aggregate", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: { metricType: "Sum", groupBy: ["signal"] },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("rejects aggregate on Histogram metric type", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: { metricType: "Histogram", aggregate: "sum" },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("rejects cursor with aggregate", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: {
+          metricType: "Sum",
+          aggregate: "sum",
+          cursor: "123:456",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 

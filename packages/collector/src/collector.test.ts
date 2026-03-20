@@ -966,4 +966,70 @@ describe("collectorRoutes", () => {
       });
     });
   });
+
+  describe("ingestion metrics opt-in", () => {
+    let server: FastifyInstance;
+    beforeEach(() => {
+      server = fastify();
+    });
+    afterEach(() => {
+      server.close();
+    });
+
+    it("emits ingestion metrics when ingestionMetricsDatasource is set", async () => {
+      const ingestionWriteSpy = vi.fn().mockResolvedValue({});
+      const writeTracesSpy = vi.fn().mockResolvedValue({
+        rejectedSpans: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: vi.fn().mockResolvedValue({}),
+          writeTraces: writeTracesSpy,
+          writeLogs: vi.fn(),
+        },
+        ingestionMetricsDatasource: { writeMetrics: ingestionWriteSpy },
+      });
+
+      await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        payload: { resourceSpans: [] },
+      });
+
+      // Allow fire-and-forget promise to settle
+      await new Promise((r) => setTimeout(r, 100));
+      expect(ingestionWriteSpy).toHaveBeenCalledOnce();
+      const payload = ingestionWriteSpy.mock.calls[0]?.[0];
+      const metrics = payload?.resourceMetrics?.[0]?.scopeMetrics?.[0]?.metrics;
+      expect(metrics?.[0]?.name).toBe("kopai.ingestion.bytes");
+      expect(metrics?.[1]?.name).toBe("kopai.ingestion.requests");
+    });
+
+    it("does NOT emit ingestion metrics when ingestionMetricsDatasource is not set", async () => {
+      const writeMetricsSpy = vi.fn().mockResolvedValue({});
+      const writeTracesSpy = vi.fn().mockResolvedValue({
+        rejectedSpans: undefined,
+        errorMessage: undefined,
+      });
+
+      server.register(collectorRoutes, {
+        telemetryDatasource: {
+          writeMetrics: writeMetricsSpy,
+          writeTraces: writeTracesSpy,
+          writeLogs: vi.fn(),
+        },
+      });
+
+      await server.inject({
+        method: "POST",
+        url: "/v1/traces",
+        payload: { resourceSpans: [] },
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+      expect(writeMetricsSpy).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -15,6 +15,11 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
     nextCursor: z.string().nullable(),
   });
 
+  const aggregatedResponseSchema = z.object({
+    data: z.array(denormalizedSignals.aggregatedMetricSchema),
+    nextCursor: z.null(),
+  });
+
   fastify.route({
     method: "POST",
     url: "/signals/metrics/search",
@@ -22,17 +27,25 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
       description: "Search metrics matching a filter",
       body: dataFilterSchemas.metricsDataFilterSchema,
       response: {
-        200: searchResponseSchema,
+        200: z.union([searchResponseSchema, aggregatedResponseSchema]),
         "4xx": problemDetailsSchema,
         "5xx": problemDetailsSchema,
       },
     },
     handler: async (req, res) => {
-      const result = await opts.readMetricsDatasource.getMetrics({
-        ...req.body,
-        requestContext: req.requestContext,
-      });
-      res.send(result);
+      if (req.body.aggregate) {
+        const result = await opts.readMetricsDatasource.getAggregatedMetrics({
+          ...req.body,
+          requestContext: req.requestContext,
+        });
+        res.send(result);
+      } else {
+        const result = await opts.readMetricsDatasource.getMetrics({
+          ...req.body,
+          requestContext: req.requestContext,
+        });
+        res.send(result);
+      }
     },
   });
 
