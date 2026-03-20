@@ -317,6 +317,18 @@ describe("E2E: OTEL Collector → ClickHouse → ReadDatasource", () => {
       expect(log.ResourceAttributes?.["service.name"]).toBe(TEST_SERVICE_NAME);
     });
 
+    it("has EventName field (empty for logs without eventName)", async () => {
+      const result = await ds.getLogs({
+        serviceName: TEST_SERVICE_NAME,
+        requestContext: requestContext(),
+      });
+
+      // Logs sent without eventName → ClickHouse stores empty string → parsed as undefined
+      for (const log of result.data) {
+        expect(log.EventName).toBeUndefined();
+      }
+    });
+
     it("filters by bodyContains", async () => {
       const result = await ds.getLogs({
         bodyContains: "error",
