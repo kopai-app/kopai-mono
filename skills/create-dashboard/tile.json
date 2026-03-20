@@ -1,8 +1,11 @@
 {
   "name": "kopai/create-dashboard",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": false,
+  "summary": "Create observability dashboards from OTEL metrics, logs, and traces using Kopai. Use when building metric visualizations, monitoring views, KPI panels, or when the user wants to see their telemetry data in a dashboard — even if they don't say \"dashboard\" explicitly. Also use when other skills or workflows need to present telemetry data visually (e.g. after root cause analysis).",
   "skills": {
-    "create-dashboard": "./SKILL.md"
+    "create-dashboard": {
+      "path": "SKILL.md"
+    }
   }
 }
