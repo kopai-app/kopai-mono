@@ -23,6 +23,7 @@ import {
   sampleTrace,
   sampleLog,
   sampleMetric,
+  sampleAggregatedMetric,
   sampleDiscovery,
   sampleDashboard,
 } from "./mocks/handlers.js";
@@ -155,6 +156,58 @@ describe("KopaiClient", () => {
       expect(result.metrics).toHaveLength(1);
       expect(result.metrics[0]!.name).toBe(sampleDiscovery.metrics[0]!.name);
       expect(result.metrics[0]!.type).toBe("Histogram");
+    });
+  });
+
+  describe("searchAggregatedMetrics", () => {
+    it("returns aggregated rows", async () => {
+      const result = await client.searchAggregatedMetrics({
+        metricType: "Sum",
+        metricName: "kopai.ingestion.bytes",
+        aggregate: "sum",
+        groupBy: ["signal"],
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toEqual(sampleAggregatedMetric);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("rejects groupBy without aggregate", async () => {
+      await expect(
+        client.searchAggregatedMetrics({
+          metricType: "Sum",
+          groupBy: ["signal"],
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects aggregate on Histogram type", async () => {
+      await expect(
+        client.searchAggregatedMetrics({
+          metricType: "Histogram",
+          aggregate: "sum",
+        })
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("searchMetricsPage with aggregated response", () => {
+    it("throws validation error when server returns aggregated shape", async () => {
+      // Simulate the bug: searchMetricsPage called but server returns
+      // aggregated rows (no MetricType discriminator)
+      server.use(
+        http.post(`${BASE_URL}/signals/metrics/search`, () =>
+          HttpResponse.json({
+            data: [sampleAggregatedMetric],
+            nextCursor: null,
+          })
+        )
+      );
+
+      await expect(
+        client.searchMetricsPage({ metricType: "Gauge" })
+      ).rejects.toThrow(/validation/i);
     });
   });
 

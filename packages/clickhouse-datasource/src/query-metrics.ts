@@ -192,6 +192,133 @@ LIMIT {limit:UInt32}`;
   return { query, params };
 }
 
+const AGGREGATE_FN_MAP: Record<string, string> = {
+  sum: "SUM",
+  avg: "AVG",
+  min: "MIN",
+  max: "MAX",
+  count: "COUNT",
+};
+
+export function buildAggregatedMetricsQuery(
+  filter: dataFilterSchemas.MetricsDataFilter
+): { query: string; params: Record<string, unknown> } {
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = {};
+  const limit = filter.limit ?? 100;
+  const metricType: datasource.MetricType = filter.metricType;
+  if (metricType !== "Gauge" && metricType !== "Sum") {
+    throw new Error(`aggregate is not supported for ${metricType}`);
+  }
+  const table = TABLE_MAP[metricType];
+
+  const aggKey = filter.aggregate ?? "sum";
+  const aggFn = AGGREGATE_FN_MAP[aggKey];
+  if (!aggFn) {
+    throw new Error(`Unknown aggregate function: ${aggKey}`);
+  }
+
+  // Build SELECT columns: group-by extractions + aggregation
+  const selectCols: string[] = [];
+  const groupByCols: string[] = [];
+
+  if (filter.groupBy) {
+    for (const [i, groupKey] of filter.groupBy.entries()) {
+      const alias = `group_${String(i)}`;
+      selectCols.push(
+        `Attributes[{groupByKey${String(i)}:String}] AS ${alias}`
+      );
+      groupByCols.push(alias);
+      params[`groupByKey${String(i)}`] = groupKey;
+    }
+  }
+
+  selectCols.push(`${aggFn}(Value) AS value`);
+
+  // Exact match filters
+  if (filter.metricName) {
+    conditions.push("MetricName = {metricName:String}");
+    params.metricName = filter.metricName;
+  }
+  if (filter.serviceName) {
+    conditions.push("ServiceName = {serviceName:String}");
+    params.serviceName = filter.serviceName;
+  }
+  if (filter.scopeName) {
+    conditions.push("ScopeName = {scopeName:String}");
+    params.scopeName = filter.scopeName;
+  }
+
+  // Implicit Delta filter for Sum
+  if (metricType === "Sum") {
+    conditions.push("AggregationTemporality = 1");
+  }
+
+  // Time range
+  if (filter.timeUnixMin != null) {
+    conditions.push("TimeUnix >= {tsMin:DateTime64(9)}");
+    params.tsMin = nanosToDateTime64(filter.timeUnixMin);
+  }
+  if (filter.timeUnixMax != null) {
+    conditions.push("TimeUnix <= {tsMax:DateTime64(9)}");
+    params.tsMax = nanosToDateTime64(filter.timeUnixMax);
+  }
+
+  // Attribute filters
+  if (filter.attributes) {
+    let i = 0;
+    for (const [key, value] of Object.entries(filter.attributes)) {
+      conditions.push(
+        `Attributes[{attrKey${String(i)}:String}] = {attrVal${String(i)}:String}`
+      );
+      params[`attrKey${String(i)}`] = key;
+      params[`attrVal${String(i)}`] = value;
+      i++;
+    }
+  }
+  if (filter.resourceAttributes) {
+    let i = 0;
+    for (const [key, value] of Object.entries(filter.resourceAttributes)) {
+      conditions.push(
+        `ResourceAttributes[{resAttrKey${String(i)}:String}] = {resAttrVal${String(i)}:String}`
+      );
+      params[`resAttrKey${String(i)}`] = key;
+      params[`resAttrVal${String(i)}`] = value;
+      i++;
+    }
+  }
+  if (filter.scopeAttributes) {
+    let i = 0;
+    for (const [key, value] of Object.entries(filter.scopeAttributes)) {
+      conditions.push(
+        `ScopeAttributes[{scopeAttrKey${String(i)}:String}] = {scopeAttrVal${String(i)}:String}`
+      );
+      params[`scopeAttrKey${String(i)}`] = key;
+      params[`scopeAttrVal${String(i)}`] = value;
+      i++;
+    }
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const groupByClause =
+    groupByCols.length > 0 ? `GROUP BY ${groupByCols.join(", ")}` : "";
+
+  const query = `
+SELECT
+  ${selectCols.join(",\n  ")}
+FROM ${table}
+${whereClause}
+${groupByClause}
+ORDER BY value DESC
+LIMIT {limit:UInt32}`;
+
+  params.limit = limit;
+
+  return { query, params };
+}
+
 // ---------------------------------------------------------------------------
 // Materialized-view target table names for metrics discovery.
 // When these tables exist, discoverMetrics uses them for near-instant results.

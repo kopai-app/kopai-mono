@@ -25,11 +25,15 @@ function fetchForDataSource(
         dataSource.params as Parameters<typeof client.searchLogsPage>[0],
         { signal }
       );
-    case "searchMetricsPage":
-      return client.searchMetricsPage(
-        dataSource.params as Parameters<typeof client.searchMetricsPage>[0],
-        { signal }
-      );
+    case "searchMetricsPage": {
+      const params = dataSource.params as Parameters<
+        typeof client.searchMetricsPage
+      >[0];
+      if (params.aggregate) {
+        return client.searchAggregatedMetrics(params, { signal });
+      }
+      return client.searchMetricsPage(params, { signal });
+    }
     case "getTrace":
       return client.getTrace(dataSource.params.traceId, { signal });
     case "discoverMetrics":

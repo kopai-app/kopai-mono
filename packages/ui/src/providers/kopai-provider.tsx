@@ -7,6 +7,7 @@ export type KopaiClient = Pick<
   | "searchTracesPage"
   | "searchLogsPage"
   | "searchMetricsPage"
+  | "searchAggregatedMetrics"
   | "getTrace"
   | "discoverMetrics"
   | "getDashboard"

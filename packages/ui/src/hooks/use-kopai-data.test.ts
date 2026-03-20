@@ -16,6 +16,7 @@ const createMockClient = () => ({
   searchTracesPage: vi.fn(),
   searchLogsPage: vi.fn(),
   searchMetricsPage: vi.fn(),
+  searchAggregatedMetrics: vi.fn(),
   getTrace: vi.fn(),
   discoverMetrics: vi.fn(),
   getDashboard: vi.fn(),
@@ -150,6 +151,36 @@ describe("useKopaiData", () => {
 
       expect(result.current.data).toEqual(mockData);
       expect(mockClient.searchMetricsPage).toHaveBeenCalled();
+    });
+
+    it("routes to searchAggregatedMetrics when aggregate is set", async () => {
+      const mockData = {
+        data: [{ groups: { signal: "/v1/traces" }, value: 1024 }],
+        nextCursor: null,
+      };
+      mockClient.searchAggregatedMetrics.mockResolvedValue(mockData);
+
+      const dataSource: DataSource = {
+        method: "searchMetricsPage",
+        params: {
+          metricType: "Sum",
+          metricName: "kopai.ingestion.bytes",
+          aggregate: "sum",
+          groupBy: ["signal"],
+        },
+      };
+
+      const { result } = renderHook(() => useKopaiData(dataSource), {
+        wrapper: wrapper(mockClient),
+      });
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(result.current.data).toEqual(mockData);
+      expect(mockClient.searchAggregatedMetrics).toHaveBeenCalled();
+      expect(mockClient.searchMetricsPage).not.toHaveBeenCalled();
     });
   });
 

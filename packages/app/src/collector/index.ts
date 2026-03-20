@@ -5,5 +5,8 @@ import type { datasource } from "@kopai/core";
 export const otelCollectorRoutes: FastifyPluginAsyncZod<{
   telemetryDatasource: datasource.WriteTelemetryDatasource;
 }> = async function (fastify, opts) {
-  fastify.register(collectorRoutes, opts);
+  fastify.register(collectorRoutes, {
+    ...opts,
+    ingestionMetricsDatasource: opts.telemetryDatasource,
+  });
 };

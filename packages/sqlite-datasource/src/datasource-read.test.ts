@@ -1785,6 +1785,235 @@ describe("OptimizedDatasource", () => {
     });
   });
 
+  describe("getAggregatedMetrics", () => {
+    let testConnection: DatabaseSync;
+    let ds: OptimizedDatasource;
+    let readDs: datasource.ReadTelemetryDatasource;
+    let insertSum: ReturnType<typeof createInsertSum>;
+
+    beforeEach(async () => {
+      testConnection = initializeDatabase(":memory:");
+      ds = createOptimizedDatasource(testConnection);
+      readDs = ds;
+      insertSum = createInsertSum(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("aggregates Sum values with SUM function", async () => {
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "1000000000000000",
+        value: 100,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { signal: "/v1/traces" },
+      });
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "2000000000000000",
+        value: 200,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { signal: "/v1/traces" },
+      });
+
+      const result = await readDs.getAggregatedMetrics({
+        metricType: "Sum",
+        metricName: "kopai.ingestion.bytes",
+        aggregate: "sum",
+        groupBy: ["signal"],
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.groups).toEqual({ signal: "/v1/traces" });
+      expect(row0.value).toBe(300);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("groups by multiple attributes", async () => {
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "1000000000000000",
+        value: 100,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { signal: "/v1/traces", "tenant.id": "t1" },
+      });
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "2000000000000000",
+        value: 50,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { signal: "/v1/logs", "tenant.id": "t1" },
+      });
+
+      const result = await readDs.getAggregatedMetrics({
+        metricType: "Sum",
+        metricName: "kopai.ingestion.bytes",
+        aggregate: "sum",
+        groupBy: ["signal", "tenant.id"],
+      });
+
+      expect(result.data).toHaveLength(2);
+      const first = result.data[0];
+      const second = result.data[1];
+      assertDefined(first);
+      assertDefined(second);
+      // Ordered by value DESC
+      expect(first.value).toBe(100);
+      expect(first.groups.signal).toBe("/v1/traces");
+      expect(second.value).toBe(50);
+      expect(second.groups.signal).toBe("/v1/logs");
+    });
+
+    it("aggregates without groupBy", async () => {
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "1000000000000000",
+        value: 100,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+      });
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "2000000000000000",
+        value: 200,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+      });
+
+      const result = await readDs.getAggregatedMetrics({
+        metricType: "Sum",
+        metricName: "kopai.ingestion.bytes",
+        aggregate: "sum",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.groups).toEqual({});
+      expect(row0.value).toBe(300);
+    });
+
+    it("applies time range filter", async () => {
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "1000000000000000",
+        value: 100,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+      });
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "3000000000000000",
+        value: 200,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+      });
+
+      const result = await readDs.getAggregatedMetrics({
+        metricType: "Sum",
+        metricName: "kopai.ingestion.bytes",
+        aggregate: "sum",
+        timeUnixMin: "2000000000000000",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(200);
+    });
+
+    it("respects limit", async () => {
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "1000000000000000",
+        value: 100,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { signal: "/v1/traces" },
+      });
+      await insertSum({
+        metricName: "kopai.ingestion.bytes",
+        timeUnixNano: "2000000000000000",
+        value: 200,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { signal: "/v1/logs" },
+      });
+
+      const result = await readDs.getAggregatedMetrics({
+        metricType: "Sum",
+        metricName: "kopai.ingestion.bytes",
+        aggregate: "sum",
+        groupBy: ["signal"],
+        limit: 1,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(200); // highest value first
+    });
+
+    it("handles special characters in groupBy keys", async () => {
+      const specialKey = `it's a "test"`;
+      await insertSum({
+        metricName: "test.metric",
+        timeUnixNano: "1000000000000000",
+        value: 42,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { [specialKey]: "val1" },
+      });
+      await insertSum({
+        metricName: "test.metric",
+        timeUnixNano: "2000000000000000",
+        value: 58,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { [specialKey]: "val1" },
+      });
+
+      const result = await readDs.getAggregatedMetrics({
+        metricType: "Sum",
+        metricName: "test.metric",
+        aggregate: "sum",
+        groupBy: [specialKey],
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.groups[specialKey]).toBe("val1");
+      expect(row0.value).toBe(100);
+    });
+
+    it("handles special characters in attribute filter keys", async () => {
+      const specialKey = `key'with"quotes`;
+      await insertSum({
+        metricName: "test.metric",
+        timeUnixNano: "1000000000000000",
+        value: 77,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { [specialKey]: "match" },
+      });
+      await insertSum({
+        metricName: "test.metric",
+        timeUnixNano: "2000000000000000",
+        value: 33,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { [specialKey]: "no-match" },
+      });
+
+      const result = await readDs.getAggregatedMetrics({
+        metricType: "Sum",
+        metricName: "test.metric",
+        aggregate: "sum",
+        attributes: { [specialKey]: "match" },
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(77);
+    });
+  });
+
   describe("discoverMetrics", () => {
     let testConnection: DatabaseSync;
     let ds: OptimizedDatasource;

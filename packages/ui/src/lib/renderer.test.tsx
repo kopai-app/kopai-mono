@@ -52,6 +52,7 @@ type MockClient = {
   searchTracesPage: ReturnType<typeof vi.fn>;
   searchLogsPage: ReturnType<typeof vi.fn>;
   searchMetricsPage: ReturnType<typeof vi.fn>;
+  searchAggregatedMetrics: ReturnType<typeof vi.fn>;
   getTrace: ReturnType<typeof vi.fn>;
   discoverMetrics: ReturnType<typeof vi.fn>;
   searchTraces: ReturnType<typeof vi.fn>;
@@ -281,6 +282,7 @@ describe("Renderer with dataSource", () => {
     searchTracesPage: vi.fn(),
     searchLogsPage: vi.fn(),
     searchMetricsPage: vi.fn(),
+    searchAggregatedMetrics: vi.fn(),
     getTrace: vi.fn(),
     discoverMetrics: vi.fn(),
     searchTraces: vi.fn(),
