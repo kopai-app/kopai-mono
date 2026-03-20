@@ -1,8 +1,11 @@
 {
   "name": "kopai/root-cause-analysis",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": false,
+  "summary": "Analyze telemetry data for root cause analysis using Kopai CLI. Use when debugging errors, investigating latency issues, tracing request flows across services, or correlating logs with traces. Also use when users report production issues like \"why is my API slow\", \"getting 500 errors\", \"service is down\", \"requests are timing out\", or any symptom that needs telemetry-based investigation — even if they don't mention traces or observability explicitly.",
   "skills": {
-    "root-cause-analysis": "./SKILL.md"
+    "root-cause-analysis": {
+      "path": "SKILL.md"
+    }
   }
 }
