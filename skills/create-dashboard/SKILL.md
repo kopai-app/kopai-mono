@@ -4,7 +4,7 @@ description: Create observability dashboards from OTEL metrics, logs, and traces
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # Create Dashboard with Kopai
