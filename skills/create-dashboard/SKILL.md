@@ -11,11 +11,11 @@ metadata:
 
 ## Component Schema (auto-generated)
 
-!`npx @kopai/cli dashboards schema`
+!`npx @kopai/cli dashboards schema 2>/dev/null || echo "ERROR: Cannot connect to Kopai backend. If running locally, start it with: npx @kopai/app start — If using a remote backend, check the url in your .kopairc file."`
 
 ## Available Metrics
 
-!`npx @kopai/cli metrics discover --json`
+!`npx @kopai/cli metrics discover --json 2>/dev/null || echo "ERROR: Cannot connect to Kopai backend. If running locally, start it with: npx @kopai/app start — If using a remote backend, check the url in your .kopairc file."`
 
 ## Rules
 
