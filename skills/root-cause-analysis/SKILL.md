@@ -29,7 +29,7 @@ See otel-instrumentation skill for setup.
 
 ```bash
 # Find failing requests
-npx @kopai/cli traces search --severity-min 17 --service payment-api --json
+npx @kopai/cli traces search --status-code ERROR --service payment-api --json
 
 # Get trace details (copy traceId from above)
 npx @kopai/cli traces get abc123def456 --json
