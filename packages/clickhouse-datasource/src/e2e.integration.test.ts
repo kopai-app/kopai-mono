@@ -324,6 +324,7 @@ describe("E2E: OTEL Collector → ClickHouse → ReadDatasource", () => {
       });
 
       // Logs sent without eventName → ClickHouse stores empty string → parsed as undefined
+      expect(result.data.length).toBeGreaterThan(0);
       for (const log of result.data) {
         expect(log.EventName).toBeUndefined();
       }

@@ -71,7 +71,9 @@ async function runMigrationFile(
       .filter(
         (s) =>
           s.length > 0 &&
-          !s.split("\n").every((l) => l.startsWith("--") || l.trim() === "")
+          !s
+            .split("\n")
+            .every((l) => l.trim().startsWith("--") || l.trim() === "")
       );
 
     for (const stmt of statements) {
@@ -96,7 +98,11 @@ async function waitForData(
 ): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (await check()) return;
+    try {
+      if (await check()) return;
+    } catch {
+      // Swallow transient errors (e.g. table not yet created) and keep polling
+    }
     await new Promise((r) => setTimeout(r, DATA_POLL_INTERVAL));
   }
   throw new Error(`Timed out waiting for data after ${String(timeoutMs)}ms`);
