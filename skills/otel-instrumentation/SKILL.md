@@ -4,7 +4,7 @@ description: Instrument applications with OpenTelemetry SDK and validate telemet
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # OpenTelemetry Instrumentation with Kopai
