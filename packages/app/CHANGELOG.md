@@ -1,5 +1,20 @@
 # @kopai/app
 
+## 0.14.0
+
+### Minor Changes
+
+- 3894c34: Add aggregate metrics
+
+### Patch Changes
+
+- Updated dependencies [3894c34]
+  - @kopai/sqlite-datasource@0.11.0
+  - @kopai/collector@0.7.0
+  - @kopai/core@0.9.0
+  - @kopai/api@0.6.0
+  - @kopai/ui@0.10.0
+
 ## 0.13.3
 
 ### Patch Changes

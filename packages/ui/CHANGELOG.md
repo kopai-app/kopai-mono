@@ -1,5 +1,17 @@
 # @kopai/ui
 
+## 0.10.0
+
+### Minor Changes
+
+- 3894c34: Add aggregate metrics
+
+### Patch Changes
+
+- Updated dependencies [3894c34]
+  - @kopai/core@0.9.0
+  - @kopai/sdk@0.7.0
+
 ## 0.9.0
 
 ### Minor Changes
