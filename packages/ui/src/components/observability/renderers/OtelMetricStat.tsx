@@ -26,11 +26,27 @@ export function OtelMetricStat(props: Props) {
 
   if (isAggregatedRequest(props)) {
     const response = props.data as { data: AggregatedMetricRow[] } | null;
-    const firstRow = response?.data[0];
+    const rows = response?.data ?? [];
+
+    if (rows.length > 1) {
+      return (
+        <MetricStat
+          rows={[]}
+          error={
+            new Error(
+              "MetricStat cannot display grouped aggregates. Remove groupBy or use MetricTable."
+            )
+          }
+          label={props.element.props.label ?? undefined}
+          formatValue={formatOtelValue}
+        />
+      );
+    }
+
     return (
       <MetricStat
         rows={[]}
-        value={firstRow?.value}
+        value={rows[0]?.value}
         isLoading={props.loading}
         error={props.error ?? undefined}
         label={props.element.props.label ?? undefined}

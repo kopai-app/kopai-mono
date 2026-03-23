@@ -116,7 +116,8 @@ export function createMetricsCommand(): Command {
       output(result.data, { format, fields });
     } catch (err) {
       outputError(err, format === "json");
-      process.exit(1);
+      const code = err instanceof InvalidArgumentError ? 2 : 1;
+      process.exit(code);
     }
   });
 
@@ -159,8 +160,12 @@ function isAggregateFn(value: string): value is AggregateFn {
   );
 }
 
+class InvalidArgumentError extends Error {
+  override readonly name = "InvalidArgumentError";
+}
+
 function toAggregateFn(value: string | undefined): AggregateFn | undefined {
   if (value === undefined) return undefined;
   if (isAggregateFn(value)) return value;
-  throw new Error(`Invalid aggregate function: ${value}`);
+  throw new InvalidArgumentError(`Invalid aggregate function: ${value}`);
 }
