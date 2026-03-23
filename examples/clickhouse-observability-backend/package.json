@@ -8,10 +8,10 @@
   "dependencies": {
     "@kopai/api": "workspace:*",
     "@kopai/clickhouse-datasource": "workspace:*",
-    "fastify": "^5.8.2",
+    "fastify": "^5.8.4",
     "fastify-type-provider-zod": "^6.1.0"
   },
   "devDependencies": {
-    "tsdown": "^0.21.2"
+    "tsdown": "^0.21.4"
   }
 }
