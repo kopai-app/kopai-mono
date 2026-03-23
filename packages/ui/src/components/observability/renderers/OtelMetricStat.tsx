@@ -11,6 +11,11 @@ type Props = RendererComponentProps<
   typeof observabilityCatalog.components.MetricStat
 >;
 
+const EMPTY_ROWS: never[] = [];
+const GROUPED_AGGREGATE_ERROR = new Error(
+  "MetricStat cannot display grouped aggregates. Remove groupBy or use MetricTable."
+);
+
 function isAggregatedRequest(props: Props & { hasData: true }): boolean {
   const ds = props.element.dataSource;
   if (!ds || ds.method !== "searchMetricsPage" || !ds.params) return false;
@@ -31,12 +36,8 @@ export function OtelMetricStat(props: Props) {
     if (rows.length > 1) {
       return (
         <MetricStat
-          rows={[]}
-          error={
-            new Error(
-              "MetricStat cannot display grouped aggregates. Remove groupBy or use MetricTable."
-            )
-          }
+          rows={EMPTY_ROWS}
+          error={GROUPED_AGGREGATE_ERROR}
           label={props.element.props.label ?? undefined}
           formatValue={formatOtelValue}
         />
@@ -45,7 +46,7 @@ export function OtelMetricStat(props: Props) {
 
     return (
       <MetricStat
-        rows={[]}
+        rows={EMPTY_ROWS}
         value={rows[0]?.value}
         isLoading={props.loading}
         error={props.error ?? undefined}

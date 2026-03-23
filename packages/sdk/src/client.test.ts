@@ -175,6 +175,7 @@ describe("KopaiClient", () => {
 
     it("rejects groupBy without aggregate", async () => {
       await expect(
+        // @ts-expect-error testing runtime validation of invalid input
         client.searchAggregatedMetrics({
           metricType: "Sum",
           groupBy: ["signal"],

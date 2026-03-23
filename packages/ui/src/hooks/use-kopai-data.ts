@@ -30,7 +30,10 @@ function fetchForDataSource(
         typeof client.searchMetricsPage
       >[0];
       if (params.aggregate) {
-        return client.searchAggregatedMetrics(params, { signal });
+        return client.searchAggregatedMetrics(
+          { ...params, aggregate: params.aggregate },
+          { signal }
+        );
       }
       return client.searchMetricsPage(params, { signal });
     }

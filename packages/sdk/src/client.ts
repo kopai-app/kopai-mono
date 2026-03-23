@@ -254,17 +254,13 @@ export class KopaiClient {
    * Returns grouped/aggregated values instead of raw data points.
    */
   async searchAggregatedMetrics(
-    filter: MetricsDataFilter,
+    filter: MetricsDataFilter & {
+      aggregate: NonNullable<MetricsDataFilter["aggregate"]>;
+    },
     opts?: RequestOptions
   ): Promise<{ data: AggregatedMetricRow[]; nextCursor: null }> {
     const validatedFilter =
       dataFilterSchemas.metricsDataFilterSchema.parse(filter);
-
-    if (!validatedFilter.aggregate) {
-      throw new Error(
-        "searchAggregatedMetrics requires aggregate to be set in filter"
-      );
-    }
 
     return request(
       `${this.baseUrl}/signals/metrics/search`,

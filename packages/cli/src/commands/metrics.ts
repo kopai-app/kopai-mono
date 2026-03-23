@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import {
   createClient,
   parseAttributes,
@@ -111,13 +111,15 @@ export function createMetricsCommand(): Command {
       };
 
       const result = filter.aggregate
-        ? await client.searchAggregatedMetrics(filter)
+        ? await client.searchAggregatedMetrics({
+            ...filter,
+            aggregate: filter.aggregate,
+          })
         : await client.searchMetricsPage(filter);
       output(result.data, { format, fields });
     } catch (err) {
       outputError(err, format === "json");
-      const code = err instanceof InvalidArgumentError ? 2 : 1;
-      process.exit(code);
+      process.exit(1);
     }
   });
 
@@ -158,10 +160,6 @@ function isAggregateFn(value: string): value is AggregateFn {
     value === "max" ||
     value === "count"
   );
-}
-
-class InvalidArgumentError extends Error {
-  override readonly name = "InvalidArgumentError";
 }
 
 function toAggregateFn(value: string | undefined): AggregateFn | undefined {
