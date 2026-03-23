@@ -20,6 +20,9 @@ describe("apiRoutes", () => {
   let getMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>
   >;
+  let getAggregatedMetricsSpy: ReturnType<
+    typeof vi.fn<datasource.ReadMetricsDatasource["getAggregatedMetrics"]>
+  >;
   let discoverMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>
   >;
@@ -37,6 +40,8 @@ describe("apiRoutes", () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     getLogsSpy = vi.fn<datasource.ReadLogsDatasource["getLogs"]>();
     getMetricsSpy = vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>();
+    getAggregatedMetricsSpy =
+      vi.fn<datasource.ReadMetricsDatasource["getAggregatedMetrics"]>();
     discoverMetricsSpy =
       vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>();
     getServicesSpy =
@@ -51,6 +56,7 @@ describe("apiRoutes", () => {
         getTraces: getTracesSpy,
         getLogs: getLogsSpy,
         getMetrics: getMetricsSpy,
+        getAggregatedMetrics: getAggregatedMetricsSpy,
         discoverMetrics: discoverMetricsSpy,
         getServices: getServicesSpy,
         getOperations: getOperationsSpy,

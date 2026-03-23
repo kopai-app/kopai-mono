@@ -1,6 +1,6 @@
 {
   "name": "@kopai/cli",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "CLI for querying OpenTelemetry data from Kopai - traces, logs, and metrics",
   "keywords": [
     "opentelemetry",
@@ -48,6 +48,6 @@
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "tsdown": "^0.21.2"
+    "tsdown": "^0.21.4"
   }
 }

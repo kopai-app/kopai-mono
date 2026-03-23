@@ -418,3 +418,15 @@ export type OtelExponentialHistogramRow = z.infer<
 >;
 export type OtelSummaryRow = z.infer<typeof otelSummarySchema>;
 export type OtelMetricsRow = z.infer<typeof otelMetricsSchema>;
+
+// Aggregated metric result (returned when aggregate filter is set)
+export const aggregatedMetricSchema = z.object({
+  groups: z
+    .record(z.string(), attributeValue)
+    .describe(
+      "Group-by key/value pairs (e.g. { 'tenant.id': 'otel_tenant_2' })."
+    ),
+  value: z.number().describe("The aggregated value."),
+});
+
+export type AggregatedMetricRow = z.infer<typeof aggregatedMetricSchema>;

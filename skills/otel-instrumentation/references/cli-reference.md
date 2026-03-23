@@ -38,6 +38,12 @@ kopai metrics discover [--json]
 
 # Search metrics (type required)
 kopai metrics search --type TYPE [--name NAME] [--json]
+
+# Aggregate: total sum, no grouping
+kopai metrics search --type Sum --name kopai.ingestion.bytes --aggregate sum --json
+
+# Aggregate: sum grouped by attribute key
+kopai metrics search --type Sum --name kopai.ingestion.bytes --aggregate sum --group-by signal --json
 ```
 
 ## Output Options

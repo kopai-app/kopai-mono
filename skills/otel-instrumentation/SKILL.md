@@ -4,7 +4,7 @@ description: Instrument applications with OpenTelemetry SDK and validate telemet
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # OpenTelemetry Instrumentation with Kopai
@@ -26,6 +26,31 @@ npx @kopai/cli traces search --service my-service --json
 npx @kopai/cli logs search --service my-service --json
 npx @kopai/cli metrics discover --json
 ```
+
+## Workflow
+
+1. **Start backend** — `npx @kopai/app start`
+2. **Set env vars** — `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` and `OTEL_SERVICE_NAME=<name>`
+3. **Instrument app** — install SDK + auto-instrumentation for your language (see rules below)
+4. **Validate** — `npx @kopai/cli traces search --service <name> --json`. If empty: check endpoint/port, verify app is running and generating traffic, wait 10-30s and retry
+5. **Troubleshoot** — if still no data, check rules in section 4 below
+
+## Quick Example (Node.js)
+
+```bash
+npm install @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node @opentelemetry/api
+```
+
+Create `instrumentation.mjs`:
+
+```javascript
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+const sdk = new NodeSDK({ instrumentations: [getNodeAutoInstrumentations()] });
+sdk.start();
+```
+
+Run: `node --import ./instrumentation.mjs server.mjs`
 
 ## Rules
 

@@ -4,7 +4,7 @@ description: Analyze telemetry data for root cause analysis using Kopai CLI. Use
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Root Cause Analysis with Kopai
@@ -17,13 +17,26 @@ Ensure access to Kopai app backend.
 Make sure the services are set up to send their OpenTelemetry data to Kopai.
 See otel-instrumentation skill for setup.
 
-## RCA Workflow Summary
+## RCA Workflow
 
-1. Find error traces
-2. Get full trace context
-3. Correlate logs with trace
-4. Check related metrics
-5. Identify root cause
+1. **Find error traces** — `npx @kopai/cli traces search --status-code ERROR --limit 20 --json`. If empty: broaden time range, check service name, or search logs with `--severity-min 17`
+2. **Get full trace context** — `npx @kopai/cli traces get <traceId> --json`. Check Duration, StatusCode, and span hierarchy for bottlenecks
+3. **Correlate logs** — `npx @kopai/cli logs search --trace-id <traceId> --json`. Look for error messages, stack traces, and timestamps
+4. **Check metrics** — `npx @kopai/cli metrics discover --json` then `npx @kopai/cli metrics search --type <type> --name <name> --json` for anomalies
+5. **Present findings** — summarize root cause with evidence (specific traceIds, log entries, metric anomalies), impact, and suggested fix
+
+## Quick Example
+
+```bash
+# Find failing requests
+npx @kopai/cli traces search --status-code ERROR --service payment-api --json
+
+# Get trace details (copy traceId from above)
+npx @kopai/cli traces get abc123def456 --json
+
+# Check correlated logs
+npx @kopai/cli logs search --trace-id abc123def456 --severity-min 17 --json
+```
 
 ## Rules
 

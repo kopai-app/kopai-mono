@@ -16,6 +16,10 @@ export interface ThresholdConfig {
 
 export interface MetricStatProps {
   rows: OtelMetricsRow[];
+  /** Pre-computed value (e.g. from aggregated queries). Bypasses row extraction when set. */
+  value?: number;
+  /** Unit string for formatting when using pre-computed value. */
+  unit?: string;
   isLoading?: boolean;
   error?: Error;
   label?: string;
@@ -140,6 +144,8 @@ function buildStatData(rows: OtelMetricsRow[]): {
 
 export function MetricStat({
   rows,
+  value: directValue,
+  unit: directUnit,
   isLoading = false,
   error,
   label,
@@ -155,10 +161,12 @@ export function MetricStat({
   colorBackground,
   colorValue = false,
 }: MetricStatProps) {
-  const { latestValue, unit, timestamp, dataPoints, metricName } = useMemo(
-    () => buildStatData(rows),
-    [rows]
-  );
+  const statData = useMemo(() => buildStatData(rows), [rows]);
+
+  // Pre-computed value (aggregated queries) bypasses row extraction
+  const latestValue = directValue ?? statData.latestValue;
+  const unit = directUnit ?? statData.unit;
+  const { timestamp, dataPoints, metricName } = statData;
 
   const sparklineData = useMemo(() => {
     if (!showSparkline || dataPoints.length === 0) return [];

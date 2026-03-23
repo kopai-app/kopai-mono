@@ -3,6 +3,7 @@ import type {
   OtelTracesRow,
   OtelLogsRow,
   OtelMetricsRow,
+  AggregatedMetricRow,
   MetricsDiscoveryResult,
   SearchResult,
   ApiErrorResponse,
@@ -58,6 +59,12 @@ export const sampleDashboard: Dashboard = {
     },
   },
 };
+
+// Sample aggregated metric
+export const sampleAggregatedMetric = {
+  groups: { signal: "/v1/traces" },
+  value: 1024,
+} satisfies AggregatedMetricRow;
 
 // Sample metrics discovery
 export const sampleDiscovery = {
@@ -216,6 +223,13 @@ export const handlers = [
     }
 
     const body = (await request.clone().json()) as Record<string, unknown>;
+
+    if (body.aggregate) {
+      return HttpResponse.json({
+        data: [sampleAggregatedMetric],
+        nextCursor: null,
+      });
+    }
 
     if (body.cursor === "page2") {
       return HttpResponse.json({

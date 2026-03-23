@@ -209,7 +209,7 @@ export const logsDataFilterSchema = z.object({
 
 export type LogsDataFilter = z.infer<typeof logsDataFilterSchema>;
 
-export const metricsDataFilterSchema = z.object({
+const metricsDataFilterBaseSchema = z.object({
   metricType: z
     .enum(["Gauge", "Sum", "Histogram", "ExponentialHistogram", "Summary"])
     .describe("Metric type to query."),
@@ -253,6 +253,20 @@ export const metricsDataFilterSchema = z.object({
     .optional()
     .describe("Attributes of the instrumentation scope."),
 
+  // Aggregation
+  aggregate: z
+    .enum(["sum", "avg", "min", "max", "count"])
+    .optional()
+    .describe(
+      "Aggregation function to apply to metric values. When set, returns aggregated results instead of raw data points."
+    ),
+  groupBy: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Attribute keys to group by when aggregating (e.g. ['tenant.id', 'signal'])."
+    ),
+
   // Pagination
   limit: z
     .number()
@@ -271,7 +285,30 @@ export const metricsDataFilterSchema = z.object({
     .describe("Sort by timestamp. ASC = oldest first, DESC = newest first."),
 });
 
-export type MetricsDataFilter = z.infer<typeof metricsDataFilterSchema>;
+export const metricsDataFilterSchema = metricsDataFilterBaseSchema
+  .refine((data) => !(data.groupBy && !data.aggregate), {
+    message: "groupBy requires aggregate to be set",
+    path: ["groupBy"],
+  })
+  .refine((data) => !(data.aggregate && data.cursor), {
+    message: "cursor is incompatible with aggregate",
+    path: ["cursor"],
+  })
+  .refine(
+    (data) =>
+      !data.aggregate ||
+      data.metricType === "Gauge" ||
+      data.metricType === "Sum",
+    {
+      message: "aggregate is only supported for Gauge and Sum metric types",
+      path: ["aggregate"],
+    }
+  );
+
+// Inferred from base schema (not refined) so downstream code sees aggregate/groupBy fields.
+// Runtime validation (groupBy requires aggregate, cursor incompatible with aggregate)
+// is enforced by metricsDataFilterSchema's .refine() calls.
+export type MetricsDataFilter = z.infer<typeof metricsDataFilterBaseSchema>;
 
 // --- Trace summaries (Jaeger-like search) ---
 

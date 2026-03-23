@@ -2,12 +2,14 @@
 
 ## Available Filters
 
-| Filter          | Flag        | Example                      |
-| --------------- | ----------- | ---------------------------- |
-| Type (required) | `--type`    | `--type Gauge`               |
-| Name            | `--name`    | `--name http_requests_total` |
-| Service         | `--service` | `--service payment-api`      |
-| Attributes      | `--attr`    | `--attr "endpoint=/api"`     |
+| Filter          | Flag          | Example                          |
+| --------------- | ------------- | -------------------------------- |
+| Type (required) | `--type`      | `--type Gauge`                   |
+| Name            | `--name`      | `--name http_requests_total`     |
+| Service         | `--service`   | `--service payment-api`          |
+| Attributes      | `--attr`      | `--attr "endpoint=/api"`         |
+| Aggregate       | `--aggregate` | `--aggregate sum`                |
+| Group by (attr) | `--group-by`  | `--group-by signal` (repeatable) |
 
 ## Metric Types
 

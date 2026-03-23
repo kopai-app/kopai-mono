@@ -19,6 +19,7 @@ const createMockClient = () => ({
   searchTracesPage: vi.fn(),
   searchLogsPage: vi.fn(),
   searchMetricsPage: vi.fn(),
+  searchAggregatedMetrics: vi.fn(),
   getTrace: vi.fn(),
   discoverMetrics: vi.fn(),
   getDashboard: vi.fn(),

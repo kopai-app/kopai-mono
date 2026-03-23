@@ -1,5 +1,11 @@
 # @kopai/core
 
+## 0.9.0
+
+### Minor Changes
+
+- 3894c34: Add aggregate metrics
+
 ## 0.8.0
 
 ### Minor Changes

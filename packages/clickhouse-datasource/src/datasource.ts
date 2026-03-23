@@ -20,6 +20,7 @@ import {
 import { buildLogsQuery } from "./query-logs.js";
 import {
   buildMetricsQuery,
+  buildAggregatedMetricsQuery,
   buildDiscoverMetricsFromMV,
 } from "./query-metrics.js";
 import {
@@ -64,6 +65,11 @@ function isChError(err: unknown, code: string): boolean {
     "code" in err &&
     (err as { code: string }).code === code
   );
+}
+
+/** Type predicate: narrows unknown to a string-keyed record. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Collect all rows from a ResultSet stream, parsing each with the given schema. */
@@ -309,6 +315,79 @@ export class ClickHouseReadDatasource
       "query complete"
     );
     return { data, nextCursor };
+  }
+
+  async getAggregatedMetrics(
+    filter: dataFilterSchemas.MetricsDataFilter & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
+    data: denormalizedSignals.AggregatedMetricRow[];
+    nextCursor: null;
+  }> {
+    assertClickHouseRequestContext(filter.requestContext);
+    const { database, username, password } = filter.requestContext;
+    const log = getLogger(filter.requestContext);
+    const start = performance.now();
+
+    let chNode: string | undefined;
+    try {
+      const { query, params } = buildAggregatedMetricsQuery(filter);
+
+      const resultSet = await this.client.query({
+        query,
+        query_params: params,
+        format: "JSONEachRow",
+        auth: { username, password },
+        http_headers: { "X-ClickHouse-Database": database },
+      });
+      chNode = getChNode(resultSet);
+
+      const groupByKeys = filter.groupBy ?? [];
+      const data: denormalizedSignals.AggregatedMetricRow[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json();
+          if (!isRecord(json)) continue;
+          const groups: Record<string, string> = {};
+          for (let i = 0; i < groupByKeys.length; i++) {
+            const key = groupByKeys[i];
+            if (key !== undefined) {
+              groups[key] = String(json[`group_${String(i)}`] ?? "");
+            }
+          }
+          data.push({ groups, value: Number(json.value) });
+        }
+      }
+
+      const durationMs = Math.round(performance.now() - start);
+      log.info(
+        {
+          database,
+          username,
+          method: "getAggregatedMetrics",
+          durationMs,
+          rowCount: data.length,
+          chNode,
+        },
+        "query complete"
+      );
+      return { data, nextCursor: null };
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        {
+          database,
+          username,
+          method: "getAggregatedMetrics",
+          durationMs,
+          chNode,
+          err,
+        },
+        "query failed"
+      );
+      throw err;
+    }
   }
 
   async getServices(opts?: {

@@ -1,6 +1,6 @@
 {
   "name": "@kopai/api",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "license": "Apache-2.0",
   "author": "Vladimir Adamic",
   "repository": {
@@ -45,6 +45,6 @@
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.5",
     "@kopai/tsconfig": "workspace:*",
-    "tsdown": "^0.21.2"
+    "tsdown": "^0.21.4"
   }
 }

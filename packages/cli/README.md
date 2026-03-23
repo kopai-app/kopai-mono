@@ -137,6 +137,9 @@ Search metrics by type.
 kopai metrics search --type Gauge --name cpu_usage
 kopai metrics search --type Histogram --service my-api
 kopai metrics search --type Sum --attr "host=server1"
+
+# Aggregate: total bytes ingested grouped by signal
+kopai metrics search --type Sum --name kopai.ingestion.bytes --aggregate sum --group-by signal
 ```
 
 **Types:** Gauge, Sum, Histogram, ExponentialHistogram, Summary
@@ -151,6 +154,8 @@ kopai metrics search --type Sum --attr "host=server1"
 - `--resource-attr <key=value>` - repeatable
 - `--scope-attr <key=value>` - repeatable
 - `--sort` - ASC or DESC
+- `--aggregate <fn>` - aggregation function (sum, avg, min, max, count). Gauge/Sum only
+- `--group-by <attr>` - group by attribute key (repeatable, requires --aggregate)
 
 **Fields:** TimeUnix, StartTimeUnix, MetricType, MetricName, MetricDescription, MetricUnit, ServiceName, Value, Count, Sum, Min, Max, Attributes, ResourceAttributes, ScopeName, ScopeAttributes, Exemplars, BucketCounts, ExplicitBounds
 
