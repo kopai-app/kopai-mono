@@ -130,6 +130,12 @@ export const logsDataFilterSchema = z.object({
     .string()
     .optional()
     .describe("Name denoting the instrumentation scope."),
+  eventName: z
+    .string()
+    .optional()
+    .describe(
+      "A unique identifier of event category/type. Filters logs that are events with this name."
+    ),
   severityText: z
     .string()
     .optional()

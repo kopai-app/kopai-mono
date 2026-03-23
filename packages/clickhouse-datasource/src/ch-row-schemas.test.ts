@@ -80,6 +80,7 @@ describe("chLogsRowSchema", () => {
     SeverityText: "ERROR",
     SeverityNumber: "17",
     Body: "something failed",
+    EventName: "",
     LogAttributes: { "log.source": "stderr" },
     ResourceAttributes: { "service.name": "svc" },
     ResourceSchemaUrl: "",

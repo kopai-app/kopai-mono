@@ -273,7 +273,8 @@ async function createOtelTables(client: ClickHouseClient) {
         ScopeName String CODEC(ZSTD(1)),
         ScopeVersion LowCardinality(String) CODEC(ZSTD(1)),
         ScopeAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-        LogAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1))
+        LogAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+        EventName String CODEC(ZSTD(1))
       ) ENGINE = MergeTree()
       ORDER BY (ServiceName, TimestampTime, Timestamp)
     `,
@@ -622,6 +623,7 @@ async function seedLogs(client: ClickHouseClient) {
         ScopeVersion: "",
         ScopeAttributes: {},
         LogAttributes: { "error.type": "ConnectionError" },
+        EventName: "db.connection.error",
       },
       {
         Timestamp: "2024-01-01 00:00:03.000000000",
@@ -1444,6 +1446,36 @@ describe("ClickHouseReadDatasource", () => {
       expect(firstRow(result.data).LogAttributes).toEqual({
         "request.id": "req-001",
       });
+    });
+
+    it("returns EventName when present", async () => {
+      const result = await ds.getLogs({
+        serviceName: "user-service",
+        severityText: "ERROR",
+        requestContext: requestContext(),
+      });
+
+      expect(firstRow(result.data).EventName).toBe("db.connection.error");
+    });
+
+    it("returns undefined EventName for logs without it", async () => {
+      const result = await ds.getLogs({
+        serviceName: "order-service",
+        requestContext: requestContext(),
+      });
+
+      // Empty string from ClickHouse default → converted to undefined by chOptionalString
+      expect(firstRow(result.data).EventName).toBeUndefined();
+    });
+
+    it("filters by eventName", async () => {
+      const result = await ds.getLogs({
+        eventName: "db.connection.error",
+        requestContext: requestContext(),
+      });
+
+      expect(result.data.length).toBe(1);
+      expect(firstRow(result.data).Body).toBe("Database connection failed");
     });
 
     it("supports cursor pagination", async () => {

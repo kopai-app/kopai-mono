@@ -791,6 +791,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           "SeverityText",
           "SeverityNumber",
           "Body",
+          "EventName",
           "LogAttributes",
           "ResourceAttributes",
           "ResourceSchemaUrl",
@@ -811,6 +812,8 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         query = query.where("ScopeName", "=", filter.scopeName);
       if (filter.severityText)
         query = query.where("SeverityText", "=", filter.severityText);
+      if (filter.eventName)
+        query = query.where("EventName", "=", filter.eventName);
 
       // Severity number range
       if (filter.severityNumberMin != null)
@@ -1411,6 +1414,7 @@ function toLogRow(
     SeverityText: logRecord.severityText ?? "",
     SeverityNumber: logRecord.severityNumber ?? 0,
     Body: anyValueToBodyString(logRecord.body),
+    EventName: logRecord.eventName ?? "",
     LogAttributes: keyValueArrayToJson(logRecord.attributes),
     ResourceAttributes: keyValueArrayToJson(resource?.attributes),
     ResourceSchemaUrl: resourceSchemaUrl ?? "",
@@ -1832,6 +1836,12 @@ function toNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+/** Convert an unknown DB value to string | undefined, treating empty strings as undefined. */
+function toOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return value === "" ? undefined : value;
+}
+
 function mapRowToOtelLogs(
   row: Record<string, unknown> // TODO: can we use kysely-generated type for this?
 ): denormalizedSignals.OtelLogsRow {
@@ -1843,6 +1853,7 @@ function mapRowToOtelLogs(
     SeverityText: row.SeverityText as string | undefined,
     SeverityNumber: toNumber(row.SeverityNumber),
     Body: row.Body as string | undefined,
+    EventName: toOptionalString(row.EventName),
     LogAttributes: parseJsonField(row.LogAttributes),
     ResourceAttributes: parseJsonField(row.ResourceAttributes),
     ResourceSchemaUrl: row.ResourceSchemaUrl as string | undefined,
