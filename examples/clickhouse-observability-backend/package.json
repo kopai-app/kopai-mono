@@ -12,6 +12,6 @@
     "fastify-type-provider-zod": "^6.1.0"
   },
   "devDependencies": {
-    "tsdown": "^0.21.6"
+    "tsdown": "^0.21.7"
   }
 }
