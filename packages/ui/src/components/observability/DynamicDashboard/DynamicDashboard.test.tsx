@@ -222,6 +222,72 @@ describe("DynamicDashboard", () => {
     vi.clearAllMocks();
   });
 
+  it("renders TraceDetail with searchTraceSummariesPage without crashing", async () => {
+    const summaryTree = {
+      root: "root",
+      elements: {
+        root: {
+          key: "root",
+          type: "Stack" as const,
+          children: ["trace-detail"],
+          parentKey: "",
+          props: {
+            direction: "vertical" as const,
+            gap: "md" as const,
+            align: null,
+          },
+        },
+        "trace-detail": {
+          key: "trace-detail",
+          type: "TraceDetail" as const,
+          children: [],
+          parentKey: "root",
+          props: { height: 400 },
+          dataSource: {
+            method: "searchTraceSummariesPage" as const,
+            params: {
+              serviceName: "test-service",
+              limit: 20,
+              sortOrder: "DESC" as const,
+            },
+          },
+        },
+      },
+    } satisfies UITree;
+
+    mockClient.searchTraceSummariesPage.mockResolvedValue({
+      data: [
+        {
+          traceId: "0af7651916cd43dd8448eb211c80319c",
+          rootServiceName: "api-gateway",
+          rootSpanName: "GET /api/users",
+          startTimeNs: "1700000000000000000",
+          durationNs: "320000000",
+          spanCount: 8,
+          errorCount: 0,
+          services: [{ name: "api-gateway", count: 3, hasError: false }],
+        },
+      ],
+      nextCursor: null,
+    });
+
+    const { container } = render(
+      createElement(DynamicDashboard, {
+        kopaiClient: mockClient as unknown as KopaiClient,
+        uiTree: summaryTree,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockClient.searchTraceSummariesPage).toHaveBeenCalled();
+    });
+
+    // Should render trace summary list without crashing
+    await waitFor(() => {
+      expect(container.textContent).toContain("GET /api/users");
+    });
+  });
+
   it("renders a UITree containing all catalog components", async () => {
     const { container } = render(
       createElement(DynamicDashboard, {
