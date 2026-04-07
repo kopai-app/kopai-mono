@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createElement } from "react";
-import { render, waitFor } from "@testing-library/react";
+import { render, waitFor, fireEvent } from "@testing-library/react";
 import { DynamicDashboard, type UITree } from "./index.js";
 import { queryClient } from "../../../providers/kopai-provider.js";
 import type { KopaiClient } from "@kopai/sdk";
@@ -285,6 +285,111 @@ describe("DynamicDashboard", () => {
     // Should render trace summary list without crashing
     await waitFor(() => {
       expect(container.textContent).toContain("GET /api/users");
+    });
+  });
+
+  it("drills down from trace summary to trace detail on click", async () => {
+    const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
+
+    const summaryTree = {
+      root: "root",
+      elements: {
+        root: {
+          key: "root",
+          type: "Stack" as const,
+          children: ["trace-detail"],
+          parentKey: "",
+          props: {
+            direction: "vertical" as const,
+            gap: "md" as const,
+            align: null,
+          },
+        },
+        "trace-detail": {
+          key: "trace-detail",
+          type: "TraceDetail" as const,
+          children: [],
+          parentKey: "root",
+          props: { height: 400 },
+          dataSource: {
+            method: "searchTraceSummariesPage" as const,
+            params: {
+              serviceName: "test-service",
+              limit: 20,
+              sortOrder: "DESC" as const,
+            },
+          },
+        },
+      },
+    } satisfies UITree;
+
+    mockClient.searchTraceSummariesPage.mockResolvedValue({
+      data: [
+        {
+          traceId: TRACE_ID,
+          rootServiceName: "api-gateway",
+          rootSpanName: "GET /api/users",
+          startTimeNs: "1700000000000000000",
+          durationNs: "320000000",
+          spanCount: 8,
+          errorCount: 0,
+          services: [{ name: "api-gateway", count: 3, hasError: false }],
+        },
+      ],
+      nextCursor: null,
+    });
+
+    // Mock getTrace to return span data for drill-down
+    mockClient.getTrace.mockResolvedValue([
+      {
+        SpanId: "b7ad6b7169203331",
+        TraceId: TRACE_ID,
+        Timestamp: "1700000000000000000",
+        Duration: "320000000",
+        ParentSpanId: "",
+        ServiceName: "api-gateway",
+        SpanName: "GET /api/users",
+        SpanKind: "SERVER",
+        StatusCode: "OK",
+        StatusMessage: "",
+        ScopeName: "",
+        ScopeVersion: "",
+        SpanAttributes: {},
+        ResourceAttributes: { "service.name": "api-gateway" },
+        "Events.Name": [],
+        "Events.Timestamp": [],
+        "Events.Attributes": [],
+      },
+    ]);
+
+    const { container, getByText } = render(
+      createElement(DynamicDashboard, {
+        kopaiClient: mockClient as unknown as KopaiClient,
+        uiTree: summaryTree,
+      })
+    );
+
+    // Wait for summaries to render
+    await waitFor(() => {
+      expect(container.textContent).toContain("GET /api/users");
+    });
+
+    // Click the trace row to drill down
+    const traceRow = getByText("api-gateway: GET /api/users");
+    fireEvent.click(traceRow);
+
+    // Should fetch the full trace
+    await waitFor(() => {
+      expect(mockClient.getTrace).toHaveBeenCalledWith(
+        TRACE_ID,
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+    });
+
+    // Should render the trace detail view with "Traces" breadcrumb
+    await waitFor(() => {
+      expect(container.textContent).toContain("Traces");
+      expect(container.textContent).toContain(TRACE_ID.slice(0, 16));
     });
   });
 
