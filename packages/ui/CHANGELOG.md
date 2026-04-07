@@ -1,5 +1,11 @@
 # @kopai/ui
 
+## 0.11.0
+
+### Minor Changes
+
+- c73dc8c: Add missing TraceSummariesView
+
 ## 0.10.0
 
 ### Minor Changes
