@@ -485,6 +485,18 @@ describe("E2E: OTEL Collector → ClickHouse → ReadDatasource", () => {
       expect(summary.services.length).toBeGreaterThan(0);
     });
 
+    it("computes valid durationNs", async () => {
+      const result = await ds.getTraceSummaries({
+        limit: 20,
+        sortOrder: "DESC",
+        requestContext: requestContext(),
+      });
+
+      expect(result.data.length).toBeGreaterThan(0);
+      const summary = result.data[0]!;
+      expect(BigInt(summary.durationNs)).toBeGreaterThanOrEqual(0n);
+    });
+
     it("filters by serviceName", async () => {
       const result = await ds.getTraceSummaries({
         serviceName: TEST_SERVICE_NAME,
