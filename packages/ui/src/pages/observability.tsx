@@ -379,12 +379,6 @@ function parseLogfmt(str: string): Record<string, string> {
   return result;
 }
 
-export function serializeLogfmt(rec: Record<string, string>): string {
-  return Object.entries(rec)
-    .map(([k, v]) => (v.includes(" ") ? `${k}="${v}"` : `${k}=${v}`))
-    .join(" ");
-}
-
 // ---------------------------------------------------------------------------
 // Lookback presets (ms values)
 // ---------------------------------------------------------------------------

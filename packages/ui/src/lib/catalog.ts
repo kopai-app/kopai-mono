@@ -160,6 +160,3 @@ export const dashboardCatalog = createCatalog({
     },
   },
 });
-
-// Export the component list for the AI prompt
-export const componentList = Object.keys(dashboardCatalog.components);

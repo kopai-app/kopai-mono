@@ -70,20 +70,6 @@ export const catalogConfigSchema = z.object({
   ),
 });
 
-// Union of all element types with literal type discriminator
-export type InferredElement<C extends Record<string, { props: unknown }>> = {
-  [K in keyof C & string]: {
-    key: string;
-    type: K;
-    children: string[];
-    parentKey: string;
-    dataSource?: z.infer<typeof dataSourceSchema>;
-    props: C[K]["props"] extends z.ZodTypeAny
-      ? z.infer<C[K]["props"]>
-      : unknown;
-  };
-}[keyof C & string];
-
 // Zod schema type for a single element variant (preserves K-to-props mapping)
 type ElementVariantSchema<
   K extends string,
