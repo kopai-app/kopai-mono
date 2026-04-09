@@ -58,7 +58,7 @@ type InferData<CD> = CD extends { acceptsDataFrom: readonly (infer M)[] }
 
 type WithData<D = unknown> = {
   hasData: true;
-  data: D | null;
+  response: D | null;
   loading: boolean;
   error: Error | null;
   refetch: () => void;
@@ -110,7 +110,7 @@ export interface ComponentRenderPropsWithData {
   element: UIElement;
   children?: ReactNode;
   hasData: true;
-  data: unknown;
+  response: unknown;
   loading: boolean;
   error: Error | null;
   refetch: () => void;
@@ -200,7 +200,7 @@ function DataSourceElement({
     <Component
       element={element}
       hasData={true}
-      data={data}
+      response={data}
       loading={loading}
       error={error}
       refetch={refetch}

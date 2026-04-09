@@ -15,7 +15,7 @@ export function OtelMetricTable(props: Props) {
 
   return (
     <MetricTable
-      rows={props.data?.data ?? []}
+      rows={props.response?.data ?? []}
       isLoading={props.loading}
       error={props.error ?? undefined}
       maxRows={props.element.props.maxRows ?? 100}

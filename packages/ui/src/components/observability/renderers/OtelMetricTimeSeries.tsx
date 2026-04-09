@@ -15,7 +15,7 @@ export function OtelMetricTimeSeries(props: Props) {
 
   return (
     <MetricTimeSeries
-      rows={props.data?.data ?? []}
+      rows={props.response?.data ?? []}
       isLoading={props.loading}
       error={props.error ?? undefined}
       height={props.element.props.height ?? 400}

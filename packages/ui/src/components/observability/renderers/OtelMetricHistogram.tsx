@@ -15,7 +15,7 @@ export function OtelMetricHistogram(props: Props) {
 
   return (
     <MetricHistogram
-      rows={props.data?.data ?? []}
+      rows={props.response?.data ?? []}
       isLoading={props.loading}
       error={props.error ?? undefined}
       height={props.element.props.height ?? 400}

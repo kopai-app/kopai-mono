@@ -15,7 +15,7 @@ const TYPE_ORDER: Record<string, number> = {
 };
 
 export function OtelMetricDiscovery(props: Props) {
-  const data = props.hasData ? props.data : null;
+  const data = props.hasData ? props.response : null;
   const loading = props.hasData ? props.loading : false;
   const error = props.hasData ? props.error : null;
 

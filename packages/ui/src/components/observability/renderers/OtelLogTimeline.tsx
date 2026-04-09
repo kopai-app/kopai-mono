@@ -18,7 +18,7 @@ export function OtelLogTimeline(props: Props) {
   return (
     <div style={{ height }} className="flex flex-col min-h-0">
       <LogTimeline
-        rows={props.data?.data ?? []}
+        rows={props.response?.data ?? []}
         isLoading={props.loading}
         error={props.error ?? undefined}
       />

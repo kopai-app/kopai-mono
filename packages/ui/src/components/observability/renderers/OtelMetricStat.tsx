@@ -12,7 +12,7 @@ type Props = RendererComponentProps<
 
 type AggregatedDataProps = Props & {
   hasData: true;
-  data: { data: AggregatedMetricRow[]; nextCursor: null } | null;
+  response: { data: AggregatedMetricRow[]; nextCursor: null } | null;
 };
 
 const EMPTY_ROWS: never[] = [];
@@ -34,7 +34,7 @@ export function OtelMetricStat(props: Props) {
   }
 
   if (isAggregatedRequest(props)) {
-    const rows = props.data?.data ?? [];
+    const rows = props.response?.data ?? [];
 
     if (rows.length > 1) {
       return (
@@ -60,7 +60,7 @@ export function OtelMetricStat(props: Props) {
     );
   }
 
-  const rows = props.data?.data ?? [];
+  const rows = props.response?.data ?? [];
 
   return (
     <MetricStat

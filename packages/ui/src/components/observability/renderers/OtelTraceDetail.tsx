@@ -17,7 +17,7 @@ type Props = RendererComponentProps<
 
 type SummariesDataProps = Props & {
   hasData: true;
-  data: SearchResult<TraceSummaryRow> | null;
+  response: SearchResult<TraceSummaryRow> | null;
 };
 
 function isTraceSummariesSource(
@@ -100,14 +100,14 @@ export function OtelTraceDetail(props: Props) {
   if (isTraceSummariesSource(props)) {
     return (
       <TraceSummariesView
-        data={props.data}
+        data={props.response}
         loading={props.loading}
         error={props.error}
       />
     );
   }
 
-  const rows = props.data?.data ?? [];
+  const rows = props.response?.data ?? [];
   const traceId = rows[0]?.TraceId ?? "";
 
   return (
