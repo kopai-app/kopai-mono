@@ -1,17 +1,14 @@
 import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { RendererComponentProps } from "../../../lib/renderer.js";
 import { MetricTimeSeries } from "../index.js";
+import { NoDataSource } from "./NoDataSource.js";
 
 type Props = RendererComponentProps<
   typeof observabilityCatalog.components.MetricTimeSeries
 >;
 
 export function OtelMetricTimeSeries(props: Props) {
-  if (!props.hasData) {
-    return (
-      <div style={{ padding: 24, color: "var(--muted)" }}>No data source</div>
-    );
-  }
+  if (!props.hasData) return <NoDataSource />;
 
   return (
     <MetricTimeSeries

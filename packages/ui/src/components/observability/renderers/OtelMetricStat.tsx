@@ -2,6 +2,7 @@ import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { RendererComponentProps } from "../../../lib/renderer.js";
 import { MetricStat } from "../index.js";
 import { formatOtelValue } from "../utils/units.js";
+import { NoDataSource } from "./NoDataSource.js";
 import type { denormalizedSignals } from "@kopai/core";
 
 type AggregatedMetricRow = denormalizedSignals.AggregatedMetricRow;
@@ -27,11 +28,7 @@ function isAggregatedRequest(
 }
 
 export function OtelMetricStat(props: Props) {
-  if (!props.hasData) {
-    return (
-      <div style={{ padding: 24, color: "var(--muted)" }}>No data source</div>
-    );
-  }
+  if (!props.hasData) return <NoDataSource />;
 
   if (isAggregatedRequest(props)) {
     const rows = props.response?.data ?? [];
