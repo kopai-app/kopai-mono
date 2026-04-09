@@ -1,9 +1,6 @@
 import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { RendererComponentProps } from "../../../lib/renderer.js";
 import { MetricTable } from "../index.js";
-import type { denormalizedSignals } from "@kopai/core";
-
-type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
 
 type Props = RendererComponentProps<
   typeof observabilityCatalog.components.MetricTable
@@ -16,11 +13,9 @@ export function OtelMetricTable(props: Props) {
     );
   }
 
-  const response = props.data as { data?: OtelMetricsRow[] } | null;
-
   return (
     <MetricTable
-      rows={response?.data ?? []}
+      rows={props.data?.data ?? []}
       isLoading={props.loading}
       error={props.error ?? undefined}
       maxRows={props.element.props.maxRows ?? 100}

@@ -13,6 +13,7 @@ import {
 import z from "zod";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
 import type { DataSource } from "./component-catalog.js";
+import type { KopaiClient } from "../providers/kopai-provider.js";
 
 type RegistryFromCatalog<
   C extends { components: Record<string, ComponentDefinition> },
@@ -43,9 +44,21 @@ type BaseElement<Props> = {
   props: Props;
 };
 
-type WithData = {
+/** Derives the SDK response type for a given client method. */
+type SDKResponseFor<M extends keyof KopaiClient> = Awaited<
+  ReturnType<KopaiClient[M]>
+>;
+
+/** Infers the data type from a component definition's `acceptsDataFrom`. */
+type InferData<CD> = CD extends { acceptsDataFrom: readonly (infer M)[] }
+  ? M extends keyof KopaiClient
+    ? SDKResponseFor<M>
+    : unknown
+  : unknown;
+
+type WithData<D = unknown> = {
   hasData: true;
-  data: unknown;
+  data: D | null;
   loading: boolean;
   error: Error | null;
   refetch: () => void;
@@ -55,6 +68,9 @@ type WithData = {
 type WithoutData = {
   hasData: false;
 };
+
+/** Distributes WithData over a union: WithData<A | B> → WithData<A> | WithData<B> */
+type DistributeWithData<D> = D extends unknown ? WithData<D> : never;
 
 export type RendererComponentProps<CD extends ComponentDefinition> =
   CD extends {
@@ -69,11 +85,13 @@ export type RendererComponentProps<CD extends ComponentDefinition> =
         | ({
             element: BaseElement<InferProps<P>>;
             children: ReactNode;
-          } & WithData)
+          } & DistributeWithData<InferData<CD>>)
     : CD extends { props: infer P }
       ?
           | ({ element: BaseElement<InferProps<P>> } & WithoutData)
-          | ({ element: BaseElement<InferProps<P>> } & WithData)
+          | ({ element: BaseElement<InferProps<P>> } & DistributeWithData<
+              InferData<CD>
+            >)
       : never;
 
 /**

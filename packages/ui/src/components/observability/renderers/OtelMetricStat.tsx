@@ -4,22 +4,26 @@ import { MetricStat } from "../index.js";
 import { formatOtelValue } from "../utils/units.js";
 import type { denormalizedSignals } from "@kopai/core";
 
-type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
 type AggregatedMetricRow = denormalizedSignals.AggregatedMetricRow;
 
 type Props = RendererComponentProps<
   typeof observabilityCatalog.components.MetricStat
 >;
 
+type AggregatedDataProps = Props & {
+  hasData: true;
+  data: { data: AggregatedMetricRow[]; nextCursor: null } | null;
+};
+
 const EMPTY_ROWS: never[] = [];
 const GROUPED_AGGREGATE_ERROR = new Error(
   "MetricStat cannot display grouped aggregates. Remove groupBy or use MetricTable."
 );
 
-function isAggregatedRequest(props: Props & { hasData: true }): boolean {
-  const ds = props.element.dataSource;
-  if (!ds || ds.method !== "searchMetricsPage" || !ds.params) return false;
-  return !!ds.params.aggregate;
+function isAggregatedRequest(
+  props: Props & { hasData: true }
+): props is AggregatedDataProps {
+  return props.element.dataSource?.method === "searchAggregatedMetrics";
 }
 
 export function OtelMetricStat(props: Props) {
@@ -30,8 +34,7 @@ export function OtelMetricStat(props: Props) {
   }
 
   if (isAggregatedRequest(props)) {
-    const response = props.data as { data: AggregatedMetricRow[] } | null;
-    const rows = response?.data ?? [];
+    const rows = props.data?.data ?? [];
 
     if (rows.length > 1) {
       return (
@@ -57,11 +60,11 @@ export function OtelMetricStat(props: Props) {
     );
   }
 
-  const response = props.data as { data?: OtelMetricsRow[] } | null;
+  const rows = props.data?.data ?? [];
 
   return (
     <MetricStat
-      rows={response?.data ?? []}
+      rows={rows}
       isLoading={props.loading}
       error={props.error ?? undefined}
       label={props.element.props.label ?? undefined}

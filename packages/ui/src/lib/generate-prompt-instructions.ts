@@ -5,7 +5,12 @@ type Catalog = {
   name: string;
   components: Record<
     string,
-    { hasChildren: boolean; description: string; props: unknown }
+    {
+      hasChildren: boolean;
+      description: string;
+      props: unknown;
+      acceptsDataFrom?: readonly string[];
+    }
   >;
   uiTreeSchema: z.ZodTypeAny;
 };
@@ -156,7 +161,9 @@ export function generatePromptInstructions(
       const propsFormatted = formatPropsFromJsonSchema(propsSchema);
       const roleLine = def.hasChildren
         ? "Accepts children: yes"
-        : "Accepts dataSource: yes";
+        : def.acceptsDataFrom?.length
+          ? `Accepts dataSource methods: ${def.acceptsDataFrom.join(", ")}`
+          : "Accepts dataSource: yes";
 
       return `### ${name}
 ${def.description ?? "No description"}
