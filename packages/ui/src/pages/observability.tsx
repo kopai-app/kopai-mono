@@ -790,7 +790,7 @@ const METRICS_TREE = {
       children: [],
       parentKey: "card-bytes",
       dataSource: {
-        method: "searchMetricsPage" as const,
+        method: "searchAggregatedMetrics" as const,
         params: {
           metricType: "Sum" as const,
           metricName: "kopai.ingestion.bytes",
@@ -817,7 +817,7 @@ const METRICS_TREE = {
       children: [],
       parentKey: "card-requests",
       dataSource: {
-        method: "searchMetricsPage" as const,
+        method: "searchAggregatedMetrics" as const,
         params: {
           metricType: "Sum" as const,
           metricName: "kopai.ingestion.requests",
