@@ -1,5 +1,12 @@
 # @kopai/sqlite-datasource
 
+## 0.11.1
+
+### Patch Changes
+
+- Updated dependencies [b88c36f]
+  - @kopai/core@0.10.0
+
 ## 0.11.0
 
 ### Minor Changes
