@@ -179,7 +179,15 @@ describe("useKopaiData", () => {
       });
 
       expect(result.current.data).toEqual(mockData);
-      expect(mockClient.searchAggregatedMetrics).toHaveBeenCalled();
+      expect(mockClient.searchAggregatedMetrics).toHaveBeenCalledWith(
+        {
+          metricType: "Sum",
+          metricName: "kopai.ingestion.bytes",
+          aggregate: "sum",
+          groupBy: ["signal"],
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
       expect(mockClient.searchMetricsPage).not.toHaveBeenCalled();
     });
   });

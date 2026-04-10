@@ -37,11 +37,13 @@ const _testCatalog = createCatalog({
       hasChildren: false,
       description: "Data test component",
       props: z.object({}),
+      acceptsDataFrom: ["searchTracesPage"] as const,
     },
     RefetchComponent: {
       hasChildren: false,
       description: "Refetch test component",
       props: z.object({}),
+      acceptsDataFrom: ["searchTracesPage"] as const,
     },
   },
 });

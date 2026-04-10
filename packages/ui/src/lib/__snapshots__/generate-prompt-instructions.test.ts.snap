@@ -23,7 +23,7 @@ Clickable button
 
 Props:
 - label: string (required)
-Accepts dataSource: yes
+Accepts dataSource: no
 
 ---
 

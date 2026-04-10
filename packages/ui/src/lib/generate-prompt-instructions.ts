@@ -60,10 +60,14 @@ function formatPropsFromJsonSchema(jsonSchema: object): string {
     };
     const typeStr = formatPropType(prop);
     const isNullable = typeStr.endsWith("| null");
-    const isRequired = required.has(key) && !isNullable;
+    const isRequired = required.has(key);
     const reqStr = isRequired
-      ? " (required)"
-      : " (optional, pass null to omit)";
+      ? isNullable
+        ? " (required, may be null)"
+        : " (required)"
+      : isNullable
+        ? " (optional, may be null)"
+        : " (optional)";
     const descStr = prop.description ? ` - ${prop.description}` : "";
     lines.push(`- ${key}: ${typeStr}${reqStr}${descStr}`);
   }
@@ -177,7 +181,7 @@ export function generatePromptInstructions(
         ? "Accepts children: yes"
         : def.acceptsDataFrom?.length
           ? `Accepts dataSource methods: ${def.acceptsDataFrom.join(", ")}`
-          : "Accepts dataSource: yes";
+          : "Accepts dataSource: no";
 
       return `### ${name}
 ${def.description ?? "No description"}
