@@ -1,10 +1,10 @@
-import { dashboardCatalog } from "../../../lib/catalog.js";
+import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { CatalogueComponentProps } from "../../../lib/component-catalog.js";
 
 export function Empty({
   element,
   onAction,
-}: CatalogueComponentProps<typeof dashboardCatalog.components.Empty> & {
+}: CatalogueComponentProps<typeof observabilityCatalog.components.Empty> & {
   onAction?: (action: string) => void;
 }) {
   const { title, description, action, actionLabel } = element.props;

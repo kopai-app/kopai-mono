@@ -6,16 +6,24 @@ import { TraceDetail } from "../index.js";
 import { TraceSearch } from "../TraceSearch/index.js";
 import type { TraceSummary } from "../TraceSearch/index.js";
 import { useKopaiSDK } from "../../../providers/kopai-provider.js";
-import type { denormalizedSignals, dataFilterSchemas } from "@kopai/core";
+import { NoDataSource } from "./NoDataSource.js";
+import type { dataFilterSchemas } from "@kopai/core";
+import type { OtelTracesRow, SearchResult } from "@kopai/sdk";
 
-type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 type TraceSummaryRow = dataFilterSchemas.TraceSummaryRow;
 
 type Props = RendererComponentProps<
   typeof observabilityCatalog.components.TraceDetail
 >;
 
-function isTraceSummariesSource(props: Props & { hasData: true }): boolean {
+type SummariesDataProps = Props & {
+  hasData: true;
+  response: SearchResult<TraceSummaryRow> | null;
+};
+
+function isTraceSummariesSource(
+  props: Props & { hasData: true }
+): props is SummariesDataProps {
   return props.element.dataSource?.method === "searchTraceSummariesPage";
 }
 
@@ -24,17 +32,15 @@ function TraceSummariesView({
   loading,
   error,
 }: {
-  data: unknown;
+  data: SearchResult<TraceSummaryRow> | null;
   loading: boolean;
   error: Error | null;
 }) {
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const client = useKopaiSDK();
 
-  const response = data as { data?: TraceSummaryRow[] } | null;
-
   const traces = useMemo<TraceSummary[]>(() => {
-    const rows = response?.data;
+    const rows = data?.data;
     if (!Array.isArray(rows)) return [];
     return rows.map((row) => ({
       traceId: row.traceId,
@@ -47,7 +53,7 @@ function TraceSummariesView({
       services: row.services,
       errorCount: row.errorCount,
     }));
-  }, [response]);
+  }, [data]);
 
   const {
     data: traceRows,
@@ -86,24 +92,19 @@ function TraceSummariesView({
 }
 
 export function OtelTraceDetail(props: Props) {
-  if (!props.hasData) {
-    return (
-      <div style={{ padding: 24, color: "var(--muted)" }}>No data source</div>
-    );
-  }
+  if (!props.hasData) return <NoDataSource />;
 
   if (isTraceSummariesSource(props)) {
     return (
       <TraceSummariesView
-        data={props.data}
+        data={props.response}
         loading={props.loading}
         error={props.error}
       />
     );
   }
 
-  const response = props.data as { data?: OtelTracesRow[] } | null;
-  const rows = Array.isArray(response?.data) ? response.data : [];
+  const rows = props.response?.data ?? [];
   const traceId = rows[0]?.TraceId ?? "";
 
   return (

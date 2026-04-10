@@ -153,7 +153,7 @@ describe("useKopaiData", () => {
       expect(mockClient.searchMetricsPage).toHaveBeenCalled();
     });
 
-    it("routes to searchAggregatedMetrics when aggregate is set", async () => {
+    it("calls searchAggregatedMetrics for searchAggregatedMetrics method", async () => {
       const mockData = {
         data: [{ groups: { signal: "/v1/traces" }, value: 1024 }],
         nextCursor: null,
@@ -161,7 +161,7 @@ describe("useKopaiData", () => {
       mockClient.searchAggregatedMetrics.mockResolvedValue(mockData);
 
       const dataSource: DataSource = {
-        method: "searchMetricsPage",
+        method: "searchAggregatedMetrics",
         params: {
           metricType: "Sum",
           metricName: "kopai.ingestion.bytes",
@@ -179,7 +179,15 @@ describe("useKopaiData", () => {
       });
 
       expect(result.current.data).toEqual(mockData);
-      expect(mockClient.searchAggregatedMetrics).toHaveBeenCalled();
+      expect(mockClient.searchAggregatedMetrics).toHaveBeenCalledWith(
+        {
+          metricType: "Sum",
+          metricName: "kopai.ingestion.bytes",
+          aggregate: "sum",
+          groupBy: ["signal"],
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
       expect(mockClient.searchMetricsPage).not.toHaveBeenCalled();
     });
   });

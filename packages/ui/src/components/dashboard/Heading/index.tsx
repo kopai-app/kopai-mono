@@ -1,10 +1,10 @@
 import React from "react";
-import { dashboardCatalog } from "../../../lib/catalog.js";
+import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { CatalogueComponentProps } from "../../../lib/component-catalog.js";
 
 export function Heading({
   element,
-}: CatalogueComponentProps<typeof dashboardCatalog.components.Heading>) {
+}: CatalogueComponentProps<typeof observabilityCatalog.components.Heading>) {
   const { text, level } = element.props;
   const Tag = (level || "h2") as keyof React.JSX.IntrinsicElements;
   const sizes: Record<string, string> = {

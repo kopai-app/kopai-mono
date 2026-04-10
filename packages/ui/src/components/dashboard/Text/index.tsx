@@ -1,9 +1,9 @@
-import { dashboardCatalog } from "../../../lib/catalog.js";
+import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { CatalogueComponentProps } from "../../../lib/component-catalog.js";
 
 export function Text({
   element,
-}: CatalogueComponentProps<typeof dashboardCatalog.components.Text>) {
+}: CatalogueComponentProps<typeof observabilityCatalog.components.Text>) {
   const { content, color } = element.props;
   const colors: Record<string, string> = {
     default: "hsl(var(--foreground))",

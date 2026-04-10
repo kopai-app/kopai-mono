@@ -1,9 +1,9 @@
-import { dashboardCatalog } from "../../../lib/catalog.js";
+import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { CatalogueComponentProps } from "../../../lib/component-catalog.js";
 
 export function Divider({
   element,
-}: CatalogueComponentProps<typeof dashboardCatalog.components.Divider>) {
+}: CatalogueComponentProps<typeof observabilityCatalog.components.Divider>) {
   const { label } = element.props;
 
   if (label) {

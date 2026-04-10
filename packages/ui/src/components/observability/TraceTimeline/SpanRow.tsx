@@ -10,7 +10,6 @@ export interface SpanRowProps {
   level: number;
   isCollapsed: boolean;
   isSelected: boolean;
-  isHovered?: boolean;
   isParentOfHovered?: boolean;
   relativeStart: number;
   relativeDuration: number;
