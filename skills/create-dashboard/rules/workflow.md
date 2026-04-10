@@ -57,7 +57,7 @@ priority: critical
 ## Component Compatibility
 
 - **MetricStat** — works with **Sum** and **Gauge** only. Does NOT work with Histogram (shows "--")
-- **MetricStat with aggregation** — add `aggregate: "sum"` to params for a single aggregated value (e.g. total bytes). Do NOT use `groupBy` with MetricStat (use MetricTable for grouped results)
+- **MetricStat with aggregation** — use `method: "searchAggregatedMetrics"` with `aggregate: "sum"` (or `"avg"`, `"min"`, `"max"`, `"count"`) in params for a single aggregated value (e.g. total bytes). Do NOT use `groupBy` with MetricStat (use MetricTable for grouped results)
 - **MetricTimeSeries** — works with **Sum**, **Gauge**, and **Histogram** (renders mean duration over time)
 - **MetricHistogram** — works with **Histogram** and **ExponentialHistogram** only
 
