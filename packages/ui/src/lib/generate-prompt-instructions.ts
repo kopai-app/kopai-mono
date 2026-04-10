@@ -77,7 +77,10 @@ function formatPropsFromJsonSchema(jsonSchema: object): string {
 // Helper to build example UI tree
 function buildExampleElements(
   names: string[],
-  components: Record<string, { hasChildren: boolean }>
+  components: Record<
+    string,
+    { hasChildren: boolean; acceptsDataFrom?: readonly string[] }
+  >
 ): { root: string; elements: Record<string, unknown> } {
   const containerName =
     names.find((n) => components[n]?.hasChildren) ?? names[0];
@@ -103,9 +106,10 @@ function buildExampleElements(
       props: {},
       parentKey: containerKey,
     };
-    if (!components[name]?.hasChildren) {
+    const acceptedMethod = components[name]?.acceptsDataFrom?.[0];
+    if (!components[name]?.hasChildren && acceptedMethod) {
       element.dataSource = {
-        method: "searchTracesPage",
+        method: acceptedMethod,
         params: { limit: 10 },
       };
     }
