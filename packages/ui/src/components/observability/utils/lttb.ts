@@ -102,20 +102,3 @@ export function downsampleLTTB(
 
   return sampled;
 }
-
-export function downsampleTimeSeries<
-  T extends { timestamp: number; value: number },
->(data: T[], targetPoints: number): T[] {
-  if (targetPoints >= data.length) {
-    return data;
-  }
-
-  const points: LTTBPoint[] = data.map((d) => ({
-    x: d.timestamp,
-    y: d.value,
-  }));
-
-  const sampled = downsampleLTTB(points, targetPoints);
-  const sampledTimestamps = new Set(sampled.map((p) => p.x));
-  return data.filter((d) => sampledTimestamps.has(d.timestamp));
-}

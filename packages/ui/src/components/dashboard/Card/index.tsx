@@ -1,10 +1,10 @@
-import { dashboardCatalog } from "../../../lib/catalog.js";
+import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { RendererComponentProps } from "../../../lib/renderer.js";
 
 export function Card({
   element,
   children,
-}: RendererComponentProps<typeof dashboardCatalog.components.Card>) {
+}: RendererComponentProps<typeof observabilityCatalog.components.Card>) {
   const { title, description, padding } = element.props as {
     title?: string | null;
     description?: string | null;

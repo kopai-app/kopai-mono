@@ -1,10 +1,10 @@
-import { dashboardCatalog } from "../../../lib/catalog.js";
+import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { CatalogueComponentProps } from "../../../lib/component-catalog.js";
 
 export function Grid({
   element,
   children,
-}: CatalogueComponentProps<typeof dashboardCatalog.components.Grid>) {
+}: CatalogueComponentProps<typeof observabilityCatalog.components.Grid>) {
   const { columns, gap } = element.props;
   const gaps: Record<string, string> = {
     sm: "8px",

@@ -1,9 +1,9 @@
-import { dashboardCatalog } from "../../../lib/catalog.js";
+import { observabilityCatalog } from "../../../lib/observability-catalog.js";
 import type { CatalogueComponentProps } from "../../../lib/component-catalog.js";
 
 export function Badge({
   element,
-}: CatalogueComponentProps<typeof dashboardCatalog.components.Badge>) {
+}: CatalogueComponentProps<typeof observabilityCatalog.components.Badge>) {
   const { text, variant } = element.props;
 
   const colors: Record<string, string> = {

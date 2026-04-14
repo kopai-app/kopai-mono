@@ -44,9 +44,26 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
     params: dataFilterSchemas.traceSummariesFilterSchema,
     refetchIntervalMs: z.number().optional(),
   }),
+  z.object({
+    method: z.literal("searchAggregatedMetrics"),
+    params: dataFilterSchemas.metricsDataFilterSchema,
+    refetchIntervalMs: z.number().optional(),
+  }),
 ]);
 
 export type DataSource = z.infer<typeof dataSourceSchema>;
+
+type DataSourceMethodLiteral =
+  (typeof dataSourceSchema.options)[number]["shape"]["method"]["value"];
+
+export const dataSourceMethodSchema = z.enum(
+  dataSourceSchema.options.map((o) => o.shape.method.value) as [
+    DataSourceMethodLiteral,
+    ...DataSourceMethodLiteral[],
+  ]
+);
+
+export type DataSourceMethod = z.infer<typeof dataSourceMethodSchema>;
 
 export const componentDefinitionSchema = z
   .object({
@@ -57,6 +74,7 @@ export const componentDefinitionSchema = z
         "Component description to be displayed by the prompt generator"
       ),
     props: z.unknown(),
+    acceptsDataFrom: z.array(dataSourceMethodSchema).readonly().optional(),
   })
   .describe(
     "All options and properties necessary to render the React component with renderer"
@@ -69,20 +87,6 @@ export const catalogConfigSchema = z.object({
     componentDefinitionSchema
   ),
 });
-
-// Union of all element types with literal type discriminator
-export type InferredElement<C extends Record<string, { props: unknown }>> = {
-  [K in keyof C & string]: {
-    key: string;
-    type: K;
-    children: string[];
-    parentKey: string;
-    dataSource?: z.infer<typeof dataSourceSchema>;
-    props: C[K]["props"] extends z.ZodTypeAny
-      ? z.infer<C[K]["props"]>
-      : unknown;
-  };
-}[keyof C & string];
 
 // Zod schema type for a single element variant (preserves K-to-props mapping)
 type ElementVariantSchema<

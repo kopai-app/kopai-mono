@@ -5,7 +5,12 @@ type Catalog = {
   name: string;
   components: Record<
     string,
-    { hasChildren: boolean; description: string; props: unknown }
+    {
+      hasChildren: boolean;
+      description: string;
+      props: unknown;
+      acceptsDataFrom?: readonly string[];
+    }
   >;
   uiTreeSchema: z.ZodTypeAny;
 };
@@ -15,7 +20,17 @@ function formatPropType(prop: {
   type?: string | string[];
   enum?: string[];
   items?: object;
+  anyOf?: { type?: string; enum?: string[] }[];
 }): string {
+  // Handle nullable types: anyOf: [{type/enum}, {type: "null"}]
+  if (prop.anyOf) {
+    const nonNull = prop.anyOf.filter((v) => v.type !== "null");
+    const isNullable = prop.anyOf.some((v) => v.type === "null");
+    if (nonNull.length === 1 && nonNull[0]) {
+      const inner = formatPropType(nonNull[0]);
+      return isNullable ? `${inner} | null` : inner;
+    }
+  }
   if (prop.enum) return prop.enum.map((v) => `"${v}"`).join(" | ");
   if (Array.isArray(prop.type))
     return prop.type.filter((t) => t !== "null").join(" | ");
@@ -41,10 +56,18 @@ function formatPropsFromJsonSchema(jsonSchema: object): string {
       enum?: string[];
       description?: string;
       items?: object;
+      anyOf?: { type?: string; enum?: string[] }[];
     };
-    const isRequired = required.has(key);
     const typeStr = formatPropType(prop);
-    const reqStr = isRequired ? " (required)" : " (optional)";
+    const isNullable = typeStr.endsWith("| null");
+    const isRequired = required.has(key);
+    const reqStr = isRequired
+      ? isNullable
+        ? " (required, may be null)"
+        : " (required)"
+      : isNullable
+        ? " (optional, may be null)"
+        : " (optional)";
     const descStr = prop.description ? ` - ${prop.description}` : "";
     lines.push(`- ${key}: ${typeStr}${reqStr}${descStr}`);
   }
@@ -54,7 +77,10 @@ function formatPropsFromJsonSchema(jsonSchema: object): string {
 // Helper to build example UI tree
 function buildExampleElements(
   names: string[],
-  components: Record<string, { hasChildren: boolean }>
+  components: Record<
+    string,
+    { hasChildren: boolean; acceptsDataFrom?: readonly string[] }
+  >
 ): { root: string; elements: Record<string, unknown> } {
   const containerName =
     names.find((n) => components[n]?.hasChildren) ?? names[0];
@@ -80,9 +106,10 @@ function buildExampleElements(
       props: {},
       parentKey: containerKey,
     };
-    if (!components[name]?.hasChildren) {
+    const acceptedMethod = components[name]?.acceptsDataFrom?.[0];
+    if (!components[name]?.hasChildren && acceptedMethod) {
       element.dataSource = {
-        method: "searchTracesPage",
+        method: acceptedMethod,
         params: { limit: 10 },
       };
     }
@@ -156,7 +183,9 @@ export function generatePromptInstructions(
       const propsFormatted = formatPropsFromJsonSchema(propsSchema);
       const roleLine = def.hasChildren
         ? "Accepts children: yes"
-        : "Accepts dataSource: yes";
+        : def.acceptsDataFrom?.length
+          ? `Accepts dataSource methods: ${def.acceptsDataFrom.join(", ")}`
+          : "Accepts dataSource: no";
 
       return `### ${name}
 ${def.description ?? "No description"}

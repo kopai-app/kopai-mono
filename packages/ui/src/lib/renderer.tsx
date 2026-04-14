@@ -13,6 +13,7 @@ import {
 import z from "zod";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
 import type { DataSource } from "./component-catalog.js";
+import type { KopaiClient } from "../providers/kopai-provider.js";
 
 type RegistryFromCatalog<
   C extends { components: Record<string, ComponentDefinition> },
@@ -43,9 +44,21 @@ type BaseElement<Props> = {
   props: Props;
 };
 
-type WithData = {
+/** Derives the SDK response type for a given client method. */
+type SDKResponseFor<M extends keyof KopaiClient> = Awaited<
+  ReturnType<KopaiClient[M]>
+>;
+
+/** Infers the data type from a component definition's `acceptsDataFrom`. */
+type InferData<CD> = CD extends { acceptsDataFrom: readonly (infer M)[] }
+  ? M extends keyof KopaiClient
+    ? SDKResponseFor<M>
+    : unknown
+  : unknown;
+
+type WithData<D = unknown> = {
   hasData: true;
-  data: unknown;
+  response: D | null;
   loading: boolean;
   error: Error | null;
   refetch: () => void;
@@ -55,6 +68,9 @@ type WithData = {
 type WithoutData = {
   hasData: false;
 };
+
+/** Distributes WithData over a union: WithData<A | B> → WithData<A> | WithData<B> */
+type DistributeWithData<D> = D extends unknown ? WithData<D> : never;
 
 export type RendererComponentProps<CD extends ComponentDefinition> =
   CD extends {
@@ -69,11 +85,13 @@ export type RendererComponentProps<CD extends ComponentDefinition> =
         | ({
             element: BaseElement<InferProps<P>>;
             children: ReactNode;
-          } & WithData)
+          } & DistributeWithData<InferData<CD>>)
     : CD extends { props: infer P }
       ?
           | ({ element: BaseElement<InferProps<P>> } & WithoutData)
-          | ({ element: BaseElement<InferProps<P>> } & WithData)
+          | ({ element: BaseElement<InferProps<P>> } & DistributeWithData<
+              InferData<CD>
+            >)
       : never;
 
 /**
@@ -92,7 +110,7 @@ export interface ComponentRenderPropsWithData {
   element: UIElement;
   children?: ReactNode;
   hasData: true;
-  data: unknown;
+  response: unknown;
   loading: boolean;
   error: Error | null;
   refetch: () => void;
@@ -116,10 +134,13 @@ export type ComponentRenderer = ComponentType<ComponentRenderProps>;
  */
 type ComponentRegistry = Record<string, ComponentRenderer>;
 
+/** Map from component type name to the dataSource methods it accepts. */
+type AcceptsDataFromByType = Record<string, readonly string[] | undefined>;
+
 /**
  * Creates a typed Renderer component bound to a catalog and component implementations.
  *
- * @param _catalog - The catalog created via createCatalog (used for type inference)
+ * @param catalog - The catalog created via createCatalog (used for type inference and runtime acceptsDataFrom check)
  * @param components - React component implementations matching catalog definitions
  * @returns A Renderer component that only needs `tree` and optional `fallback`
  *
@@ -135,7 +156,13 @@ type ComponentRegistry = Record<string, ComponentRenderer>;
  */
 export function createRendererFromCatalog<
   C extends { components: Record<string, ComponentDefinition> },
->(_catalog: C, components: RegistryFromCatalog<C>) {
+>(catalog: C, components: RegistryFromCatalog<C>) {
+  const acceptsDataFromByType: AcceptsDataFromByType = Object.fromEntries(
+    Object.entries(catalog.components).map(([name, def]) => [
+      name,
+      def.acceptsDataFrom,
+    ])
+  );
   return function CatalogRenderer({
     tree,
     fallback,
@@ -143,36 +170,71 @@ export function createRendererFromCatalog<
     tree: UITree | null;
     fallback?: ComponentRenderer;
   }) {
-    return <Renderer tree={tree} registry={components} fallback={fallback} />;
+    return (
+      <Renderer
+        tree={tree}
+        registry={components}
+        fallback={fallback}
+        acceptsDataFromByType={acceptsDataFromByType}
+      />
+    );
   };
 }
 
 /**
- * Wrapper component for elements with dataSource
+ * Wrapper component for elements with dataSource.
+ *
+ * When `acceptsDataFromByType` is provided (i.e. the renderer was created via
+ * createRendererFromCatalog), validates that the element's dataSource.method
+ * is one of the methods the component declared via `acceptsDataFrom`. This
+ * guards against tree persistence / authoring bugs where a component ends up
+ * bound to a dataSource method it wasn't designed to consume. When the map is
+ * undefined (e.g. Renderer is called directly without a catalog), validation
+ * is skipped — the caller has opted out of strict checking.
  */
 function DataSourceElement({
   element,
   Component,
+  acceptsDataFromByType,
   children,
 }: {
   element: UIElement;
   Component: ComponentRenderer;
+  acceptsDataFromByType: AcceptsDataFromByType | undefined;
   children?: ReactNode;
 }) {
   const [paramsOverride, setParamsOverride] = useState<Record<string, unknown>>(
     {}
   );
 
+  const acceptsDataFrom = acceptsDataFromByType?.[element.type];
+  const methodIsAccepted =
+    !element.dataSource ||
+    acceptsDataFromByType === undefined ||
+    (acceptsDataFrom?.includes(element.dataSource.method) ?? false);
+
   const effectiveDataSource = useMemo(() => {
-    if (!element.dataSource) return undefined;
+    if (!element.dataSource || !methodIsAccepted) return undefined;
     const merged = {
       ...element.dataSource,
       params: { ...element.dataSource.params, ...paramsOverride },
     };
     return merged as DataSource;
-  }, [element.dataSource, paramsOverride]);
+  }, [element.dataSource, paramsOverride, methodIsAccepted]);
 
   const { data, loading, error, refetch } = useKopaiData(effectiveDataSource);
+
+  if (!methodIsAccepted && element.dataSource) {
+    const accepted = acceptsDataFrom?.length
+      ? acceptsDataFrom.join(", ")
+      : "none";
+    return (
+      <div style={{ padding: 24, color: "var(--destructive, #ef4444)" }}>
+        Component <code>{element.type}</code> does not accept dataSource method{" "}
+        <code>{element.dataSource.method}</code>. Accepted methods: {accepted}.
+      </div>
+    );
+  }
 
   const updateParams = useCallback((params: Record<string, unknown>) => {
     setParamsOverride((prev) => ({ ...prev, ...params }));
@@ -182,7 +244,7 @@ function DataSourceElement({
     <Component
       element={element}
       hasData={true}
-      data={data}
+      response={data}
       loading={loading}
       error={error}
       refetch={refetch}
@@ -201,11 +263,13 @@ function ElementRenderer({
   tree,
   registry,
   fallback,
+  acceptsDataFromByType,
 }: {
   element: UIElement;
   tree: UITree;
   registry: ComponentRegistry;
   fallback?: ComponentRenderer;
+  acceptsDataFromByType: AcceptsDataFromByType | undefined;
 }) {
   const Component = registry[element.type] ?? fallback;
 
@@ -224,6 +288,7 @@ function ElementRenderer({
         tree={tree}
         registry={registry}
         fallback={fallback}
+        acceptsDataFromByType={acceptsDataFromByType}
       />
     );
   });
@@ -231,7 +296,11 @@ function ElementRenderer({
   // If element has dataSource, wrap with data fetching
   if (element.dataSource) {
     return (
-      <DataSourceElement element={element} Component={Component}>
+      <DataSourceElement
+        element={element}
+        Component={Component}
+        acceptsDataFromByType={acceptsDataFromByType}
+      >
         {children}
       </DataSourceElement>
     );
@@ -247,7 +316,13 @@ function ElementRenderer({
 
 /**
  * Renders a UITree using a component registry.
- * Prefer using {@link createRendererFromCatalog} for type-safe rendering.
+ *
+ * Prefer using {@link createRendererFromCatalog}, which auto-derives
+ * `acceptsDataFromByType` from the catalog and enforces strict dataSource
+ * compatibility checks at runtime. Calling Renderer directly without
+ * `acceptsDataFromByType` skips those checks — the caller is responsible
+ * for ensuring tree authors don't pair components with incompatible
+ * dataSource methods.
  */
 export function Renderer<
   C extends { components: Record<string, ComponentDefinition> },
@@ -255,10 +330,12 @@ export function Renderer<
   tree,
   registry,
   fallback,
+  acceptsDataFromByType,
 }: {
   tree: z.infer<ReturnType<typeof createCatalog>["uiTreeSchema"]> | null;
   registry: RegistryFromCatalog<C>;
   fallback?: ComponentRenderer;
+  acceptsDataFromByType?: AcceptsDataFromByType;
 }) {
   if (!tree || !tree.root) return null;
 
@@ -271,6 +348,7 @@ export function Renderer<
       tree={tree}
       registry={registry as ComponentRegistry}
       fallback={fallback}
+      acceptsDataFromByType={acceptsDataFromByType}
     />
   );
 }
