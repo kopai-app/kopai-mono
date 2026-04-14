@@ -1,5 +1,16 @@
 # @kopai/api
 
+## 0.7.0
+
+### Minor Changes
+
+- b88c36f: Fix problem with ISO timestamps being passed instead of timestamps in nanos
+
+### Patch Changes
+
+- Updated dependencies [b88c36f]
+  - @kopai/core@0.10.0
+
 ## 0.6.0
 
 ### Minor Changes
