@@ -1,5 +1,11 @@
 # @kopai/ui
 
+## 0.13.0
+
+### Minor Changes
+
+- eac75d0: Improve uiTree schema and remove unncessary components and exports
+
 ## 0.12.0
 
 ### Minor Changes

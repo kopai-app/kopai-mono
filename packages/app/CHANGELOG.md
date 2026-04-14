@@ -1,5 +1,12 @@
 # @kopai/app
 
+## 0.14.3
+
+### Patch Changes
+
+- Updated dependencies [eac75d0]
+  - @kopai/ui@0.13.0
+
 ## 0.14.2
 
 ### Patch Changes
