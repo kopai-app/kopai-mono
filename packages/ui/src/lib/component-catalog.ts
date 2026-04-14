@@ -53,10 +53,13 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
 
 export type DataSource = z.infer<typeof dataSourceSchema>;
 
+type DataSourceMethodLiteral =
+  (typeof dataSourceSchema.options)[number]["shape"]["method"]["value"];
+
 export const dataSourceMethodSchema = z.enum(
   dataSourceSchema.options.map((o) => o.shape.method.value) as [
-    string,
-    ...string[],
+    DataSourceMethodLiteral,
+    ...DataSourceMethodLiteral[],
   ]
 );
 
