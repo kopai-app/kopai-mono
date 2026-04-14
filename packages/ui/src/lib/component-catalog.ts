@@ -53,6 +53,15 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
 
 export type DataSource = z.infer<typeof dataSourceSchema>;
 
+export const dataSourceMethodSchema = z.enum(
+  dataSourceSchema.options.map((o) => o.shape.method.value) as [
+    string,
+    ...string[],
+  ]
+);
+
+export type DataSourceMethod = z.infer<typeof dataSourceMethodSchema>;
+
 export const componentDefinitionSchema = z
   .object({
     hasChildren: z.boolean(),
@@ -62,7 +71,7 @@ export const componentDefinitionSchema = z
         "Component description to be displayed by the prompt generator"
       ),
     props: z.unknown(),
-    acceptsDataFrom: z.array(z.string()).readonly().optional(),
+    acceptsDataFrom: z.array(dataSourceMethodSchema).readonly().optional(),
   })
   .describe(
     "All options and properties necessary to render the React component with renderer"
