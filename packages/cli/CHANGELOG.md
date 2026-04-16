@@ -1,5 +1,12 @@
 # @kopai/cli
 
+## 0.9.2
+
+### Patch Changes
+
+- Updated dependencies [0ec5875]
+  - @kopai/sdk@0.8.0
+
 ## 0.9.1
 
 ### Patch Changes
