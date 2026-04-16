@@ -1,6 +1,6 @@
 # UiTree examples
 
-The goal of uiTree is to enable server-driven UI. This also makes it possible for a generative generation of the UI. The uiTree has a strict zod schema which is constructed from all the available components in the component catalogue. The LLM can be instructed to use structured output according to the uiTree schema. Instead of emitting prose, the final LLM output is structured data conforming to the uiTree schema.
+The goal of uiTree is to enable server-driven UI. This also makes it possible to create the UI using generative AI. The uiTree has a strict zod schema which is constructed from all the available components in the component catalogue. The LLM can be instructed to use structured output according to the uiTree schema. Instead of emitting prose, the final LLM output is structured data conforming to the uiTree schema.
 
 When the UI receives the uiTree satisfying the schema it knows how to render and has components for, it uses a uiTree renderer.
 
@@ -137,4 +137,4 @@ Reference implementation for the full `observabilityCatalog` exported from `@kop
 
 ## Feature-complete reference
 
-The renderers in this package are intentionally minimal. For production-grade implementations with charts, virtual scroll, drill-downs, etc., see `packages/ui/src/components/observability/renderers/OtelMetric*.tsx` in the repo.
+The renderers in this package are intentionally minimal. For production-grade implementations with charts, virtual scroll, drill-downs, etc., see [`packages/ui/src/components/observability/renderers/`](../../packages/ui/src/components/observability/renderers/) in the repo.

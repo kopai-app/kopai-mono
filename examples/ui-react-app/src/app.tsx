@@ -4,10 +4,10 @@ import { ExampleWithStaticData } from "./static-data.js";
 
 export function App() {
   return (
-    <div>
+    <main>
       <ExampleWithStaticData />
       <ExampleWithDynamicData />
       <ExampleObservabilityCatalog />
-    </div>
+    </main>
   );
 }

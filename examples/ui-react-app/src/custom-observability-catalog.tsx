@@ -372,7 +372,10 @@ function MetricTable(props: RendererProps<"MetricTable">) {
           </thead>
           <tbody>
             {shown.map((r, i) => (
-              <tr key={i} style={{ borderTop: "1px solid #eee" }}>
+              <tr
+                key={`${r.TimeUnix}-${r.MetricName ?? ""}-${i}`}
+                style={{ borderTop: "1px solid #eee" }}
+              >
                 <td style={{ padding: "4px 8px" }}>{r.TimeUnix}</td>
                 <td style={{ padding: "4px 8px" }}>{r.MetricName ?? "—"}</td>
                 <td style={{ padding: "4px 8px" }}>{r.MetricType}</td>
@@ -427,7 +430,7 @@ function LogTimeline(props: RendererProps<"LogTimeline">) {
         <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: 12 }}>
           {rows.slice(0, 10).map((r, i) => (
             <li
-              key={i}
+              key={`${r.Timestamp}-${r.SpanId ?? ""}-${i}`}
               style={{
                 padding: "4px 0",
                 borderBottom: "1px solid #eee",

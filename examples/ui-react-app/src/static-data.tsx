@@ -51,8 +51,8 @@ const ExampleUiTreeRenderer = createRendererFromCatalog(catalog, {
         style={{
           display: "flex",
           flexDirection: direction === "horizontal" ? "row" : "column",
-          gap: gaps[gap || "md"],
-          alignItems: alignments[align || "stretch"],
+          gap: gaps[gap ?? "md"],
+          alignItems: alignments[align ?? "stretch"],
         }}
       >
         {children}

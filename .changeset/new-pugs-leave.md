@@ -3,4 +3,4 @@
 "@kopai/ui": minor
 ---
 
-Expose additional elements allowing implementation of custom catalog
+Expose additional elements to allow implementation of a custom catalog
