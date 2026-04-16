@@ -18,6 +18,8 @@ flowchart LR
     style DOM fill:#fce4ec,stroke:#c62828
 ```
 
+> This example depends only on **`@kopai/ui-core`** — the DOM-free subset that ships the catalog schema, the renderer factory, the SDK provider, and the data-fetching hook. It runs in any React host (web, React Native, SSR). The full feature-complete DOM renderer set (charts, virtual scroll, drill-downs) lives in **`@kopai/ui`** and is the right choice for web apps that want batteries-included components. See [§ Feature-complete reference](#feature-complete-reference).
+
 ## Run it
 
 ```bash
@@ -31,7 +33,7 @@ pnpm lint
 
 ## The two contract functions
 
-`@kopai/ui` provides the two functions needed to build a renderer:
+`@kopai/ui-core` provides the two functions needed to build a renderer:
 
 1. `createCatalog` — define the components and their props. The returned `uiTreeSchema` is a Zod schema that any valid tree must satisfy.
 2. `createRendererFromCatalog` — bind each catalog entry to a React component.
@@ -133,8 +135,8 @@ Same local-catalog pattern, but adds a `MetricStat` component with `acceptsDataF
 
 ### 3. [`src/custom-observability-catalog.tsx`](src/custom-observability-catalog.tsx)
 
-Reference implementation for the full `observabilityCatalog` exported from `@kopai/ui` — all 15 components (8 primitives + 7 data-backed), a shared `<RequestState>` helper, multi-method type-guard narrowing, and a kitchen-sink tree that exercises every renderer. Read this as the authoritative example for building a custom renderer set. Canonical catalog definitions (Zod schemas for each component's `props` + `acceptsDataFrom`) live at [`packages/ui/src/lib/observability-catalog.ts`](../../packages/ui/src/lib/observability-catalog.ts).
+Reference implementation for the full `observabilityCatalog` exported from `@kopai/ui-core` — all 15 components (8 primitives + 7 data-backed), a shared `<RequestState>` helper, multi-method type-guard narrowing, and a kitchen-sink tree that exercises every renderer. Read this as the authoritative example for building a custom renderer set. Canonical catalog definitions (Zod schemas for each component's `props` + `acceptsDataFrom`) live at [`packages/ui-core/src/lib/observability-catalog.ts`](../../packages/ui-core/src/lib/observability-catalog.ts).
 
 ## Feature-complete reference
 
-The renderers in this package are intentionally minimal. For production-grade implementations with charts, virtual scroll, drill-downs, etc., see [`packages/ui/src/components/observability/renderers/`](../../packages/ui/src/components/observability/renderers/) in the repo.
+The renderers in this package are intentionally minimal — they're a teaching aid built directly on `@kopai/ui-core`. For production-grade implementations with charts, virtual scroll, drill-downs, etc., see [`packages/ui/src/components/observability/renderers/`](../../packages/ui/src/components/observability/renderers/) — those live in `@kopai/ui`, which bundles recharts + react-virtual and targets web only.

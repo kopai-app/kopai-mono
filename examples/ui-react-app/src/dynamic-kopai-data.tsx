@@ -3,7 +3,7 @@ import {
   KopaiSDKProvider,
   createCatalog,
   createRendererFromCatalog,
-} from "@kopai/ui";
+} from "@kopai/ui-core";
 import { z } from "zod";
 
 const catalog = createCatalog({

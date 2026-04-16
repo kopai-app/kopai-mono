@@ -36,7 +36,7 @@ import {
   createRendererFromCatalog,
   observabilityCatalog,
   type RendererComponentProps,
-} from "@kopai/ui";
+} from "@kopai/ui-core";
 import type { ReactNode } from "react";
 import { z } from "zod";
 
