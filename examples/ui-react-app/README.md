@@ -4,6 +4,20 @@ The goal of uiTree is to enable server-driven UI. This also makes it possible fo
 
 When the UI receives the uiTree satisfying the schema it knows how to render and has components for, it uses a uiTree renderer.
 
+```mermaid
+flowchart LR
+    LLM["LLM / server"] -->|JSON uiTree| TREE[("uiTree<br/>(data)")]
+    CAT["Catalog<br/>(Zod schema +<br/>component contract)"] -.->|validates| TREE
+    TREE --> R["Renderer<br/>(catalog → React)"]
+    R --> DOM["React DOM"]
+
+    style LLM fill:#f3e5f5,stroke:#7b1fa2
+    style CAT fill:#fff3e0,stroke:#f57c00
+    style TREE fill:#e3f2fd,stroke:#1976d2
+    style R fill:#e8f5e9,stroke:#388e3c
+    style DOM fill:#fce4ec,stroke:#c62828
+```
+
 ## Run it
 
 ```bash
@@ -39,6 +53,23 @@ const Renderer = createRendererFromCatalog(catalog, {
 });
 
 <Renderer tree={uiTree} />;
+```
+
+A valid `uiTree` for the catalog above — a flat map of elements keyed by `key`, with `root` pointing at the entry point:
+
+```ts
+const uiTree = {
+  root: "hello",
+  elements: {
+    hello: {
+      key: "hello",
+      type: "PlainText" as const,
+      parentKey: "",
+      children: [],
+      props: { content: "Hello, uiTree" },
+    },
+  },
+} satisfies z.infer<typeof catalog.uiTreeSchema>;
 ```
 
 ### Catalog entry fields
@@ -80,6 +111,12 @@ const kopaiClient = new KopaiClient({ baseUrl: "/kopai-api" });
 </KopaiSDKProvider>;
 ```
 
+### Pitfalls
+
+- **`as const` on discriminators.** Tree literals need `type: "Foo" as const` and `dataSource.method: "..." as const` for `satisfies UITree` to narrow the discriminated union. Without them TS widens to `string` and the `satisfies` check fails with a cryptic union-mismatch error.
+- **Method-specific params.** `dataSource` is a Zod discriminated union on `method` — each method has its own `params` schema. Wrong shape = compile error. Example: `searchTraceSummariesPage` requires `sortOrder: "ASC" | "DESC"` (there's a schema default, but the output type treats it as required).
+- **`acceptsDataFrom` is a contract, not a switch.** A component can render without a `dataSource` even when `acceptsDataFrom` is set — the `hasData: false` branch is always reachable, so your renderer must handle it.
+
 ### Vite dev-proxy
 
 The examples target `https://demo.kopai.app` without CORS headaches by routing through a Vite dev proxy. `KopaiClient` uses a relative `baseUrl: "/kopai-api"`, and [`vite.config.ts`](vite.config.ts) forwards that prefix to the demo host. Copying this pattern is usually the simplest way to talk to a backend from a local dev setup.
@@ -96,7 +133,7 @@ Same local-catalog pattern, but adds a `MetricStat` component with `acceptsDataF
 
 ### 3. [`src/custom-observability-catalog.tsx`](src/custom-observability-catalog.tsx)
 
-Reference implementation for the full `observabilityCatalog` exported from `@kopai/ui` — all 15 components (8 primitives + 7 data-backed), a shared `<RequestState>` helper, multi-method type-guard narrowing, and a kitchen-sink tree that exercises every renderer. Read this as the authoritative example for building a custom renderer set.
+Reference implementation for the full `observabilityCatalog` exported from `@kopai/ui` — all 15 components (8 primitives + 7 data-backed), a shared `<RequestState>` helper, multi-method type-guard narrowing, and a kitchen-sink tree that exercises every renderer. Read this as the authoritative example for building a custom renderer set. Canonical catalog definitions (Zod schemas for each component's `props` + `acceptsDataFrom`) live at [`packages/ui/src/lib/observability-catalog.ts`](../../packages/ui/src/lib/observability-catalog.ts).
 
 ## Feature-complete reference
 
