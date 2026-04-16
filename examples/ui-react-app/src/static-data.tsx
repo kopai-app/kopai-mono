@@ -1,4 +1,4 @@
-import { createRendererFromCatalog, createCatalog } from "@kopai/ui";
+import { createRendererFromCatalog, createCatalog } from "@kopai/ui-core";
 import { z } from "zod";
 
 const catalog = createCatalog({

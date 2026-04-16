@@ -1,0 +1,55 @@
+{
+  "name": "@kopai/ui-core",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "author": "Vladimir Adamic",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kopai-app/kopai-mono.git",
+    "directory": "packages/ui-core"
+  },
+  "homepage": "https://github.com/kopai-app/kopai-mono/tree/main/packages/ui-core#readme",
+  "bugs": {
+    "url": "https://github.com/kopai-app/kopai-mono/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "lint": "eslint src",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kopai/core": "workspace:*",
+    "@kopai/sdk": "workspace:*",
+    "@tanstack/react-query": "^5",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "react": "^19.2.5"
+  },
+  "devDependencies": {
+    "@kopai/tsconfig": "workspace:*",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.1.0",
+    "jsdom": "^29.0.2",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "tsdown": "^0.21.7"
+  }
+}

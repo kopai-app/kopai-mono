@@ -72,9 +72,9 @@ importers:
       "@kopai/sdk":
         specifier: workspace:*
         version: link:../../packages/sdk
-      "@kopai/ui":
+      "@kopai/ui-core":
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../../packages/ui-core
       react:
         specifier: ^19.2.5
         version: 19.2.5
@@ -535,6 +535,46 @@ importers:
       vite:
         specifier: ^8.0.8
         version: 8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  packages/ui-core:
+    dependencies:
+      "@kopai/core":
+        specifier: workspace:*
+        version: link:../core
+      "@kopai/sdk":
+        specifier: workspace:*
+        version: link:../sdk
+      "@tanstack/react-query":
+        specifier: ^5
+        version: 5.97.0(react@19.2.5)
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      "@kopai/tsconfig":
+        specifier: workspace:*
+        version: link:../tsconfig
+      "@testing-library/react":
+        specifier: ^16.3.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      "@types/react":
+        specifier: ^19.2.14
+        version: 19.2.14
+      "@types/react-dom":
+        specifier: ^19.1.0
+        version: 19.2.3(@types/react@19.2.14)
+      jsdom:
+        specifier: ^29.0.2
+        version: 29.0.2
+      react:
+        specifier: ^19.2.5
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.2.5
+        version: 19.2.5(react@19.2.5)
+      tsdown:
+        specifier: ^0.21.7
+        version: 0.21.7(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@typescript/native-preview@7.0.0-dev.20260410.1)(synckit@0.11.12)(typescript@6.0.2)
 
 packages:
   "@adobe/css-tools@4.4.4":
