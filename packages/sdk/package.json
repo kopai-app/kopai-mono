@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "msw": "^2.13.2",
-    "tsdown": "^0.21.7"
+    "msw": "^2.13.4",
+    "tsdown": "^0.21.9"
   }
 }
