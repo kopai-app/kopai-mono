@@ -1,5 +1,5 @@
-import { observabilityCatalog } from "../../../lib/observability-catalog.js";
-import type { CatalogueComponentProps } from "../../../lib/component-catalog.js";
+import { observabilityCatalog } from "@kopai/ui-core";
+import type { CatalogueComponentProps } from "@kopai/ui-core";
 
 export function Empty({
   element,

@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createElement } from "react";
 import { render, waitFor, fireEvent } from "@testing-library/react";
 import { DynamicDashboard, type UITree } from "./index.js";
-import { queryClient } from "../../../providers/kopai-provider.js";
+import { queryClient } from "@kopai/ui-core";
 import type { KopaiClient } from "@kopai/sdk";
 
 type MockClient = {

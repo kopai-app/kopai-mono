@@ -474,6 +474,9 @@ importers:
       "@kopai/sdk":
         specifier: workspace:*
         version: link:../sdk
+      "@kopai/ui-core":
+        specifier: workspace:*
+        version: link:../ui-core
       "@tanstack/react-query":
         specifier: ^5
         version: 5.97.0(react@19.2.5)

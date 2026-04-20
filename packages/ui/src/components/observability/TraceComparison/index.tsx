@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { denormalizedSignals } from "@kopai/core";
-import type { DataSource } from "../../../lib/component-catalog.js";
-import { useKopaiData } from "../../../hooks/use-kopai-data.js";
+import type { DataSource } from "@kopai/ui-core";
+import { useKopaiData } from "@kopai/ui-core";
 import { TraceTimeline } from "../TraceTimeline/index.js";
 import { formatDuration } from "../utils/time.js";
 

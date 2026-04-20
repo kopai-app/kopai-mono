@@ -6,14 +6,14 @@ import {
   useSyncExternalStore,
   useRef,
 } from "react";
-import { KopaiSDKProvider, useKopaiSDK } from "../providers/kopai-provider.js";
+import { KopaiSDKProvider, useKopaiSDK } from "@kopai/ui-core";
 import { useQuery } from "@tanstack/react-query";
 import { KopaiClient } from "@kopai/sdk";
-import { useKopaiData } from "../hooks/use-kopai-data.js";
-import { useLiveLogs } from "../hooks/use-live-logs.js";
+import { useKopaiData } from "@kopai/ui-core";
+import { useLiveLogs } from "@kopai/ui-core";
 import type { denormalizedSignals, dataFilterSchemas } from "@kopai/core";
-import type { DataSource } from "../lib/component-catalog.js";
-import { observabilityCatalog } from "../lib/observability-catalog.js";
+import type { DataSource } from "@kopai/ui-core";
+import { observabilityCatalog } from "@kopai/ui-core";
 // Observability components
 import {
   LogTimeline,

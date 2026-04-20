@@ -39,6 +39,7 @@
   "dependencies": {
     "@kopai/core": "workspace:*",
     "@kopai/sdk": "workspace:*",
+    "@kopai/ui-core": "workspace:*",
     "@tanstack/react-query": "^5",
     "@tanstack/react-virtual": "^3.13.23",
     "recharts": "^3.8.1"

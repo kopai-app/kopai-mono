@@ -1,14 +1,32 @@
+// DOM-only page composition — stays here.
 export { default as ObservabilityPage } from "./pages/observability.js";
-export { observabilityCatalog } from "./lib/observability-catalog.js";
-export { generatePromptInstructions } from "./lib/generate-prompt-instructions.js";
 
+// Back-compat re-exports — original DOM-free symbols now live in @kopai/ui-core.
+// Additive: earlier versions of @kopai/ui exposed only a subset of these.
 export {
+  observabilityCatalog,
+  generatePromptInstructions,
   createRendererFromCatalog,
+  Renderer,
+  createCatalog,
+  KopaiSDKProvider,
+  useKopaiSDK,
+  queryClient,
+  useKopaiData,
+  useLiveLogs,
+  LogBuffer,
   type RendererComponentProps,
   type UITree,
-} from "./lib/renderer.js";
-export { createCatalog } from "./lib/component-catalog.js";
-export {
-  KopaiSDKProvider,
+  type ComponentRenderer,
+  type ComponentRenderProps,
+  type ComponentRenderPropsBase,
+  type ComponentRenderPropsWithData,
+  type CatalogueComponentProps,
+  type ComponentDefinition,
+  type DataSource,
+  type InferProps,
   type KopaiClient,
-} from "./providers/kopai-provider.js";
+  type UseKopaiDataResult,
+  type UseLiveLogsOptions,
+  type UseLiveLogsResult,
+} from "@kopai/ui-core";
