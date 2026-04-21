@@ -29,9 +29,12 @@ program
     "after",
     `
 Examples:
-  $ kopai traces search                                          # ${DEFAULT_URL} (default)
-  $ kopai traces search --url http://localhost:8000              # local @kopai/app
-  $ kopai logs search --url https://example.com --token kpi_…    # custom instance`
+  $ kopai login                                                  # save a token for the hosted default (requires auth)
+  $ kopai traces search                                          # ${DEFAULT_URL} (default, requires auth)
+  $ kopai traces search --url http://localhost:8000              # local @kopai/app, no auth
+  $ kopai logs search --url https://example.com --token kpi_…    # custom instance
+
+Run "kopai login" once to authenticate against ${DEFAULT_URL}, or pass --url http://localhost:8000 to target a local @kopai/app.`
   );
 
 program.parse();
