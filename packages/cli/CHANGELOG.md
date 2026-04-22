@@ -1,5 +1,11 @@
 # @kopai/cli
 
+## 0.9.3
+
+### Patch Changes
+
+- 97124e9: Defaulted the CLI API URL to the hosted Kopai endpoint (https://api.kopai.app/v2) so `kopai login` and query commands work against kopai.app without `--url`.
+
 ## 0.9.2
 
 ### Patch Changes
