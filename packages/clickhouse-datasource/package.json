@@ -34,13 +34,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clickhouse/client": "^1.18.2",
+    "@clickhouse/client": "^1.18.3",
     "@kopai/core": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
     "testcontainers": "^11.14.0",
-    "tsdown": "^0.21.9"
+    "tsdown": "^0.21.10"
   }
 }

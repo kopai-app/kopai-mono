@@ -56,14 +56,14 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^6.0.1",
-    "@tailwindcss/postcss": "^4.2.2",
+    "@tailwindcss/postcss": "^4.2.4",
     "jsdom": "^29.0.2",
     "postcss": "^8.5.10",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "storybook": "^10.3.5",
-    "tailwindcss": "^4.2.2",
-    "tsdown": "^0.21.9",
-    "vite": "^8.0.8"
+    "tailwindcss": "^4.2.4",
+    "tsdown": "^0.21.10",
+    "vite": "^8.0.10"
   }
 }
