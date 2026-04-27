@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { KopaiClient } from "@kopai/sdk";
-import { loadConfig } from "./config.js";
+import { loadConfig, DEFAULT_URL } from "./config.js";
 
 export function withConnectionOptions<T extends Command>(cmd: T): T {
   return cmd
@@ -16,8 +16,6 @@ export interface ClientOptions {
   token?: string;
   timeout?: number;
 }
-
-const DEFAULT_URL = "http://localhost:8000";
 
 export interface ConnectionOpts {
   url: string;

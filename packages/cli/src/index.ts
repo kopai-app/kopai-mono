@@ -9,6 +9,7 @@ import { createLoginCommand } from "./commands/login.js";
 import { createLogoutCommand } from "./commands/logout.js";
 import { createWhoamiCommand } from "./commands/whoami.js";
 import { checkForUpdates } from "./update-check.js";
+import { DEFAULT_URL } from "./config.js";
 import pkg from "../package.json" with { type: "json" };
 
 const program = new Command();
@@ -28,9 +29,12 @@ program
     "after",
     `
 Examples:
-  $ kopai traces search                                          # localhost:8000 (default, for @kopai/app running locally)
-  $ kopai traces search --url https://example.com                # remote instance
-  $ kopai logs search --url https://example.com --token kpi_…    # with auth`
+  $ kopai login                                                  # save a token for the hosted default (requires auth)
+  $ kopai traces search                                          # ${DEFAULT_URL} (default, requires auth)
+  $ kopai traces search --url http://localhost:8000              # local @kopai/app, no auth
+  $ kopai logs search --url https://example.com --token kpi_…    # custom instance
+
+Run "kopai login" once to authenticate against ${DEFAULT_URL}, or pass --url http://localhost:8000 to target a local @kopai/app.`
   );
 
 program.parse();

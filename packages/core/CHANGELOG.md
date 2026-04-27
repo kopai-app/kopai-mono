@@ -1,5 +1,11 @@
 # @kopai/core
 
+## 0.10.0
+
+### Minor Changes
+
+- b88c36f: Fix problem with ISO timestamps being passed instead of timestamps in nanos
+
 ## 0.9.0
 
 ### Minor Changes

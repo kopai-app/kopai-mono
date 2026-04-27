@@ -1,5 +1,16 @@
 import z from "zod";
 
+/**
+ * String containing a non-negative integer expressed in nanoseconds.
+ *
+ * Validated as a digit-only string so the API rejects malformed input
+ * (e.g. ISO date strings like "2026-04-10T14:53:58.818Z") with a 400
+ * validation error instead of crashing inside BigInt() with a 500.
+ */
+const nanosStringSchema = z
+  .string()
+  .regex(/^\d+$/, "Expected nanoseconds as a digit-only string");
+
 export const tracesDataFilterSchema = z.object({
   // Exact match filters
   traceId: z
@@ -43,28 +54,24 @@ export const tracesDataFilterSchema = z.object({
     .describe("Name denoting the instrumentation scope."),
 
   // Time range filters
-  timestampMin: z
-    .string()
+  timestampMin: nanosStringSchema
     .optional()
     .describe(
       "Minimum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
-  timestampMax: z
-    .string()
+  timestampMax: nanosStringSchema
     .optional()
     .describe(
       "Maximum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
 
   // Duration range filters
-  durationMin: z
-    .string()
+  durationMin: nanosStringSchema
     .optional()
     .describe(
       "Minimum duration of the span in nanoseconds (end_time - start_time). Expressed as string in JSON."
     ),
-  durationMax: z
-    .string()
+  durationMax: nanosStringSchema
     .optional()
     .describe(
       "Maximum duration of the span in nanoseconds (end_time - start_time). Expressed as string in JSON."
@@ -160,14 +167,12 @@ export const logsDataFilterSchema = z.object({
     .describe("Filter logs where body contains this substring."),
 
   // Time range filters
-  timestampMin: z
-    .string()
+  timestampMin: nanosStringSchema
     .optional()
     .describe(
       "Minimum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
     ),
-  timestampMax: z
-    .string()
+  timestampMax: nanosStringSchema
     .optional()
     .describe(
       "Maximum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
@@ -226,14 +231,12 @@ const metricsDataFilterBaseSchema = z.object({
     .describe("Name denoting the instrumentation scope."),
 
   // Time range filters
-  timeUnixMin: z
-    .string()
+  timeUnixMin: nanosStringSchema
     .optional()
     .describe(
       "Minimum time when the data point was recorded. UNIX Epoch time in nanoseconds. Expressed as string in JSON."
     ),
-  timeUnixMax: z
-    .string()
+  timeUnixMax: nanosStringSchema
     .optional()
     .describe(
       "Maximum time when the data point was recorded. UNIX Epoch time in nanoseconds. Expressed as string in JSON."
@@ -315,10 +318,10 @@ export type MetricsDataFilter = z.infer<typeof metricsDataFilterBaseSchema>;
 export const traceSummariesFilterSchema = z.object({
   serviceName: z.string().optional(),
   spanName: z.string().optional(),
-  timestampMin: z.string().optional(),
-  timestampMax: z.string().optional(),
-  durationMin: z.string().optional(),
-  durationMax: z.string().optional(),
+  timestampMin: nanosStringSchema.optional(),
+  timestampMax: nanosStringSchema.optional(),
+  durationMin: nanosStringSchema.optional(),
+  durationMax: nanosStringSchema.optional(),
   spanAttributes: z.record(z.string(), z.string()).optional(),
   resourceAttributes: z.record(z.string(), z.string()).optional(),
   limit: z.number().int().min(1).max(1000).default(20),

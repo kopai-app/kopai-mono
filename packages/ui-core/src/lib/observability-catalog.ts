@@ -1,8 +1,8 @@
 import { createCatalog } from "./component-catalog.js";
 import { z } from "zod";
 
-export const dashboardCatalog = createCatalog({
-  name: "dashboard",
+export const observabilityCatalog = createCatalog({
+  name: "observability",
   components: {
     // Layout Components
     Card: {
@@ -32,77 +32,6 @@ export const dashboardCatalog = createCatalog({
       }),
       hasChildren: true,
       description: "Flex stack for horizontal or vertical layouts",
-    },
-
-    // Data Display Components
-    Metric: {
-      props: z.object({
-        label: z.string(),
-        valuePath: z.string(),
-        format: z.enum(["number", "currency", "percent"]).nullable(),
-        trend: z.enum(["up", "down", "neutral"]).nullable(),
-        trendValue: z.string().nullable(),
-      }),
-      hasChildren: false,
-      description: "Display a single metric with optional trend indicator",
-    },
-
-    Chart: {
-      props: z.object({
-        type: z.enum(["bar", "line", "pie", "area"]),
-        dataPath: z.string(),
-        title: z.string().nullable(),
-        height: z.number().nullable(),
-      }),
-      hasChildren: false,
-      description: "Display a chart from array data",
-    },
-
-    Table: {
-      props: z.object({
-        dataPath: z.string(),
-        columns: z.array(
-          z.object({
-            key: z.string(),
-            label: z.string(),
-            format: z.enum(["text", "currency", "date", "badge"]).nullable(),
-          })
-        ),
-      }),
-      hasChildren: false,
-      description: "Display tabular data",
-    },
-
-    List: {
-      props: z.object({
-        dataPath: z.string(),
-        emptyMessage: z.string().nullable(),
-      }),
-      hasChildren: true,
-      description: "Render a list from array data",
-    },
-
-    // Interactive Components
-    Button: {
-      props: z.object({
-        label: z.string(),
-        variant: z.enum(["primary", "secondary", "danger", "ghost"]).nullable(),
-        size: z.enum(["sm", "md", "lg"]).nullable(),
-        action: z.string(),
-        disabled: z.boolean().nullable(),
-      }),
-      hasChildren: false,
-      description: "Clickable button with action",
-    },
-
-    DatePicker: {
-      props: z.object({
-        label: z.string().nullable(),
-        bindPath: z.string(),
-        placeholder: z.string().nullable(),
-      }),
-      hasChildren: false,
-      description: "Date picker input",
     },
 
     // Typography
@@ -139,7 +68,6 @@ export const dashboardCatalog = createCatalog({
       description: "Small status badge",
     },
 
-    // Special Components
     Divider: {
       props: z.object({
         label: z.string().nullable(),
@@ -158,8 +86,77 @@ export const dashboardCatalog = createCatalog({
       hasChildren: false,
       description: "Empty state placeholder",
     },
+
+    // Observability Components
+    LogTimeline: {
+      props: z.object({ height: z.number().nullable() }),
+      hasChildren: false,
+      description:
+        "Log timeline with virtual scroll, severity filtering, detail pane",
+      acceptsDataFrom: ["searchLogsPage"] as const,
+    },
+
+    TraceDetail: {
+      props: z.object({ height: z.number().nullable() }),
+      hasChildren: false,
+      description:
+        "Trace detail with traceId input field and waterfall timeline",
+      acceptsDataFrom: [
+        "searchTracesPage",
+        "searchTraceSummariesPage",
+      ] as const,
+    },
+
+    MetricTimeSeries: {
+      props: z.object({
+        height: z.number().nullable(),
+        showBrush: z.boolean().nullable(),
+        yAxisLabel: z.string().nullable(),
+        unit: z.string().nullable(),
+      }),
+      hasChildren: false,
+      description: "Time series line chart for Gauge/Sum metrics",
+      acceptsDataFrom: ["searchMetricsPage"] as const,
+    },
+
+    MetricHistogram: {
+      props: z.object({
+        height: z.number().nullable(),
+        yAxisLabel: z.string().nullable(),
+        unit: z.string().nullable(),
+      }),
+      hasChildren: false,
+      description: "Histogram bar chart for distribution metrics",
+      acceptsDataFrom: ["searchMetricsPage"] as const,
+    },
+
+    MetricStat: {
+      props: z.object({
+        label: z.string().nullable(),
+        showSparkline: z.boolean().nullable(),
+      }),
+      hasChildren: false,
+      description:
+        "Single metric KPI card with sparkline and threshold coloring",
+      acceptsDataFrom: [
+        "searchMetricsPage",
+        "searchAggregatedMetrics",
+      ] as const,
+    },
+
+    MetricTable: {
+      props: z.object({ maxRows: z.number().nullable() }),
+      hasChildren: false,
+      description: "Tabular display of metric data points",
+      acceptsDataFrom: ["searchMetricsPage"] as const,
+    },
+
+    MetricDiscovery: {
+      props: z.object({}),
+      hasChildren: false,
+      description:
+        "Table of discovered metric names, types, units and descriptions",
+      acceptsDataFrom: ["discoverMetrics"] as const,
+    },
   },
 });
-
-// Export the component list for the AI prompt
-export const componentList = Object.keys(dashboardCatalog.components);

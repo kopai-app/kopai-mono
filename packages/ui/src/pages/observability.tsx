@@ -379,12 +379,6 @@ function parseLogfmt(str: string): Record<string, string> {
   return result;
 }
 
-export function serializeLogfmt(rec: Record<string, string>): string {
-  return Object.entries(rec)
-    .map(([k, v]) => (v.includes(" ") ? `${k}="${v}"` : `${k}=${v}`))
-    .join(" ");
-}
-
 // ---------------------------------------------------------------------------
 // Lookback presets (ms values)
 // ---------------------------------------------------------------------------
@@ -796,7 +790,7 @@ const METRICS_TREE = {
       children: [],
       parentKey: "card-bytes",
       dataSource: {
-        method: "searchMetricsPage" as const,
+        method: "searchAggregatedMetrics" as const,
         params: {
           metricType: "Sum" as const,
           metricName: "kopai.ingestion.bytes",
@@ -823,7 +817,7 @@ const METRICS_TREE = {
       children: [],
       parentKey: "card-requests",
       dataSource: {
-        method: "searchMetricsPage" as const,
+        method: "searchAggregatedMetrics" as const,
         params: {
           metricType: "Sum" as const,
           metricName: "kopai.ingestion.requests",

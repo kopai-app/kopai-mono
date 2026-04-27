@@ -1,5 +1,18 @@
 # @kopai/sdk
 
+## 0.8.0
+
+### Minor Changes
+
+- 0ec5875: Expose additional elements to allow implementation of a custom catalog
+
+## 0.7.1
+
+### Patch Changes
+
+- Updated dependencies [b88c36f]
+  - @kopai/core@0.10.0
+
 ## 0.7.0
 
 ### Minor Changes

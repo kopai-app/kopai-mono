@@ -1,6 +1,23 @@
-# Kopai
+<div>
+  <!-- INTRO -->
+  <div align=center>
+    <h1>Kopai</h1>
+    <p>OpenTelemetry observability backend in TypeScript running on Node.js</p>
+  </div>
+  <br />
+  <!-- BADGES -->
+  <div align=center>
+    <a href="https://github.com/kopai-app/kopai-mono/blob/main/LICENSE"><img alt="license" src="https://img.shields.io/github/license/kopai-app/kopai-mono"></a>
+    <a href="https://deepwiki.com/kopai-app/kopai-mono"><img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"/></a>
+  </div>
+  <br />
+  <!-- LINKS -->
+  <div align=center>
+    <a href="https://docs.kopai.app/">Docs</a>
+  </div>
+</div>
 
-OpenTelemetry observability backend in TypeScript running on Node.js
+## Quick Start
 
 Run with
 
@@ -34,17 +51,12 @@ The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-i
 | [@kopai/cli](./packages/cli)                                     | CLI tool                        | [![npm](https://img.shields.io/npm/v/@kopai/cli?label=latest)](https://www.npmjs.com/package/@kopai/cli)                                     |
 | [@kopai/api](./packages/api)                                     | OTEL signals API                | [![npm](https://img.shields.io/npm/v/@kopai/api?label=latest)](https://www.npmjs.com/package/@kopai/api)                                     |
 | [@kopai/ui](./packages/ui)                                       | Dashboard React components      | [![npm](https://img.shields.io/npm/v/@kopai/ui?label=latest)](https://www.npmjs.com/package/@kopai/ui)                                       |
+| [@kopai/ui-core](./packages/ui-core)                             | DOM-free SDUI primitives        | [![npm](https://img.shields.io/npm/v/@kopai/ui-core?label=latest)](https://www.npmjs.com/package/@kopai/ui-core)                             |
 | [@kopai/collector](./packages/collector)                         | OTLP collector, HTTP only       | [![npm](https://img.shields.io/npm/v/@kopai/collector?label=latest)](https://www.npmjs.com/package/@kopai/collector)                         |
 | [@kopai/sqlite-datasource](./packages/sqlite-datasource)         | SQLite datasource               | [![npm](https://img.shields.io/npm/v/@kopai/sqlite-datasource?label=latest)](https://www.npmjs.com/package/@kopai/sqlite-datasource)         |
 | [@kopai/clickhouse-datasource](./packages/clickhouse-datasource) | ClickHouse datasource           | [![npm](https://img.shields.io/npm/v/@kopai/clickhouse-datasource?label=latest)](https://www.npmjs.com/package/@kopai/clickhouse-datasource) |
 | [@kopai/otel-testing-harness](./packages/otel-testing-harness)   | In-process OTEL testing harness | [![npm](https://img.shields.io/npm/v/@kopai/otel-testing-harness?label=latest)](https://www.npmjs.com/package/@kopai/otel-testing-harness)   |
 | [@kopai/tsconfig](./packages/tsconfig)                           | Shared TypeScript config        |                                                                                                                                              |
-
-## Examples
-
-| Example                                                                         | Description                                              |
-| ------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| [clickhouse-observability-backend](./examples/clickhouse-observability-backend) | Docker Compose: OTEL Collector → ClickHouse → @kopai/api |
 
 ### Dependency Graph
 
@@ -71,6 +83,13 @@ The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-i
                       │     app     │
                       └─────────────┘
 ```
+
+## Examples
+
+| Example                                                                         | Description                                               |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [clickhouse-observability-backend](./examples/clickhouse-observability-backend) | Docker Compose: OTEL Collector → ClickHouse → @kopai/api  |
+| [ui-react-app](./examples/ui-react-app)                                         | React SPA showing custom SDUI renderers on @kopai/ui-core |
 
 ## Development
 

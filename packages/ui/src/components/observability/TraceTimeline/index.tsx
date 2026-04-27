@@ -569,7 +569,6 @@ export function TraceTimeline({
                 const { span, level } = item;
                 const isCollapsed = collapsedIds.has(span.spanId);
                 const isSelected = span.spanId === selectedSpanId;
-                const isHovered = span.spanId === hoveredSpanId;
                 const isParentOfHovered = hoveredSpanId
                   ? isSpanAncestorOf(span, hoveredSpanId, flattenedSpans)
                   : false;
@@ -594,7 +593,6 @@ export function TraceTimeline({
                       level={level}
                       isCollapsed={isCollapsed}
                       isSelected={isSelected}
-                      isHovered={isHovered}
                       isParentOfHovered={isParentOfHovered}
                       relativeStart={relativeStart}
                       relativeDuration={relativeDuration}

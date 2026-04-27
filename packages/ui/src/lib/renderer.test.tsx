@@ -37,11 +37,13 @@ const _testCatalog = createCatalog({
       hasChildren: false,
       description: "Data test component",
       props: z.object({}),
+      acceptsDataFrom: ["searchTracesPage"] as const,
     },
     RefetchComponent: {
       hasChildren: false,
       description: "Refetch test component",
       props: z.object({}),
+      acceptsDataFrom: ["searchTracesPage"] as const,
     },
   },
 });
@@ -100,12 +102,16 @@ function DataComponent(
   if (!props.hasData) {
     return createElement("div", { "data-testid": "no-data" }, "No data source");
   }
-  const { data, loading, error } = props;
+  const { response, loading, error } = props;
   if (loading)
     return createElement("div", { "data-testid": "loading" }, "Loading...");
   if (error)
     return createElement("div", { "data-testid": "error" }, error.message);
-  return createElement("div", { "data-testid": "data" }, JSON.stringify(data));
+  return createElement(
+    "div",
+    { "data-testid": "data" },
+    JSON.stringify(response)
+  );
 }
 
 function RefetchComponent(
@@ -115,7 +121,7 @@ function RefetchComponent(
   return createElement(
     "div",
     { "data-testid": "data" },
-    JSON.stringify(props.data)
+    JSON.stringify(props.response)
   );
 }
 
@@ -416,7 +422,7 @@ describe("Renderer with dataSource", () => {
       return createElement(
         "div",
         { "data-testid": "data" },
-        JSON.stringify(props.data)
+        JSON.stringify(props.response)
       );
     }
 

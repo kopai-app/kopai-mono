@@ -96,13 +96,13 @@ export function buildTraceSummariesQuery(
   // Duration filters — trace-level, applied as HAVING on aggregated duration
   if (filter.durationMin != null) {
     havingConditions.push(
-      "dateDiff('nanosecond', min(Timestamp), max(Timestamp + toIntervalNanosecond(Duration))) >= {durMin:UInt64}"
+      "toUnixTimestamp64Nano(max(Timestamp + toIntervalNanosecond(Duration))) - toUnixTimestamp64Nano(min(Timestamp)) >= {durMin:UInt64}"
     );
     params.durMin = filter.durationMin;
   }
   if (filter.durationMax != null) {
     havingConditions.push(
-      "dateDiff('nanosecond', min(Timestamp), max(Timestamp + toIntervalNanosecond(Duration))) <= {durMax:UInt64}"
+      "toUnixTimestamp64Nano(max(Timestamp + toIntervalNanosecond(Duration))) - toUnixTimestamp64Nano(min(Timestamp)) <= {durMax:UInt64}"
     );
     params.durMax = filter.durationMax;
   }
@@ -149,7 +149,7 @@ SELECT
   if(anyIf(SpanName, ParentSpanId = '') != '', anyIf(SpanName, ParentSpanId = ''), any(SpanName)) as rootSpanName,
   min(Timestamp) as _startTime,
   toString(toUnixTimestamp64Nano(min(Timestamp))) as startTimeNs,
-  toString(dateDiff('nanosecond', min(Timestamp), max(Timestamp + toIntervalNanosecond(Duration)))) as durationNs,
+  toString(toUnixTimestamp64Nano(max(Timestamp + toIntervalNanosecond(Duration))) - toUnixTimestamp64Nano(min(Timestamp))) as durationNs,
   toUInt32(count()) as spanCount,
   toUInt32(countIf(StatusCode = 'ERROR')) as errorCount,
   groupArray(tuple(ServiceName, StatusCode)) as _serviceData

@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import type { LogEntry } from "../types.js";
 import { getServiceColor } from "../utils/colors.js";
 
@@ -109,7 +109,7 @@ export const LogRow = memo(function LogRow({
   referenceTimeMs,
 }: LogRowProps) {
   const severityColor = getSeverityColor(log.severityText);
-  const message = useMemo(() => log.body || "", [log.body]);
+  const message = log.body || "";
   const timestamp =
     relativeTime && referenceTimeMs != null
       ? formatRelativeTime(log.timeUnixMs, referenceTimeMs)

@@ -12,6 +12,7 @@ export type {
   OtelTracesRow,
   OtelLogsRow,
   OtelMetricsRow,
+  AggregatedMetricRow,
   MetricsDiscoveryResult,
   DiscoveredMetric,
   DiscoveredMetricAttributes,

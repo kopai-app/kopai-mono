@@ -63,7 +63,10 @@ export function FlamegraphView({
     return getAncestorPath(trace.rootSpans, zoomSpanId);
   }, [trace.rootSpans, zoomSpanId]);
 
-  const viewRoots = zoomRoot ? [zoomRoot] : trace.rootSpans;
+  const viewRoots = useMemo(
+    () => (zoomRoot ? [zoomRoot] : trace.rootSpans),
+    [zoomRoot, trace.rootSpans]
+  );
   const viewMinTime = zoomRoot ? zoomRoot.startTimeUnixMs : trace.minTimeMs;
   const viewMaxTime = zoomRoot ? zoomRoot.endTimeUnixMs : trace.maxTimeMs;
   const viewDuration = viewMaxTime - viewMinTime;

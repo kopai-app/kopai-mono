@@ -1,5 +1,40 @@
 # @kopai/ui
 
+## 0.14.0
+
+### Minor Changes
+
+- 0ec5875: Expose additional elements to allow implementation of a custom catalog
+
+### Patch Changes
+
+- Updated dependencies [0ec5875]
+  - @kopai/sdk@0.8.0
+
+## 0.13.0
+
+### Minor Changes
+
+- eac75d0: Improve uiTree schema and remove unncessary components and exports
+
+## 0.12.0
+
+### Minor Changes
+
+- b88c36f: Fix problem with ISO timestamps being passed instead of timestamps in nanos
+
+### Patch Changes
+
+- Updated dependencies [b88c36f]
+  - @kopai/core@0.10.0
+  - @kopai/sdk@0.7.1
+
+## 0.11.0
+
+### Minor Changes
+
+- c73dc8c: Add missing TraceSummariesView
+
 ## 0.10.0
 
 ### Minor Changes

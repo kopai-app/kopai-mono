@@ -1,5 +1,18 @@
 # @kopai/clickhouse-datasource
 
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [b88c36f]
+  - @kopai/core@0.10.0
+
+## 0.6.0
+
+### Minor Changes
+
+- 343a649: Fix trace duration calculation in older ClickHouse version
+
 ## 0.5.0
 
 ### Minor Changes

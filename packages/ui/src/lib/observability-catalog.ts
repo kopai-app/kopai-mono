@@ -93,6 +93,7 @@ export const observabilityCatalog = createCatalog({
       hasChildren: false,
       description:
         "Log timeline with virtual scroll, severity filtering, detail pane",
+      acceptsDataFrom: ["searchLogsPage"] as const,
     },
 
     TraceDetail: {
@@ -100,6 +101,10 @@ export const observabilityCatalog = createCatalog({
       hasChildren: false,
       description:
         "Trace detail with traceId input field and waterfall timeline",
+      acceptsDataFrom: [
+        "searchTracesPage",
+        "searchTraceSummariesPage",
+      ] as const,
     },
 
     MetricTimeSeries: {
@@ -111,6 +116,7 @@ export const observabilityCatalog = createCatalog({
       }),
       hasChildren: false,
       description: "Time series line chart for Gauge/Sum metrics",
+      acceptsDataFrom: ["searchMetricsPage"] as const,
     },
 
     MetricHistogram: {
@@ -121,6 +127,7 @@ export const observabilityCatalog = createCatalog({
       }),
       hasChildren: false,
       description: "Histogram bar chart for distribution metrics",
+      acceptsDataFrom: ["searchMetricsPage"] as const,
     },
 
     MetricStat: {
@@ -131,12 +138,17 @@ export const observabilityCatalog = createCatalog({
       hasChildren: false,
       description:
         "Single metric KPI card with sparkline and threshold coloring",
+      acceptsDataFrom: [
+        "searchMetricsPage",
+        "searchAggregatedMetrics",
+      ] as const,
     },
 
     MetricTable: {
       props: z.object({ maxRows: z.number().nullable() }),
       hasChildren: false,
       description: "Tabular display of metric data points",
+      acceptsDataFrom: ["searchMetricsPage"] as const,
     },
 
     MetricDiscovery: {
@@ -144,6 +156,7 @@ export const observabilityCatalog = createCatalog({
       hasChildren: false,
       description:
         "Table of discovered metric names, types, units and descriptions",
+      acceptsDataFrom: ["discoverMetrics"] as const,
     },
   },
 });

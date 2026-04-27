@@ -9,7 +9,7 @@ export interface Config {
 
 export const CONFIG_FILENAME = ".kopairc";
 export const TOKEN_PREFIX_LENGTH = 10;
-export const DEFAULT_URL = "http://localhost:8000";
+export const DEFAULT_URL = "https://api.kopai.app/v2";
 
 /** Owner read+write only (rw-------). Used for files containing secrets. */
 const OWNER_READ_WRITE = 0o600;

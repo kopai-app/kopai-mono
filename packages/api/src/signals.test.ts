@@ -165,6 +165,39 @@ describe("signalsRoutes", () => {
         title: "Internal server error",
       });
     });
+
+    it("returns 400 for non-numeric timestampMin (e.g. ISO date string)", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {
+          timestampMin: "2026-04-10T14:53:58.818Z",
+          limit: 100,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-validation-error",
+        status: 400,
+        title: "Invalid data",
+      });
+      expect(getTracesSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 for non-numeric durationMin", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {
+          durationMin: "5ms",
+          limit: 100,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(getTracesSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe("POST /signals/logs/search", () => {
@@ -209,6 +242,26 @@ describe("signalsRoutes", () => {
         title: "Invalid data",
       });
       expect(body.detail).toBeDefined();
+    });
+
+    it("returns 400 for non-numeric timestampMin (e.g. ISO date string)", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/search",
+        payload: {
+          timestampMin: "2026-04-10T14:53:58.818Z",
+          limit: 100,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-validation-error",
+        status: 400,
+        title: "Invalid data",
+      });
+      // Datasource must NOT have been called — validation rejects upstream
+      expect(getLogsSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -256,6 +309,20 @@ describe("signalsRoutes", () => {
         title: "Invalid data",
       });
       expect(body.detail).toBeDefined();
+    });
+
+    it("returns 400 for non-numeric timeUnixMin (e.g. ISO date string)", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/search",
+        payload: {
+          metricType: "Gauge",
+          timeUnixMin: "2026-04-10T14:53:58.818Z",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(getMetricsSpy).not.toHaveBeenCalled();
     });
 
     it("returns 500 for SignalsApiError", async () => {

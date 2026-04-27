@@ -26,20 +26,6 @@ export function flattenTree(
   return result;
 }
 
-export function getAllDescendantIds(span: SpanNode): string[] {
-  const ids: string[] = [span.spanId];
-
-  function traverse(s: SpanNode) {
-    s.children.forEach((child) => {
-      ids.push(child.spanId);
-      traverse(child);
-    });
-  }
-
-  traverse(span);
-  return ids;
-}
-
 /** Flatten all spans (ignoring collapse state) with depth. */
 export function flattenAllSpans(rootSpans: SpanNode[]): FlattenedSpan[] {
   return flattenTree(rootSpans, new Set());
