@@ -144,6 +144,12 @@ export const otelLogsSchema = z.object({
     .describe(
       "Body of the log record. Can be a human-readable string message or structured data."
     ),
+  EventName: z
+    .string()
+    .optional()
+    .describe(
+      "A unique identifier of event category/type. Presence identifies this log record as an event."
+    ),
   LogAttributes: z
     .record(z.string(), attributeValue)
     .optional()
