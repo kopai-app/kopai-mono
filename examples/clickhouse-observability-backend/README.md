@@ -34,7 +34,7 @@ flowchart LR
 graph TB
     subgraph compose["docker compose"]
         CH[("clickhouse<br/>25.6-alpine")]
-        OC["otel-collector<br/>0.148.0"]
+        OC["otel-collector<br/>0.150.1"]
         API["api<br/>@kopai/api on Node.js"]
     end
 
@@ -172,5 +172,5 @@ curl http://localhost:8000/signals/metrics/discover
 | Component      | Image                                          |
 | -------------- | ---------------------------------------------- |
 | ClickHouse     | `clickhouse/clickhouse-server:25.6-alpine`     |
-| OTEL Collector | `otel/opentelemetry-collector-contrib:0.148.0` |
+| OTEL Collector | `otel/opentelemetry-collector-contrib:0.150.1` |
 | Node.js        | `node:24-slim`                                 |

@@ -1,6 +1,6 @@
 export const ddl = `
 -- OpenTelemetry SQLite Schema
--- Migrated from ClickHouse OTEL exporter schema v0.148.0
+-- Migrated from ClickHouse OTEL exporter schema v0.150.1
 --
 -- Conversion notes:
 -- - Map/Array types → JSON TEXT columns

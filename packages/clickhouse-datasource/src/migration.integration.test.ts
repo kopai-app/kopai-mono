@@ -164,7 +164,7 @@ async function hasEventNameColumn(client: ClickHouseClient): Promise<boolean> {
   return rows.length > 0;
 }
 
-describe("Migration: v0.136.0 → v0.148.0 (EventName column)", () => {
+describe("Migration: v0.136.0 → v0.150.1 (EventName column)", () => {
   let network: StartedNetwork;
   let clickhouseContainer: StartedTestContainer;
   let adminClient: ClickHouseClient;
@@ -308,10 +308,10 @@ describe("Migration: v0.136.0 → v0.148.0 (EventName column)", () => {
   });
 
   // -----------------------------------------------------------------------
-  // Phase 3: New collector (v0.148.0) — ingest data WITH EventName
+  // Phase 3: New collector (v0.150.1) — ingest data WITH EventName
   // -----------------------------------------------------------------------
 
-  describe("Phase 3: New collector (v0.148.0)", () => {
+  describe("Phase 3: New collector (v0.150.1)", () => {
     let collector: StartedTestContainer;
 
     beforeAll(async () => {

@@ -1,4 +1,4 @@
-export const OTEL_COLLECTOR_VERSION = "0.148.0";
+export const OTEL_COLLECTOR_VERSION = "0.150.1";
 export const OTEL_COLLECTOR_VERSION_OLD = "0.136.0";
 export const CLICKHOUSE_IMAGE = "clickhouse/clickhouse-server:25.6-alpine";
 export const OTEL_COLLECTOR_IMAGE = `otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION}`;
