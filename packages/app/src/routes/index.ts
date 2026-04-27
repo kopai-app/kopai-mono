@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { signalsRoutes, dashboardsRoutes } from "@kopai/api";
+import { mcpPlugin } from "@kopai/mcp";
 import { type datasource, type dashboardDatasource } from "@kopai/core";
 import { generatePromptInstructions, observabilityCatalog } from "@kopai/ui";
 
@@ -20,6 +21,11 @@ export const apiRoutes: FastifyPluginAsyncZod<{
     readTelemetryDatasource: opts.readTelemetryDatasource,
   });
   fastify.register(dashboardsRoutes, {
+    dynamicDashboardDatasource: opts.dynamicDashboardDatasource,
+    promptInstructions,
+  });
+  fastify.register(mcpPlugin, {
+    readTelemetryDatasource: opts.readTelemetryDatasource,
     dynamicDashboardDatasource: opts.dynamicDashboardDatasource,
     promptInstructions,
   });

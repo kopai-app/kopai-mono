@@ -48,7 +48,7 @@ const apiServer = fastify({
 apiServer.setValidatorCompiler(validatorCompiler);
 apiServer.setSerializerCompiler(serializerCompiler);
 
-const uiRoutes = ["/", "/*"];
+const uiRoutes = ["/", "/*", "/mcp"];
 apiServer.register(fastifySwagger, {
   openapi: {
     info: {

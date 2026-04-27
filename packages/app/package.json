@@ -61,6 +61,7 @@
     "@kopai/api": "workspace:*",
     "@kopai/collector": "workspace:*",
     "@kopai/core": "workspace:*",
+    "@kopai/mcp": "workspace:*",
     "@kopai/sqlite-datasource": "workspace:*",
     "@kopai/ui": "workspace:*",
     "close-with-grace": "^2.5.0",
