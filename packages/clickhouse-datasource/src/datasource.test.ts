@@ -1,8 +1,21 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+  vi,
+} from "vitest";
 import type { Logger } from "./types.js";
-import { createClient, type ClickHouseClient } from "@clickhouse/client";
+import {
+  createClient,
+  type ClickHouseClient,
+  type ResultSet,
+} from "@clickhouse/client";
 import {
   GenericContainer,
   Wait,
@@ -2154,6 +2167,91 @@ GROUP BY MetricName, MetricType, source, attr_key`,
       });
       expect(logObj.durationMs).toBeTypeOf("number");
       expect(logObj.err).toBeDefined();
+    });
+  });
+
+  describe("clickhouseSettings forwarding", () => {
+    let localDs: ClickHouseReadDatasource;
+    let querySpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      localDs = new ClickHouseReadDatasource("http://localhost:8123");
+      const mockRs = {
+        response_headers: {} as Record<string, string>,
+        stream() {
+          return (async function* () {})();
+        },
+        json: async () => [],
+        text: async () => "",
+        query_id: "mock",
+      };
+      querySpy = vi
+        .spyOn(localDs["client"], "query")
+        .mockResolvedValue(mockRs as unknown as ResultSet<"JSONEachRow">);
+    });
+
+    afterEach(async () => {
+      await localDs.close().catch(() => {});
+      vi.restoreAllMocks();
+    });
+
+    const ctx = {
+      database: "db",
+      username: "u",
+      password: "p",
+      clickhouseSettings: { max_threads: 1 },
+    };
+
+    it.each([
+      ["getLogs", () => localDs.getLogs({ requestContext: ctx })],
+      [
+        "getMetrics",
+        () => localDs.getMetrics({ metricType: "Gauge", requestContext: ctx }),
+      ],
+      [
+        "getAggregatedMetrics",
+        () =>
+          localDs.getAggregatedMetrics({
+            metricType: "Gauge",
+            requestContext: ctx,
+          }),
+      ],
+      ["getServices", () => localDs.getServices({ requestContext: ctx })],
+      [
+        "getOperations",
+        () => localDs.getOperations({ serviceName: "s", requestContext: ctx }),
+      ],
+      [
+        "getTraceSummaries",
+        () => localDs.getTraceSummaries({ requestContext: ctx }),
+      ],
+      ["getTraces", () => localDs.getTraces({ requestContext: ctx })],
+    ])("%s forwards clickhouseSettings", async (_, call) => {
+      await call().catch(() => {});
+      expect(querySpy).toHaveBeenCalledWith(
+        expect.objectContaining({ clickhouse_settings: { max_threads: 1 } })
+      );
+    });
+
+    it("discoverMetrics forwards to both parallel calls", async () => {
+      await localDs.discoverMetrics({ requestContext: ctx }).catch(() => {});
+      expect(querySpy).toHaveBeenCalledTimes(2);
+      for (const [args] of querySpy.mock.calls) {
+        expect(args).toMatchObject({
+          clickhouse_settings: { max_threads: 1 },
+        });
+      }
+    });
+
+    it("omits clickhouse_settings when absent", async () => {
+      const bare = { database: "db", username: "u", password: "p" };
+      await localDs.getLogs({ requestContext: bare }).catch(() => {});
+      await localDs.discoverMetrics({ requestContext: bare }).catch(() => {});
+      for (const [args] of querySpy.mock.calls) {
+        expect(args).not.toMatchObject({
+          clickhouse_settings: expect.anything(),
+        });
+      }
     });
   });
 });
