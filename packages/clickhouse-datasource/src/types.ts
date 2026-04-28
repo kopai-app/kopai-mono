@@ -1,3 +1,5 @@
+import type { ClickHouseSettings } from "@clickhouse/client";
+
 /** Matches pino.LogFn overloads so Fastify's request.log is directly assignable. */
 export interface LogFn {
   (msg: string, ...args: unknown[]): void;
@@ -19,6 +21,7 @@ export interface ClickHouseRequestContext {
   username: string;
   password: string;
   logger?: Logger;
+  clickhouseSettings?: ClickHouseSettings;
 }
 
 /**
