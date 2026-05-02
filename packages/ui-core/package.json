@@ -42,7 +42,7 @@
     "@kopai/core": "workspace:*",
     "@kopai/sdk": "workspace:*",
     "@tanstack/react-query": "^5",
-    "zod": "^4.3.6"
+    "zod": "^4.4.2"
   },
   "peerDependencies": {
     "react": "^19.2.5"
@@ -52,7 +52,7 @@
     "@testing-library/react": "^16.3.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.1.0",
-    "jsdom": "^29.0.2",
+    "jsdom": "^29.1.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "tsdown": "^0.21.10"

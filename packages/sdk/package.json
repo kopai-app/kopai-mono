@@ -35,11 +35,11 @@
   },
   "dependencies": {
     "@kopai/core": "workspace:*",
-    "zod": "^4.3.6"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "msw": "^2.13.6",
+    "msw": "^2.14.2",
     "tsdown": "^0.21.10"
   }
 }
