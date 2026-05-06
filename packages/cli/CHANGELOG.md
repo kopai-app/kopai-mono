@@ -1,5 +1,11 @@
 # @kopai/cli
 
+## 0.10.0
+
+### Minor Changes
+
+- 94418fc: Fix default kopai/cli url
+
 ## 0.9.3
 
 ### Patch Changes
