@@ -36,7 +36,7 @@
   "dependencies": {
     "@clickhouse/client": "^1.18.3",
     "@kopai/core": "workspace:*",
-    "zod": "^4.3.6"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
