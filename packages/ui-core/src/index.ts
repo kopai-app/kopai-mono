@@ -12,6 +12,7 @@ export {
 } from "./lib/renderer.js";
 export {
   createCatalog,
+  type CatalogueComponentProps,
   type ComponentDefinition,
   type DataSource,
   type InferProps,

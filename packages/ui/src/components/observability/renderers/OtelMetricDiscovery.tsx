@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { observabilityCatalog } from "../../../lib/observability-catalog.js";
-import type { RendererComponentProps } from "../../../lib/renderer.js";
+import { observabilityCatalog } from "@kopai/ui-core";
+import type { RendererComponentProps } from "@kopai/ui-core";
 
 type Props = RendererComponentProps<
   typeof observabilityCatalog.components.MetricDiscovery

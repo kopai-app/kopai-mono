@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createElement } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import ObservabilityPage from "./observability.js";
-import { queryClient } from "../providers/kopai-provider.js";
+import { queryClient } from "@kopai/ui-core";
 import type { KopaiClient } from "@kopai/sdk";
 
 type MockClient = {

@@ -1,5 +1,7 @@
-import { observabilityCatalog } from "../../../lib/observability-catalog.js";
-import type { RendererComponentProps } from "../../../lib/renderer.js";
+import {
+  observabilityCatalog,
+  type RendererComponentProps,
+} from "@kopai/ui-core";
 import { MetricTimeSeries } from "../index.js";
 import { NoDataSource } from "./NoDataSource.js";
 
