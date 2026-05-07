@@ -24,7 +24,7 @@ vi.mock("node:readline", () => ({
   }),
 }));
 
-import { saveConfig, resolveConfigPath, DEFAULT_URL } from "../config.js";
+import { saveConfig, resolveConfigPath } from "../config.js";
 import { existsSync, readFileSync } from "node:fs";
 import { createLoginCommand } from "./login.js";
 
@@ -60,11 +60,14 @@ describe("login command", () => {
     vi.restoreAllMocks();
   });
 
-  it("calls saveConfig with token and default url", async () => {
+  it("calls saveConfig with token and hosted prod url by default", async () => {
     await runCommand([]);
 
     expect(saveConfig).toHaveBeenCalledWith(
-      { token: "kpi_test_token_12345678901234567890123456", url: DEFAULT_URL },
+      {
+        token: "kpi_test_token_12345678901234567890123456",
+        url: "https://api.kopai.app/v2",
+      },
       "/mock/.kopairc"
     );
   });
@@ -88,7 +91,10 @@ describe("login command", () => {
 
     expect(resolveConfigPath).toHaveBeenCalledWith(true);
     expect(saveConfig).toHaveBeenCalledWith(
-      { token: "kpi_test_token_12345678901234567890123456", url: DEFAULT_URL },
+      {
+        token: "kpi_test_token_12345678901234567890123456",
+        url: "https://api.kopai.app/v2",
+      },
       "/home/user/.kopairc"
     );
   });

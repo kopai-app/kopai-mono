@@ -1,5 +1,5 @@
 -- OpenTelemetry SQLite Schema
--- Migrated from ClickHouse OTEL exporter schema v0.136.0
+-- Migrated from ClickHouse OTEL exporter schema v0.148.0
 --
 -- Conversion notes:
 -- - Map/Array types → JSON TEXT columns
@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS otel_logs (
     ScopeName TEXT NOT NULL DEFAULT '',
     ScopeVersion TEXT NOT NULL DEFAULT '',
     ScopeAttributes TEXT NOT NULL DEFAULT '{}',
-    LogAttributes TEXT NOT NULL DEFAULT '{}'
+    LogAttributes TEXT NOT NULL DEFAULT '{}',
+    EventName TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_otel_logs_service_time ON otel_logs (ServiceName, TimestampTime);

@@ -1,6 +1,23 @@
-# Kopai
+<div>
+  <!-- INTRO -->
+  <div align=center>
+    <h1>Kopai</h1>
+    <p>OpenTelemetry observability backend in TypeScript running on Node.js</p>
+  </div>
+  <br />
+  <!-- BADGES -->
+  <div align=center>
+    <a href="https://github.com/kopai-app/kopai-mono/blob/main/LICENSE"><img alt="license" src="https://img.shields.io/github/license/kopai-app/kopai-mono"></a>
+    <a href="https://deepwiki.com/kopai-app/kopai-mono"><img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"/></a>
+  </div>
+  <br />
+  <!-- LINKS -->
+  <div align=center>
+    <a href="https://docs.kopai.app/">Docs</a>
+  </div>
+</div>
 
-OpenTelemetry observability backend in TypeScript running on Node.js
+## Quick Start
 
 Run with
 
@@ -41,13 +58,6 @@ The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-i
 | [@kopai/otel-testing-harness](./packages/otel-testing-harness)   | In-process OTEL testing harness | [![npm](https://img.shields.io/npm/v/@kopai/otel-testing-harness?label=latest)](https://www.npmjs.com/package/@kopai/otel-testing-harness)   |
 | [@kopai/tsconfig](./packages/tsconfig)                           | Shared TypeScript config        |                                                                                                                                              |
 
-## Examples
-
-| Example                                                                         | Description                                               |
-| ------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [clickhouse-observability-backend](./examples/clickhouse-observability-backend) | Docker Compose: OTEL Collector → ClickHouse → @kopai/api  |
-| [ui-react-app](./examples/ui-react-app)                                         | React SPA showing custom SDUI renderers on @kopai/ui-core |
-
 ### Dependency Graph
 
 ```
@@ -73,6 +83,13 @@ The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-i
                       │     app     │
                       └─────────────┘
 ```
+
+## Examples
+
+| Example                                                                         | Description                                               |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [clickhouse-observability-backend](./examples/clickhouse-observability-backend) | Docker Compose: OTEL Collector → ClickHouse → @kopai/api  |
+| [ui-react-app](./examples/ui-react-app)                                         | React SPA showing custom SDUI renderers on @kopai/ui-core |
 
 ## Development
 

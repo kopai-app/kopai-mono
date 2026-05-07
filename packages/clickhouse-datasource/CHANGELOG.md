@@ -1,5 +1,12 @@
 # @kopai/clickhouse-datasource
 
+## 0.7.0
+
+### Minor Changes
+
+- f3edc9f: Allow setting clickhouseSettings in filter context
+- f3edc9f: Use latest Opentelemetry collector's clickhouse exporter DB schema
+
 ## 0.6.1
 
 ### Patch Changes

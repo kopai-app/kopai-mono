@@ -28,9 +28,10 @@ program
     "after",
     `
 Examples:
-  $ kopai traces search                                          # localhost:8000 (default, for @kopai/app running locally)
-  $ kopai traces search --url https://example.com                # remote instance
-  $ kopai logs search --url https://example.com --token kpi_…    # with auth`
+  $ kopai traces search                                          # http://localhost:8000 (default, for @kopai/app running locally)
+  $ kopai traces search --url https://api.kopai.app/v2          # hosted instance (run "kopai login" first)
+  $ kopai login                                                  # save token for https://api.kopai.app/v2
+  $ kopai logs search --url https://example.com --token kpi_…    # custom instance with auth`
   );
 
 program.parse();

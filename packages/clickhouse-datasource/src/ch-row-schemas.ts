@@ -136,6 +136,7 @@ export const chLogsRowSchema = z.object({
   SeverityText: chOptionalString,
   SeverityNumber: chNumber,
   Body: z.string().optional(),
+  EventName: chOptionalString,
   LogAttributes: chAttributes,
   ResourceAttributes: chAttributes,
   ResourceSchemaUrl: chOptionalString,

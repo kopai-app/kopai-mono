@@ -1,11 +1,13 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { observabilityCatalog } from "@kopai/ui-core";
-import type { RendererComponentProps } from "@kopai/ui-core";
+import {
+  observabilityCatalog,
+  type RendererComponentProps,
+  useKopaiSDK,
+} from "@kopai/ui-core";
 import { TraceDetail } from "../index.js";
 import { TraceSearch } from "../TraceSearch/index.js";
 import type { TraceSummary } from "../TraceSearch/index.js";
-import { useKopaiSDK } from "@kopai/ui-core";
 import { NoDataSource } from "./NoDataSource.js";
 import type { dataFilterSchemas } from "@kopai/core";
 import type { OtelTracesRow, SearchResult } from "@kopai/sdk";

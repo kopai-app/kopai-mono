@@ -6,9 +6,10 @@ import {
   saveConfig,
   resolveConfigPath,
   TOKEN_PREFIX_LENGTH,
-  DEFAULT_URL,
   type Config,
 } from "../config.js";
+
+const LOGIN_DEFAULT_URL = "https://api.kopai.app/v2";
 
 function readTokenFromStdin(): Promise<string> {
   return new Promise((resolve) => {
@@ -38,7 +39,7 @@ export function createLoginCommand(): Command {
 
       const updates: Partial<Config> = {
         token,
-        url: opts.url ?? DEFAULT_URL,
+        url: opts.url ?? LOGIN_DEFAULT_URL,
       };
 
       const targetPath = resolveConfigPath(opts.global ?? false);

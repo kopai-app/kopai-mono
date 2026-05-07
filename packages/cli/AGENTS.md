@@ -12,11 +12,11 @@ npx @kopai/cli <command>
 
 ## Configuration
 
-**Default:** `http://localhost:8000` (no auth required)
+**Default:** `https://api.kopai.app/v2` (hosted Kopai instance, requires auth)
 
-Works out of the box with local @kopai/app. No configuration needed for local development.
+Run `kopai login` to save a token, or pass `--token` on each call. For local development against `@kopai/app`, override with `--url http://localhost:8000` (no auth required).
 
-For remote/authenticated APIs, create `.kopairc` in current or home directory:
+To persist configuration, create `.kopairc` in current or home directory:
 
 ```json
 {

@@ -39,6 +39,10 @@ export function buildLogsQuery(filter: dataFilterSchemas.LogsDataFilter): {
     conditions.push("SeverityText = {severityText:String}");
     params.severityText = filter.severityText;
   }
+  if (filter.eventName) {
+    conditions.push("EventName = {eventName:String}");
+    params.eventName = filter.eventName;
+  }
 
   // Severity number range
   if (filter.severityNumberMin != null) {
@@ -148,6 +152,7 @@ SELECT
   ScopeVersion,
   ScopeAttributes,
   LogAttributes,
+  EventName,
   sipHash64(Timestamp, Body, ServiceName, TraceId, SpanId) AS _rowHash
 FROM otel_logs
 ${whereClause}

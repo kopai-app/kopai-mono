@@ -55,31 +55,31 @@
     "start": "node ./dist/cli.mjs start"
   },
   "dependencies": {
-    "@fastify/vite": "^9.0.0",
+    "@fastify/vite": "^9.0.2",
     "@fastify/swagger": "^9.7.0",
-    "@fastify/swagger-ui": "^5.2.5",
+    "@fastify/swagger-ui": "^5.2.6",
     "@kopai/api": "workspace:*",
     "@kopai/collector": "workspace:*",
     "@kopai/core": "workspace:*",
     "@kopai/sqlite-datasource": "workspace:*",
     "@kopai/ui": "workspace:*",
     "close-with-grace": "^2.5.0",
-    "fastify": "^5.8.4",
+    "fastify": "^5.8.5",
     "fastify-type-provider-zod": "^6.1.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^6.0.1",
-    "@tailwindcss/postcss": "^4.2.2",
-    "postcss": "^8.5.9",
+    "@tailwindcss/postcss": "^4.2.4",
+    "postcss": "^8.5.13",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "tailwindcss": "^4.2.2",
-    "tsdown": "^0.21.7",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.8"
+    "tailwindcss": "^4.2.4",
+    "tsdown": "^0.21.10",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10"
   }
 }

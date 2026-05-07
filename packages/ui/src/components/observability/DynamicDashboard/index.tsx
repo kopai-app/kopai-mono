@@ -1,6 +1,10 @@
-import { createRendererFromCatalog, type UITree } from "@kopai/ui-core";
-import { KopaiSDKProvider, type KopaiClient } from "@kopai/ui-core";
-import { observabilityCatalog } from "@kopai/ui-core";
+import {
+  createRendererFromCatalog,
+  type UITree,
+  KopaiSDKProvider,
+  type KopaiClient,
+  observabilityCatalog,
+} from "@kopai/ui-core";
 import {
   Heading,
   Text,

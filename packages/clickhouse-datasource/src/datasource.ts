@@ -110,6 +110,22 @@ export class ClickHouseReadDatasource
     await this.client.close();
   }
 
+  private async clientQuery(
+    ctx: ClickHouseRequestContext,
+    query: string,
+    params: Record<string, unknown> = {}
+  ): Promise<ResultSet<"JSONEachRow">> {
+    const { username, password, database, clickhouseSettings } = ctx;
+    return this.client.query({
+      query,
+      query_params: params,
+      format: "JSONEachRow",
+      auth: { username, password },
+      http_headers: { "X-ClickHouse-Database": database },
+      ...(clickhouseSettings && { clickhouse_settings: clickhouseSettings }),
+    });
+  }
+
   async getTraces(
     filter: dataFilterSchemas.TracesDataFilter & {
       requestContext?: unknown;
@@ -119,7 +135,7 @@ export class ClickHouseReadDatasource
     nextCursor: string | null;
   }> {
     assertClickHouseRequestContext(filter.requestContext);
-    const { database, username, password } = filter.requestContext;
+    const { database, username } = filter.requestContext;
     const log = getLogger(filter.requestContext);
     const start = performance.now();
 
@@ -128,13 +144,11 @@ export class ClickHouseReadDatasource
     try {
       const { query, params } = buildTracesQuery(filter);
 
-      const resultSet = await this.client.query({
+      const resultSet = await this.clientQuery(
+        filter.requestContext,
         query,
-        query_params: params,
-        format: "JSONEachRow",
-        auth: { username, password },
-        http_headers: { "X-ClickHouse-Database": database },
-      });
+        params
+      );
       chNode = getChNode(resultSet);
 
       rows = await streamParse(resultSet, chTracesRowSchema);
@@ -179,7 +193,7 @@ export class ClickHouseReadDatasource
     nextCursor: string | null;
   }> {
     assertClickHouseRequestContext(filter.requestContext);
-    const { database, username, password } = filter.requestContext;
+    const { database, username } = filter.requestContext;
     const log = getLogger(filter.requestContext);
     const start = performance.now();
 
@@ -188,13 +202,11 @@ export class ClickHouseReadDatasource
     try {
       const { query, params } = buildLogsQuery(filter);
 
-      const resultSet = await this.client.query({
+      const resultSet = await this.clientQuery(
+        filter.requestContext,
         query,
-        query_params: params,
-        format: "JSONEachRow",
-        auth: { username, password },
-        http_headers: { "X-ClickHouse-Database": database },
-      });
+        params
+      );
       chNode = getChNode(resultSet);
 
       rows = [];
@@ -251,7 +263,7 @@ export class ClickHouseReadDatasource
     nextCursor: string | null;
   }> {
     assertClickHouseRequestContext(filter.requestContext);
-    const { database, username, password } = filter.requestContext;
+    const { database, username } = filter.requestContext;
     const log = getLogger(filter.requestContext);
     const start = performance.now();
 
@@ -263,13 +275,11 @@ export class ClickHouseReadDatasource
     try {
       const { query, params } = buildMetricsQuery(filter);
 
-      const resultSet = await this.client.query({
+      const resultSet = await this.clientQuery(
+        filter.requestContext,
         query,
-        query_params: params,
-        format: "JSONEachRow",
-        auth: { username, password },
-        http_headers: { "X-ClickHouse-Database": database },
-      });
+        params
+      );
       chNode = getChNode(resultSet);
 
       rows = [];
@@ -326,7 +336,7 @@ export class ClickHouseReadDatasource
     nextCursor: null;
   }> {
     assertClickHouseRequestContext(filter.requestContext);
-    const { database, username, password } = filter.requestContext;
+    const { database, username } = filter.requestContext;
     const log = getLogger(filter.requestContext);
     const start = performance.now();
 
@@ -334,13 +344,11 @@ export class ClickHouseReadDatasource
     try {
       const { query, params } = buildAggregatedMetricsQuery(filter);
 
-      const resultSet = await this.client.query({
+      const resultSet = await this.clientQuery(
+        filter.requestContext,
         query,
-        query_params: params,
-        format: "JSONEachRow",
-        auth: { username, password },
-        http_headers: { "X-ClickHouse-Database": database },
-      });
+        params
+      );
       chNode = getChNode(resultSet);
 
       const groupByKeys = filter.groupBy ?? [];
@@ -395,7 +403,7 @@ export class ClickHouseReadDatasource
   }): Promise<{ services: string[] }> {
     const requestContext = opts?.requestContext;
     assertClickHouseRequestContext(requestContext);
-    const { database, username, password } = requestContext;
+    const { database, username } = requestContext;
     const log = getLogger(requestContext);
     const start = performance.now();
 
@@ -403,13 +411,7 @@ export class ClickHouseReadDatasource
     try {
       const { query, params } = buildServicesQuery();
 
-      const resultSet = await this.client.query({
-        query,
-        query_params: params,
-        format: "JSONEachRow",
-        auth: { username, password },
-        http_headers: { "X-ClickHouse-Database": database },
-      });
+      const resultSet = await this.clientQuery(requestContext, query, params);
       chNode = getChNode(resultSet);
 
       const services: string[] = [];
@@ -455,7 +457,7 @@ export class ClickHouseReadDatasource
     requestContext?: unknown;
   }): Promise<{ operations: string[] }> {
     assertClickHouseRequestContext(filter.requestContext);
-    const { database, username, password } = filter.requestContext;
+    const { database, username } = filter.requestContext;
     const log = getLogger(filter.requestContext);
     const start = performance.now();
 
@@ -463,13 +465,11 @@ export class ClickHouseReadDatasource
     try {
       const { query, params } = buildOperationsQuery(filter);
 
-      const resultSet = await this.client.query({
+      const resultSet = await this.clientQuery(
+        filter.requestContext,
         query,
-        query_params: params,
-        format: "JSONEachRow",
-        auth: { username, password },
-        http_headers: { "X-ClickHouse-Database": database },
-      });
+        params
+      );
       chNode = getChNode(resultSet);
 
       const operations: string[] = [];
@@ -519,7 +519,7 @@ export class ClickHouseReadDatasource
     nextCursor: string | null;
   }> {
     assertClickHouseRequestContext(filter.requestContext);
-    const { database, username, password } = filter.requestContext;
+    const { database, username } = filter.requestContext;
     const log = getLogger(filter.requestContext);
     const start = performance.now();
 
@@ -527,13 +527,11 @@ export class ClickHouseReadDatasource
     try {
       const { query, params } = buildTraceSummariesQuery(filter);
 
-      const resultSet = await this.client.query({
+      const resultSet = await this.clientQuery(
+        filter.requestContext,
         query,
-        query_params: params,
-        format: "JSONEachRow",
-        auth: { username, password },
-        http_headers: { "X-ClickHouse-Database": database },
-      });
+        params
+      );
       chNode = getChNode(resultSet);
 
       const rawRows: Array<{
@@ -630,13 +628,10 @@ export class ClickHouseReadDatasource
   }): Promise<datasource.MetricsDiscoveryResult> {
     const ctx = options?.requestContext;
     assertClickHouseRequestContext(ctx);
-    const { database, username, password } = ctx;
+    const { database, username } = ctx;
     const log = getLogger(ctx);
     const logCtx = { database, username, method: "discoverMetrics" };
     const start = performance.now();
-
-    const auth = { username, password };
-    const http_headers = { "X-ClickHouse-Database": database };
 
     // Query MV tables directly — no system.tables detection needed.
     // Reader users may lack access to system.tables, causing false negatives.
@@ -646,18 +641,8 @@ export class ClickHouseReadDatasource
     try {
       const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
       const [namesRs, attrsRs] = await Promise.all([
-        this.client.query({
-          query: namesQuery,
-          format: "JSONEachRow",
-          auth,
-          http_headers,
-        }),
-        this.client.query({
-          query: attributesQuery,
-          format: "JSONEachRow",
-          auth,
-          http_headers,
-        }),
+        this.clientQuery(ctx, namesQuery),
+        this.clientQuery(ctx, attributesQuery),
       ]);
       chNodes = [getChNode(namesRs), getChNode(attrsRs)];
       [nameRows, attrRows] = await Promise.all([

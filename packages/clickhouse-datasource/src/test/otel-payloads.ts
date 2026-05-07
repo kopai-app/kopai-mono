@@ -143,6 +143,43 @@ export function createLogsPayload() {
   };
 }
 
+export const TEST_EVENT_NAME = "user.login";
+
+export const TEST_EVENT_SERVICE_NAME = "event-test-service";
+
+export function createLogsPayloadWithEventName() {
+  const now = nowNanos();
+
+  return {
+    resourceLogs: [
+      {
+        resource: {
+          attributes: [
+            otelAttr("service.name", TEST_EVENT_SERVICE_NAME),
+            otelAttr("service.version", "2.0.0"),
+          ],
+        },
+        scopeLogs: [
+          {
+            scope: scopeInfo,
+            logRecords: [
+              {
+                timeUnixNano: now,
+                observedTimeUnixNano: now,
+                severityNumber: 9,
+                severityText: "INFO",
+                body: { stringValue: "User logged in successfully" },
+                eventName: TEST_EVENT_NAME,
+                attributes: [otelAttr("user.id", "user-123")],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 export function createMetricsPayload() {
   const now = nowNanos();
   const startTime = String(BigInt(now) - 60_000_000_000n); // 60s ago

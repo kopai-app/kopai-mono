@@ -12,6 +12,7 @@ export type Generated<T> =
 
 export interface OtelLogs {
   Body: Generated<string>;
+  EventName: Generated<string>;
   LogAttributes: Generated<string>;
   ResourceAttributes: Generated<string>;
   ResourceSchemaUrl: Generated<string>;
