@@ -773,6 +773,180 @@ export class DbDatasource implements datasource.TelemetryDatasource {
     }
   }
 
+  async getMetricsTimeSeries(
+    filter: dataFilterSchemas.MetricsDataFilter
+  ): Promise<{
+    data: denormalizedSignals.TimeseriesMetricRow[];
+    nextCursor: null;
+  }> {
+    try {
+      const limit = filter.limit ?? 1000;
+      const metricType = filter.metricType;
+      if (metricType !== "Gauge" && metricType !== "Sum") {
+        throw new Error(`aggregate is not supported for ${metricType}`);
+      }
+      if (!filter.timeBucket) {
+        throw new Error("timeBucket is required for getMetricsTimeSeries");
+      }
+
+      const tableMap = {
+        Gauge: "otel_metrics_gauge",
+        Sum: "otel_metrics_sum",
+      } as const;
+      const table = tableMap[metricType];
+
+      const aggFnSql: Record<string, ReturnType<typeof kyselySql>> = {
+        sum: kyselySql`SUM(Value)`,
+        avg: kyselySql`AVG(Value)`,
+        min: kyselySql`MIN(Value)`,
+        max: kyselySql`MAX(Value)`,
+        count: kyselySql`COUNT(Value)`,
+      };
+      const aggKey = filter.aggregate ?? "sum";
+      const aggExpr = aggFnSql[aggKey];
+      if (!aggExpr) {
+        throw new Error(`Unknown aggregate function: ${aggKey}`);
+      }
+      const groupByKeys = filter.groupBy ?? [];
+
+      // Bucket arithmetic in raw nanoseconds.
+      // Kysely's DSL does not expose SQLite functions like strftime (PRD §Open Q2),
+      // so the bucket expression is a raw SQL fragment. Using TimeUnix / bucketNs
+      // (integer division) * bucketNs floors to the bucket start in nanoseconds.
+      // SQLite INTEGER is 64-bit signed, so this is safe well past 2024.
+      // We CAST to TEXT so the result is consumable as a stringified bigint that
+      // matches TimeseriesMetricRow.timeBucketNs.
+      const bucketSizeNsMap = {
+        "1m": 60n * 1_000_000_000n,
+        "5m": 300n * 1_000_000_000n,
+        "1h": 3600n * 1_000_000_000n,
+        "1d": 86_400n * 1_000_000_000n,
+      } as const;
+      const bucketSizeNs = bucketSizeNsMap[filter.timeBucket];
+
+      // Build query
+      let query = queryBuilder
+        .selectFrom(table)
+        .select(aggExpr.as("value"))
+        .select(
+          kyselySql`CAST((TimeUnix / ${bucketSizeNs}) * ${bucketSizeNs} AS TEXT)`.as(
+            "timeBucketNs"
+          )
+        );
+
+      // Group-by columns: json_extract(Attributes, path) AS group_N
+      for (const [i, groupKey] of groupByKeys.entries()) {
+        const jsonPath = escapeJsonPath(groupKey);
+        query = query.select(
+          kyselySql`json_extract(Attributes, ${jsonPath})`.as(
+            `group_${String(i)}`
+          )
+        );
+      }
+
+      // Exact match filters
+      if (filter.metricName)
+        query = query.where("MetricName", "=", filter.metricName);
+      if (filter.serviceName)
+        query = query.where("ServiceName", "=", filter.serviceName);
+      if (filter.scopeName)
+        query = query.where("ScopeName", "=", filter.scopeName);
+
+      // Implicit Delta filter for Sum (same convention as getAggregatedMetrics)
+      if (metricType === "Sum") {
+        query = query.where(
+          "AggregationTemporality",
+          "=",
+          "AGGREGATION_TEMPORALITY_DELTA"
+        );
+      }
+
+      // Time range
+      if (filter.timeUnixMin != null)
+        query = query.where("TimeUnix", ">=", BigInt(filter.timeUnixMin));
+      if (filter.timeUnixMax != null)
+        query = query.where("TimeUnix", "<=", BigInt(filter.timeUnixMax));
+
+      // Attribute filters
+      if (filter.attributes) {
+        for (const [key, value] of Object.entries(filter.attributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(Attributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.resourceAttributes) {
+        for (const [key, value] of Object.entries(filter.resourceAttributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(ResourceAttributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.scopeAttributes) {
+        for (const [key, value] of Object.entries(filter.scopeAttributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(ScopeAttributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+
+      // GROUP BY bucket + group keys
+      query = query.groupBy(kyselySql.ref("timeBucketNs"));
+      for (const [i] of groupByKeys.entries()) {
+        query = query.groupBy(kyselySql.ref(`group_${String(i)}`));
+      }
+
+      // ORDER BY timeBucketNs ASC (chronological), then value DESC, LIMIT
+      query = query
+        .orderBy(kyselySql`CAST(timeBucketNs AS INTEGER)`, "asc")
+        .orderBy(kyselySql`value`, "desc")
+        .limit(limit);
+
+      // Execute
+      const { sql, parameters } = query.compile();
+      const stmt = this.sqliteConnection.prepare(sql);
+      stmt.setReadBigInts(true);
+      const rawRows = stmt.all(
+        ...(parameters as (string | number | bigint | null)[])
+      );
+      const rows = rawRows.filter(isRecord);
+
+      const data: denormalizedSignals.TimeseriesMetricRow[] = rows.map(
+        (row) => {
+          const groups: Record<string, string> = {};
+          for (const [i, groupKey] of groupByKeys.entries()) {
+            groups[groupKey] = String(row[`group_${String(i)}`] ?? "");
+          }
+          // timeBucketNs is selected as CAST(... AS TEXT), so the driver returns it
+          // as a JS string already. Normalize through String() to be defensive
+          // against bigint passthrough.
+          return {
+            groups,
+            timeBucketNs: String(row.timeBucketNs ?? "0"),
+            value: Number(row.value),
+          };
+        }
+      );
+
+      return { data, nextCursor: null };
+    } catch (error) {
+      if (error instanceof SqliteDatasourceQueryError) throw error;
+      throw new SqliteDatasourceQueryError(
+        "Failed to query timeseries metrics",
+        { cause: error }
+      );
+    }
+  }
+
   async getLogs(filter: dataFilterSchemas.LogsDataFilter): Promise<{
     data: denormalizedSignals.OtelLogsRow[];
     nextCursor: string | null;
@@ -922,6 +1096,128 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       return { data: data.map(mapRowToOtelLogs), nextCursor };
     } catch (error) {
       throw new SqliteDatasourceQueryError("Failed to query logs", {
+        cause: error,
+      });
+    }
+  }
+
+  async getAggregatedLogs(filter: dataFilterSchemas.LogsDataFilter): Promise<{
+    data: denormalizedSignals.AggregatedLogRow[];
+    nextCursor: null;
+  }> {
+    try {
+      const groupByKeys = filter.groupBy ?? [];
+
+      // Only "count" is supported for logs aggregation.
+      // count(*) is invariant to the column counted, so use a constant.
+      let query = queryBuilder
+        .selectFrom("otel_logs")
+        .select(kyselySql`COUNT(*)`.as("value"));
+
+      // Group-by columns: json_extract(LogAttributes, path) AS group_N
+      for (const [i, groupKey] of groupByKeys.entries()) {
+        const jsonPath = escapeJsonPath(groupKey);
+        query = query.select(
+          kyselySql`json_extract(LogAttributes, ${jsonPath})`.as(
+            `group_${String(i)}`
+          )
+        );
+      }
+
+      // Exact match filters (mirror getLogs)
+      if (filter.traceId) query = query.where("TraceId", "=", filter.traceId);
+      if (filter.spanId) query = query.where("SpanId", "=", filter.spanId);
+      if (filter.serviceName)
+        query = query.where("ServiceName", "=", filter.serviceName);
+      if (filter.scopeName)
+        query = query.where("ScopeName", "=", filter.scopeName);
+      if (filter.severityText)
+        query = query.where("SeverityText", "=", filter.severityText);
+      if (filter.eventName)
+        query = query.where("EventName", "=", filter.eventName);
+
+      // Severity number range
+      if (filter.severityNumberMin != null)
+        query = query.where("SeverityNumber", ">=", filter.severityNumberMin);
+      if (filter.severityNumberMax != null)
+        query = query.where("SeverityNumber", "<=", filter.severityNumberMax);
+
+      // Time range (nanos)
+      if (filter.timestampMin != null)
+        query = query.where("Timestamp", ">=", BigInt(filter.timestampMin));
+      if (filter.timestampMax != null)
+        query = query.where("Timestamp", "<=", BigInt(filter.timestampMax));
+
+      // Body contains
+      if (filter.bodyContains) {
+        query = query.where(
+          kyselySql`INSTR(Body, ${filter.bodyContains})`,
+          ">",
+          0
+        );
+      }
+
+      // Attribute filters (JSON extract)
+      if (filter.logAttributes) {
+        for (const [key, value] of Object.entries(filter.logAttributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(LogAttributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.resourceAttributes) {
+        for (const [key, value] of Object.entries(filter.resourceAttributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(ResourceAttributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+      if (filter.scopeAttributes) {
+        for (const [key, value] of Object.entries(filter.scopeAttributes)) {
+          const jsonPath = escapeJsonPath(key);
+          query = query.where(
+            kyselySql`json_extract(ScopeAttributes, ${jsonPath})`,
+            "=",
+            value
+          );
+        }
+      }
+
+      // GROUP BY
+      for (const [i] of groupByKeys.entries()) {
+        query = query.groupBy(kyselySql.ref(`group_${String(i)}`));
+      }
+
+      // ORDER BY value DESC, LIMIT 1000 (max page size for aggregations)
+      query = query.orderBy(kyselySql`value`, "desc").limit(1000);
+
+      // Execute
+      const { sql, parameters } = query.compile();
+      const stmt = this.sqliteConnection.prepare(sql);
+      stmt.setReadBigInts(true);
+      const rawRows = stmt.all(
+        ...(parameters as (string | number | bigint | null)[])
+      );
+      const rows = rawRows.filter(isRecord);
+
+      const data: denormalizedSignals.AggregatedLogRow[] = rows.map((row) => {
+        const groups: Record<string, string> = {};
+        for (const [i, groupKey] of groupByKeys.entries()) {
+          groups[groupKey] = String(row[`group_${String(i)}`] ?? "");
+        }
+        return { groups, value: Number(row.value) };
+      });
+
+      return { data, nextCursor: null };
+    } catch (error) {
+      if (error instanceof SqliteDatasourceQueryError) throw error;
+      throw new SqliteDatasourceQueryError("Failed to query aggregated logs", {
         cause: error,
       });
     }

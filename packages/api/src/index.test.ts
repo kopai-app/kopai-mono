@@ -17,11 +17,17 @@ describe("apiRoutes", () => {
   let getLogsSpy: ReturnType<
     typeof vi.fn<datasource.ReadLogsDatasource["getLogs"]>
   >;
+  let getAggregatedLogsSpy: ReturnType<
+    typeof vi.fn<datasource.ReadLogsDatasource["getAggregatedLogs"]>
+  >;
   let getMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>
   >;
   let getAggregatedMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["getAggregatedMetrics"]>
+  >;
+  let getMetricsTimeSeriesSpy: ReturnType<
+    typeof vi.fn<datasource.ReadMetricsDatasource["getMetricsTimeSeries"]>
   >;
   let discoverMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>
@@ -39,9 +45,13 @@ describe("apiRoutes", () => {
   beforeEach(async () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     getLogsSpy = vi.fn<datasource.ReadLogsDatasource["getLogs"]>();
+    getAggregatedLogsSpy =
+      vi.fn<datasource.ReadLogsDatasource["getAggregatedLogs"]>();
     getMetricsSpy = vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>();
     getAggregatedMetricsSpy =
       vi.fn<datasource.ReadMetricsDatasource["getAggregatedMetrics"]>();
+    getMetricsTimeSeriesSpy =
+      vi.fn<datasource.ReadMetricsDatasource["getMetricsTimeSeries"]>();
     discoverMetricsSpy =
       vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>();
     getServicesSpy =
@@ -55,8 +65,10 @@ describe("apiRoutes", () => {
       readTelemetryDatasource: {
         getTraces: getTracesSpy,
         getLogs: getLogsSpy,
+        getAggregatedLogs: getAggregatedLogsSpy,
         getMetrics: getMetricsSpy,
         getAggregatedMetrics: getAggregatedMetricsSpy,
+        getMetricsTimeSeries: getMetricsTimeSeriesSpy,
         discoverMetrics: discoverMetricsSpy,
         getServices: getServicesSpy,
         getOperations: getOperationsSpy,

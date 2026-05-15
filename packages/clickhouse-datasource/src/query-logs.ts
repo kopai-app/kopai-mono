@@ -9,14 +9,17 @@ function escapeLikePattern(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
-export function buildLogsQuery(filter: dataFilterSchemas.LogsDataFilter): {
-  query: string;
+/**
+ * Build shared WHERE conditions and params used by both raw and aggregated
+ * log queries. Cursor handling is intentionally excluded (aggregated path
+ * never paginates).
+ */
+function buildLogsWhereConditions(filter: dataFilterSchemas.LogsDataFilter): {
+  conditions: string[];
   params: Record<string, unknown>;
 } {
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
-  const limit = filter.limit ?? 100;
-  const sortOrder = filter.sortOrder === "ASC" ? "ASC" : "DESC";
 
   // Exact match filters
   if (filter.traceId) {
@@ -105,6 +108,18 @@ export function buildLogsQuery(filter: dataFilterSchemas.LogsDataFilter): {
     }
   }
 
+  return { conditions, params };
+}
+
+export function buildLogsQuery(filter: dataFilterSchemas.LogsDataFilter): {
+  query: string;
+  params: Record<string, unknown>;
+} {
+  const limit = filter.limit ?? 100;
+  const sortOrder = filter.sortOrder === "ASC" ? "ASC" : "DESC";
+
+  const { conditions, params } = buildLogsWhereConditions(filter);
+
   // Cursor pagination with sipHash64 tiebreaker
   if (filter.cursor) {
     const colonIdx = filter.cursor.indexOf(":");
@@ -160,6 +175,62 @@ ORDER BY Timestamp ${sortOrder}, _rowHash ${sortOrder}
 LIMIT {limit:UInt32}`;
 
   params.limit = limit + 1;
+
+  return { query, params };
+}
+
+// Server-side cap on aggregated log result rows. Per PRD §Non-Functional
+// Requirements — aggregated queries return up to 1000 groups, no pagination.
+const AGGREGATED_LOGS_LIMIT = 1000;
+
+/**
+ * Build an aggregated logs SQL query for COUNT-by-groupBy reporting.
+ *
+ * Mirrors {@link buildLogsQuery} for the WHERE clause but produces a
+ * GROUP BY aggregation instead of paginated row reads. The aggregate
+ * filter is currently restricted to `"count"` at the schema level.
+ *
+ * Cursor pagination is intentionally not supported here — the
+ * {@link dataFilterSchemas.LogsDataFilter} refinement guarantees that
+ * `cursor` is unset whenever `aggregate` is set.
+ */
+export function buildAggregatedLogsQuery(
+  filter: dataFilterSchemas.LogsDataFilter
+): { query: string; params: Record<string, unknown> } {
+  const { conditions, params } = buildLogsWhereConditions(filter);
+
+  // Build SELECT columns: group-by extractions + COUNT
+  const selectCols: string[] = [];
+  const groupByCols: string[] = [];
+
+  if (filter.groupBy) {
+    for (const [i, groupKey] of filter.groupBy.entries()) {
+      const alias = `group_${String(i)}`;
+      selectCols.push(
+        `LogAttributes[{groupByKey${String(i)}:String}] AS ${alias}`
+      );
+      groupByCols.push(alias);
+      params[`groupByKey${String(i)}`] = groupKey;
+    }
+  }
+
+  // Only "count" is supported for logs (enforced at schema level).
+  selectCols.push("COUNT(*) AS value");
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const groupByClause =
+    groupByCols.length > 0 ? `GROUP BY ${groupByCols.join(", ")}` : "";
+
+  const query = `
+SELECT
+  ${selectCols.join(",\n  ")}
+FROM otel_logs
+${whereClause}
+${groupByClause}
+ORDER BY value DESC
+LIMIT ${String(AGGREGATED_LOGS_LIMIT)}`;
 
   return { query, params };
 }

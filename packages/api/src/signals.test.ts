@@ -17,11 +17,17 @@ describe("signalsRoutes", () => {
   let getLogsSpy: ReturnType<
     typeof vi.fn<datasource.ReadLogsDatasource["getLogs"]>
   >;
+  let getAggregatedLogsSpy: ReturnType<
+    typeof vi.fn<datasource.ReadLogsDatasource["getAggregatedLogs"]>
+  >;
   let getMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>
   >;
   let getAggregatedMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["getAggregatedMetrics"]>
+  >;
+  let getMetricsTimeSeriesSpy: ReturnType<
+    typeof vi.fn<datasource.ReadMetricsDatasource["getMetricsTimeSeries"]>
   >;
   let discoverMetricsSpy: ReturnType<
     typeof vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>
@@ -39,9 +45,13 @@ describe("signalsRoutes", () => {
   beforeEach(async () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
     getLogsSpy = vi.fn<datasource.ReadLogsDatasource["getLogs"]>();
+    getAggregatedLogsSpy =
+      vi.fn<datasource.ReadLogsDatasource["getAggregatedLogs"]>();
     getMetricsSpy = vi.fn<datasource.ReadMetricsDatasource["getMetrics"]>();
     getAggregatedMetricsSpy =
       vi.fn<datasource.ReadMetricsDatasource["getAggregatedMetrics"]>();
+    getMetricsTimeSeriesSpy =
+      vi.fn<datasource.ReadMetricsDatasource["getMetricsTimeSeries"]>();
     discoverMetricsSpy =
       vi.fn<datasource.ReadMetricsDatasource["discoverMetrics"]>();
     getServicesSpy =
@@ -55,8 +65,10 @@ describe("signalsRoutes", () => {
       readTelemetryDatasource: {
         getTraces: getTracesSpy,
         getLogs: getLogsSpy,
+        getAggregatedLogs: getAggregatedLogsSpy,
         getMetrics: getMetricsSpy,
         getAggregatedMetrics: getAggregatedMetricsSpy,
+        getMetricsTimeSeries: getMetricsTimeSeriesSpy,
         discoverMetrics: discoverMetricsSpy,
         getServices: getServicesSpy,
         getOperations: getOperationsSpy,
@@ -263,6 +275,67 @@ describe("signalsRoutes", () => {
       // Datasource must NOT have been called — validation rejects upstream
       expect(getLogsSpy).not.toHaveBeenCalled();
     });
+
+    it("calls getAggregatedLogs when aggregate is set", async () => {
+      const aggregatedResult = {
+        data: [{ groups: { tool_name: "Bash", decision: "accept" }, value: 7 }],
+        nextCursor: null,
+      };
+      getAggregatedLogsSpy.mockResolvedValue(aggregatedResult);
+
+      const filter = {
+        serviceName: "claude-code",
+        aggregate: "count" as const,
+        groupBy: ["tool_name", "decision"],
+      };
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/search",
+        payload: filter,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(aggregatedResult);
+      expect(getAggregatedLogsSpy).toHaveBeenCalled();
+      expect(getLogsSpy).not.toHaveBeenCalled();
+    });
+
+    it("calls getLogs (not getAggregatedLogs) when aggregate is absent", async () => {
+      getLogsSpy.mockResolvedValue({ data: [mockLog], nextCursor: null });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/search",
+        payload: { serviceName: "claude-code" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(getLogsSpy).toHaveBeenCalled();
+      expect(getAggregatedLogsSpy).not.toHaveBeenCalled();
+    });
+
+    it("rejects groupBy without aggregate", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/search",
+        payload: { groupBy: ["tool_name"] },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("rejects cursor with aggregate", async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/search",
+        payload: {
+          aggregate: "count",
+          cursor: "123:456",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe("POST /signals/metrics/search", () => {
@@ -433,6 +506,80 @@ describe("signalsRoutes", () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe("POST /signals/metrics/timeseries", () => {
+    const validBody = {
+      metricType: "Sum" as const,
+      metricName: "claude_code.cost.usage",
+      aggregate: "sum" as const,
+      groupBy: ["model"],
+      timeBucket: "1d" as const,
+    };
+
+    const sampleTimeseriesRow = {
+      groups: { model: "opus" },
+      timeBucketNs: "1705000000000000000",
+      value: 12.5,
+    };
+
+    it("returns timeseries rows and calls getMetricsTimeSeries", async () => {
+      getMetricsTimeSeriesSpy.mockResolvedValue({
+        data: [sampleTimeseriesRow],
+        nextCursor: null,
+      });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/timeseries",
+        payload: validBody,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        data: [sampleTimeseriesRow],
+        nextCursor: null,
+      });
+      expect(getMetricsTimeSeriesSpy).toHaveBeenCalled();
+      expect(getMetricsSpy).not.toHaveBeenCalled();
+      expect(getAggregatedMetricsSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when timeBucket is missing", async () => {
+      const { timeBucket: _timeBucket, ...withoutBucket } = validBody;
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/timeseries",
+        payload: withoutBucket,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(getMetricsTimeSeriesSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when groupBy is missing", async () => {
+      const { groupBy: _groupBy, ...withoutGroupBy } = validBody;
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/timeseries",
+        payload: withoutGroupBy,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(getMetricsTimeSeriesSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when aggregate is missing", async () => {
+      const { aggregate: _aggregate, ...withoutAggregate } = validBody;
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/metrics/timeseries",
+        payload: withoutAggregate,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(getMetricsTimeSeriesSpy).not.toHaveBeenCalled();
     });
   });
 

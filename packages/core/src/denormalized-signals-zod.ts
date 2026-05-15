@@ -430,3 +430,37 @@ export const aggregatedMetricSchema = z.object({
 });
 
 export type AggregatedMetricRow = z.infer<typeof aggregatedMetricSchema>;
+
+// Aggregated log result (returned when aggregate filter is set on logs queries).
+// Mirrors aggregatedMetricSchema shape (value, not count) so UI renderers can
+// consume both via the same code paths.
+export const aggregatedLogSchema = z.object({
+  groups: z
+    .record(z.string(), attributeValue)
+    .describe(
+      "Group-by key/value pairs (e.g. { 'tool_name': 'Bash', 'decision': 'accept' })."
+    ),
+  value: z.number().describe("The aggregated count value."),
+});
+
+export type AggregatedLogRow = z.infer<typeof aggregatedLogSchema>;
+
+// Timeseries metric result (returned when timeBucket filter is set on metrics
+// queries). One row per (group, bucket) combination. timeBucketNs is the start
+// of the bucket as a stringified bigint (nanoseconds since UNIX epoch), matching
+// the TimeUnix convention used elsewhere in this codebase.
+export const timeseriesMetricSchema = z.object({
+  groups: z
+    .record(z.string(), attributeValue)
+    .describe(
+      "Group-by key/value pairs (e.g. { model: 'opus' }). May be empty for total-over-time."
+    ),
+  timeBucketNs: z
+    .string()
+    .describe(
+      "Start of the time bucket. UNIX Epoch time in nanoseconds, expressed as a stringified bigint."
+    ),
+  value: z.number().describe("The aggregated value for the (group, bucket)."),
+});
+
+export type TimeseriesMetricRow = z.infer<typeof timeseriesMetricSchema>;

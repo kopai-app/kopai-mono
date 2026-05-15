@@ -49,6 +49,16 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
     params: dataFilterSchemas.metricsDataFilterSchema,
     refetchIntervalMs: z.number().optional(),
   }),
+  z.object({
+    method: z.literal("searchLogsAggregate"),
+    params: dataFilterSchemas.logsDataFilterSchema,
+    refetchIntervalMs: z.number().optional(),
+  }),
+  z.object({
+    method: z.literal("searchMetricsTimeSeries"),
+    params: dataFilterSchemas.metricsDataFilterSchema,
+    refetchIntervalMs: z.number().optional(),
+  }),
 ]);
 
 export type DataSource = z.infer<typeof dataSourceSchema>;

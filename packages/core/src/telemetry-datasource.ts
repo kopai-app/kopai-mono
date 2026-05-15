@@ -9,7 +9,9 @@ import {
   otelLogsSchema,
   otelMetricsSchema,
   otelTracesSchema,
+  type AggregatedLogRow,
   type AggregatedMetricRow,
+  type TimeseriesMetricRow,
 } from "./denormalized-signals-zod.js";
 import type { MetricsData, TracesData, LogsData } from "./otlp-generated.js";
 export type { MetricsData } from "./otlp-metrics-generated.js";
@@ -65,6 +67,14 @@ export interface ReadLogsDatasource {
     data: z.infer<typeof otelLogsSchema>[];
     nextCursor: string | null;
   }>;
+  getAggregatedLogs(
+    filter: z.infer<typeof logsDataFilterSchema> & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
+    data: AggregatedLogRow[];
+    nextCursor: null;
+  }>;
 }
 
 export type MetricType =
@@ -107,6 +117,14 @@ export interface ReadMetricsDatasource {
     }
   ): Promise<{
     data: AggregatedMetricRow[];
+    nextCursor: null;
+  }>;
+  getMetricsTimeSeries(
+    filter: z.infer<typeof metricsDataFilterSchema> & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
+    data: TimeseriesMetricRow[];
     nextCursor: null;
   }>;
   discoverMetrics(options?: {

@@ -4,6 +4,8 @@ import type {
   OtelLogsRow,
   OtelMetricsRow,
   AggregatedMetricRow,
+  AggregatedLogRow,
+  TimeseriesMetricRow,
   MetricsDiscoveryResult,
   SearchResult,
   ApiErrorResponse,
@@ -65,6 +67,19 @@ export const sampleAggregatedMetric = {
   groups: { signal: "/v1/traces" },
   value: 1024,
 } satisfies AggregatedMetricRow;
+
+// Sample aggregated log
+export const sampleAggregatedLog = {
+  groups: { tool_name: "Bash", decision: "accept" },
+  value: 7,
+} satisfies AggregatedLogRow;
+
+// Sample timeseries metric row
+export const sampleTimeseriesMetric = {
+  groups: { model: "opus" },
+  timeBucketNs: "1705000000000000000",
+  value: 12.5,
+} satisfies TimeseriesMetricRow;
 
 // Sample metrics discovery
 export const sampleDiscovery = {
@@ -186,6 +201,13 @@ export const handlers = [
 
     const body = (await request.clone().json()) as Record<string, unknown>;
 
+    if (body.aggregate) {
+      return HttpResponse.json({
+        data: [sampleAggregatedLog],
+        nextCursor: null,
+      });
+    }
+
     if (body.cursor === "page2") {
       return HttpResponse.json({
         data: [{ ...sampleLog, Body: "Log page 2" }],
@@ -249,6 +271,28 @@ export const handlers = [
       data: [sampleMetric],
       nextCursor: null,
     } satisfies SearchResult<OtelMetricsRow>);
+  }),
+
+  // Metrics timeseries endpoint
+  http.post(`${BASE_URL}/signals/metrics/timeseries`, async (info) => {
+    const { request } = info;
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Unauthorized",
+          code: "UNAUTHORIZED",
+        } satisfies ApiErrorResponse,
+        { status: 401 }
+      );
+    }
+
+    return HttpResponse.json({
+      data: [sampleTimeseriesMetric],
+      nextCursor: null,
+    });
   }),
 
   // Metrics discovery endpoint

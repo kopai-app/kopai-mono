@@ -116,7 +116,10 @@ export const observabilityCatalog = createCatalog({
       }),
       hasChildren: false,
       description: "Time series line chart for Gauge/Sum metrics",
-      acceptsDataFrom: ["searchMetricsPage"] as const,
+      acceptsDataFrom: [
+        "searchMetricsPage",
+        "searchMetricsTimeSeries",
+      ] as const,
     },
 
     MetricHistogram: {
@@ -157,6 +160,52 @@ export const observabilityCatalog = createCatalog({
       description:
         "Table of discovered metric names, types, units and descriptions",
       acceptsDataFrom: ["discoverMetrics"] as const,
+    },
+
+    MetricBarChart: {
+      props: z.object({
+        orientation: z.enum(["horizontal", "vertical"]).nullable(),
+        yAxisLabel: z.string().nullable(),
+        unit: z.string().nullable(),
+        maxBars: z.number().nullable(),
+        logScale: z.boolean().nullable(),
+      }),
+      hasChildren: false,
+      description:
+        "Categorical bar chart comparing aggregate values across groups (e.g. cost by model, tokens by type, tool counts).",
+      acceptsDataFrom: [
+        "searchAggregatedMetrics",
+        "searchLogsAggregate",
+      ] as const,
+    },
+
+    MetricDonutChart: {
+      props: z.object({
+        unit: z.string().nullable(),
+        showLegend: z.boolean().nullable(),
+        showLabels: z.boolean().nullable(),
+        maxSlices: z.number().nullable(),
+      }),
+      hasChildren: false,
+      description:
+        "Donut chart showing proportional distribution across groups (e.g. token type breakdown).",
+      acceptsDataFrom: ["searchAggregatedMetrics"] as const,
+    },
+
+    MetricLeaderboard: {
+      props: z.object({
+        maxRows: z.number().nullable(),
+        unit: z.string().nullable(),
+        showBar: z.boolean().nullable(),
+        label: z.string().nullable(),
+      }),
+      hasChildren: false,
+      description:
+        "Ranked list showing top N groups by aggregate value with inline proportional bars (e.g. top users by cost).",
+      acceptsDataFrom: [
+        "searchAggregatedMetrics",
+        "searchLogsAggregate",
+      ] as const,
     },
   },
 });

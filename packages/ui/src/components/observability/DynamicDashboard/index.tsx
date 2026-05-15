@@ -17,8 +17,11 @@ import {
 } from "../../dashboard/index.js";
 import {
   OtelLogTimeline,
+  OtelMetricBarChart,
   OtelMetricDiscovery,
+  OtelMetricDonutChart,
   OtelMetricHistogram,
+  OtelMetricLeaderboard,
   OtelMetricStat,
   OtelMetricTable,
   OtelMetricTimeSeries,
@@ -41,6 +44,9 @@ const MetricsRenderer = createRendererFromCatalog(observabilityCatalog, {
   MetricStat: OtelMetricStat,
   MetricTable: OtelMetricTable,
   MetricDiscovery: OtelMetricDiscovery,
+  MetricBarChart: OtelMetricBarChart,
+  MetricDonutChart: OtelMetricDonutChart,
+  MetricLeaderboard: OtelMetricLeaderboard,
 });
 
 export { type UITree };

@@ -318,12 +318,19 @@ function MetricStat(props: MetricStatProps) {
 // ---------- MetricTimeSeries ------------------------------------------------
 function MetricTimeSeries(props: RendererProps<"MetricTimeSeries">) {
   if (!props.hasData) return <NoSource name="MetricTimeSeries" />;
-  const rows: OtelMetricsRow[] = props.response?.data ?? [];
+  // `MetricTimeSeries` accepts data from either `searchMetricsPage`
+  // (raw OtelMetricsRow[]) or `searchMetricsTimeSeries` (bucketed
+  // {groups, timeBucketNs, value} rows). Narrow based on dataSource method.
+  const isTimeseries =
+    props.element.dataSource?.method === "searchMetricsTimeSeries";
+  const data = props.response?.data ?? [];
   return (
     <RequestState loading={props.loading} error={props.error}>
       <div style={{ fontSize: 13, color: "#666" }}>
-        {rows.length} points
-        {rows[0]?.MetricName ? ` · ${rows[0].MetricName}` : ""}{" "}
+        {data.length} points
+        {!isTimeseries && (data[0] as OtelMetricsRow | undefined)?.MetricName
+          ? ` · ${(data[0] as OtelMetricsRow).MetricName}`
+          : ""}{" "}
         <em>(render a line chart here)</em>
       </div>
     </RequestState>
@@ -507,8 +514,47 @@ function TraceDetail(props: TraceDetailProps) {
   );
 }
 
+// ---------- MetricBarChart / MetricDonutChart / MetricLeaderboard -----------
+// Minimal stub renderers for aggregate-shaped components. The production-grade
+// implementations live in `packages/ui/src/components/observability/`.
+function MetricBarChart(props: RendererProps<"MetricBarChart">) {
+  if (!props.hasData) return <NoSource name="MetricBarChart" />;
+  const rows = (props.response?.data ?? []) as AggregatedMetricRow[];
+  return (
+    <RequestState loading={props.loading} error={props.error}>
+      <div style={{ fontSize: 13, color: "#666" }}>
+        {rows.length} groups <em>(render a bar chart here)</em>
+      </div>
+    </RequestState>
+  );
+}
+
+function MetricDonutChart(props: RendererProps<"MetricDonutChart">) {
+  if (!props.hasData) return <NoSource name="MetricDonutChart" />;
+  const rows = (props.response?.data ?? []) as AggregatedMetricRow[];
+  return (
+    <RequestState loading={props.loading} error={props.error}>
+      <div style={{ fontSize: 13, color: "#666" }}>
+        {rows.length} slices <em>(render a donut chart here)</em>
+      </div>
+    </RequestState>
+  );
+}
+
+function MetricLeaderboard(props: RendererProps<"MetricLeaderboard">) {
+  if (!props.hasData) return <NoSource name="MetricLeaderboard" />;
+  const rows = (props.response?.data ?? []) as AggregatedMetricRow[];
+  return (
+    <RequestState loading={props.loading} error={props.error}>
+      <div style={{ fontSize: 13, color: "#666" }}>
+        {rows.length} rows <em>(render a leaderboard here)</em>
+      </div>
+    </RequestState>
+  );
+}
+
 // =============================================================================
-// Register all 15 renderers with the catalog. `createRendererFromCatalog`
+// Register all renderers with the catalog. `createRendererFromCatalog`
 // enforces at compile time that the registry matches the catalog shape.
 // =============================================================================
 const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
@@ -527,6 +573,9 @@ const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
   MetricHistogram,
   MetricTable,
   MetricDiscovery,
+  MetricBarChart,
+  MetricDonutChart,
+  MetricLeaderboard,
   LogTimeline,
   TraceDetail,
 });

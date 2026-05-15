@@ -15,8 +15,10 @@ import type { DataSource } from "../lib/component-catalog.js";
 const createMockClient = () => ({
   searchTracesPage: vi.fn(),
   searchLogsPage: vi.fn(),
+  searchLogsAggregate: vi.fn(),
   searchMetricsPage: vi.fn(),
   searchAggregatedMetrics: vi.fn(),
+  searchMetricsTimeSeries: vi.fn(),
   getTrace: vi.fn(),
   discoverMetrics: vi.fn(),
   getDashboard: vi.fn(),
@@ -189,6 +191,93 @@ describe("useKopaiData", () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       );
       expect(mockClient.searchMetricsPage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("searchMetricsTimeSeries", () => {
+    it("calls searchMetricsTimeSeries for searchMetricsTimeSeries method", async () => {
+      const mockData = {
+        data: [
+          {
+            groups: { model: "opus" },
+            timeBucketNs: "1705000000000000000",
+            value: 12.5,
+          },
+        ],
+        nextCursor: null,
+      };
+      mockClient.searchMetricsTimeSeries.mockResolvedValue(mockData);
+
+      const dataSource: DataSource = {
+        method: "searchMetricsTimeSeries",
+        params: {
+          metricType: "Sum",
+          metricName: "claude_code.cost.usage",
+          aggregate: "sum",
+          groupBy: ["model"],
+          timeBucket: "1d",
+        },
+      };
+
+      const { result } = renderHook(() => useKopaiData(dataSource), {
+        wrapper: wrapper(mockClient),
+      });
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(result.current.data).toEqual(mockData);
+      expect(mockClient.searchMetricsTimeSeries).toHaveBeenCalledWith(
+        {
+          metricType: "Sum",
+          metricName: "claude_code.cost.usage",
+          aggregate: "sum",
+          groupBy: ["model"],
+          timeBucket: "1d",
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      expect(mockClient.searchMetricsPage).not.toHaveBeenCalled();
+      expect(mockClient.searchAggregatedMetrics).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("searchLogsAggregate", () => {
+    it("calls searchLogsAggregate for searchLogsAggregate method", async () => {
+      const mockData = {
+        data: [{ groups: { tool_name: "Bash" }, value: 7 }],
+        nextCursor: null,
+      };
+      mockClient.searchLogsAggregate.mockResolvedValue(mockData);
+
+      const dataSource: DataSource = {
+        method: "searchLogsAggregate",
+        params: {
+          serviceName: "claude-code",
+          aggregate: "count",
+          groupBy: ["tool_name"],
+        },
+      };
+
+      const { result } = renderHook(() => useKopaiData(dataSource), {
+        wrapper: wrapper(mockClient),
+      });
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(result.current.data).toEqual(mockData);
+      expect(mockClient.searchLogsAggregate).toHaveBeenCalledWith(
+        {
+          serviceName: "claude-code",
+          aggregate: "count",
+          groupBy: ["tool_name"],
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      expect(mockClient.searchLogsPage).not.toHaveBeenCalled();
     });
   });
 

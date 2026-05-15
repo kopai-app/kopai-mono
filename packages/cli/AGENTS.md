@@ -51,6 +51,17 @@ kopai logs search --severity-text ERROR --json
 kopai logs search --body "exception" --json
 kopai logs search --trace-id abc123 --json
 kopai logs search --log-attr key=value --json
+
+# Aggregate logs by attributes (currently only --aggregate count is supported).
+# --group-by is required. --limit is ignored; the server caps results at 1000
+# groups. Output is one row per group with the group keys plus a `value` column.
+kopai logs search \
+  --service claude-code \
+  --log-attr event.name=tool_decision \
+  --aggregate count \
+  --group-by tool_name \
+  --group-by decision \
+  --json
 ```
 
 ### Metrics
@@ -63,6 +74,27 @@ kopai metrics discover --json
 kopai metrics search --type Gauge --name http_requests_total --json
 kopai metrics search --type Sum --service myapp --json
 kopai metrics search --type Histogram --attr endpoint=/api --json
+
+# Aggregate metrics by attributes (Gauge/Sum only).
+# Requires --group-by. --limit is ignored in this mode.
+kopai metrics search \
+  --type Sum \
+  --name kopai.ingestion.bytes \
+  --aggregate sum \
+  --group-by signal \
+  --json
+
+# Time-bucketed timeseries (Gauge/Sum only).
+# Requires --aggregate AND --group-by. --time-bucket = 1m|5m|1h|1d.
+# Server caps results at 10000 rows; --limit is ignored.
+# Output is one row per (group, bucket) with group keys, timeBucketNs, and value.
+kopai metrics search \
+  --type Sum \
+  --name claude_code.cost.usage \
+  --aggregate sum \
+  --group-by model \
+  --time-bucket 1d \
+  --json
 ```
 
 ## Output Formats
@@ -119,6 +151,8 @@ Flags marked `(repeatable)` can be specified multiple times; all conditions must
 - `--resource-attr key=value` (repeatable)
 - `--scope-attr key=value` (repeatable)
 - `--sort ASC|DESC`
+- `--aggregate count` (only `count` supported for logs; requires `--group-by`)
+- `--group-by <attr>` (repeatable; required with `--aggregate`)
 
 ### Metrics Search
 
@@ -129,6 +163,9 @@ Flags marked `(repeatable)` can be specified multiple times; all conditions must
 - `--resource-attr key=value` (repeatable)
 - `--scope-attr key=value` (repeatable)
 - `--sort ASC|DESC`
+- `--aggregate sum|avg|min|max|count` (Gauge/Sum only; requires `--group-by`)
+- `--group-by <attr>` (repeatable; required with `--aggregate`)
+- `--time-bucket 1m|5m|1h|1d` (Gauge/Sum only; requires `--aggregate` AND `--group-by`; `--limit` ignored)
 
 ## Available Fields (--fields)
 

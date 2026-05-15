@@ -17,10 +17,11 @@ import {
   buildOperationsQuery,
   buildTraceSummariesQuery,
 } from "./query-traces.js";
-import { buildLogsQuery } from "./query-logs.js";
+import { buildLogsQuery, buildAggregatedLogsQuery } from "./query-logs.js";
 import {
   buildMetricsQuery,
   buildAggregatedMetricsQuery,
+  buildMetricsTimeSeriesQuery,
   buildDiscoverMetricsFromMV,
 } from "./query-metrics.js";
 import {
@@ -254,6 +255,77 @@ export class ClickHouseReadDatasource
     return { data, nextCursor };
   }
 
+  async getAggregatedLogs(
+    filter: dataFilterSchemas.LogsDataFilter & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
+    data: denormalizedSignals.AggregatedLogRow[];
+    nextCursor: null;
+  }> {
+    assertClickHouseRequestContext(filter.requestContext);
+    const { database, username } = filter.requestContext;
+    const log = getLogger(filter.requestContext);
+    const start = performance.now();
+
+    let chNode: string | undefined;
+    try {
+      const { query, params } = buildAggregatedLogsQuery(filter);
+
+      const resultSet = await this.clientQuery(
+        filter.requestContext,
+        query,
+        params
+      );
+      chNode = getChNode(resultSet);
+
+      const groupByKeys = filter.groupBy ?? [];
+      const data: denormalizedSignals.AggregatedLogRow[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json();
+          if (!isRecord(json)) continue;
+          const groups: Record<string, string> = {};
+          for (let i = 0; i < groupByKeys.length; i++) {
+            const key = groupByKeys[i];
+            if (key !== undefined) {
+              groups[key] = String(json[`group_${String(i)}`] ?? "");
+            }
+          }
+          data.push({ groups, value: Number(json.value) });
+        }
+      }
+
+      const durationMs = Math.round(performance.now() - start);
+      log.info(
+        {
+          database,
+          username,
+          method: "getAggregatedLogs",
+          durationMs,
+          rowCount: data.length,
+          chNode,
+        },
+        "query complete"
+      );
+      return { data, nextCursor: null };
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        {
+          database,
+          username,
+          method: "getAggregatedLogs",
+          durationMs,
+          chNode,
+          err,
+        },
+        "query failed"
+      );
+      throw err;
+    }
+  }
+
   async getMetrics(
     filter: dataFilterSchemas.MetricsDataFilter & {
       requestContext?: unknown;
@@ -388,6 +460,81 @@ export class ClickHouseReadDatasource
           database,
           username,
           method: "getAggregatedMetrics",
+          durationMs,
+          chNode,
+          err,
+        },
+        "query failed"
+      );
+      throw err;
+    }
+  }
+
+  async getMetricsTimeSeries(
+    filter: dataFilterSchemas.MetricsDataFilter & {
+      requestContext?: unknown;
+    }
+  ): Promise<{
+    data: denormalizedSignals.TimeseriesMetricRow[];
+    nextCursor: null;
+  }> {
+    assertClickHouseRequestContext(filter.requestContext);
+    const { database, username } = filter.requestContext;
+    const log = getLogger(filter.requestContext);
+    const start = performance.now();
+
+    let chNode: string | undefined;
+    try {
+      const { query, params } = buildMetricsTimeSeriesQuery(filter);
+
+      const resultSet = await this.clientQuery(
+        filter.requestContext,
+        query,
+        params
+      );
+      chNode = getChNode(resultSet);
+
+      const groupByKeys = filter.groupBy ?? [];
+      const data: denormalizedSignals.TimeseriesMetricRow[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json();
+          if (!isRecord(json)) continue;
+          const groups: Record<string, string> = {};
+          for (let i = 0; i < groupByKeys.length; i++) {
+            const key = groupByKeys[i];
+            if (key !== undefined) {
+              groups[key] = String(json[`group_${String(i)}`] ?? "");
+            }
+          }
+          data.push({
+            groups,
+            timeBucketNs: String(json.timeBucketNs),
+            value: Number(json.value),
+          });
+        }
+      }
+
+      const durationMs = Math.round(performance.now() - start);
+      log.info(
+        {
+          database,
+          username,
+          method: "getMetricsTimeSeries",
+          durationMs,
+          rowCount: data.length,
+          chNode,
+        },
+        "query complete"
+      );
+      return { data, nextCursor: null };
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        {
+          database,
+          username,
+          method: "getMetricsTimeSeries",
           durationMs,
           chNode,
           err,

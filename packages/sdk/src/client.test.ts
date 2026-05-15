@@ -24,6 +24,8 @@ import {
   sampleLog,
   sampleMetric,
   sampleAggregatedMetric,
+  sampleAggregatedLog,
+  sampleTimeseriesMetric,
   sampleDiscovery,
   sampleDashboard,
 } from "./mocks/handlers.js";
@@ -188,6 +190,150 @@ describe("KopaiClient", () => {
         client.searchAggregatedMetrics({
           metricType: "Histogram",
           aggregate: "sum",
+        })
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("searchMetricsTimeSeries", () => {
+    it("returns timeseries rows", async () => {
+      const result = await client.searchMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toEqual(sampleTimeseriesMetric);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("posts to /signals/metrics/timeseries with body", async () => {
+      let capturedBody: unknown = null;
+      let capturedUrl: string | null = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/metrics/timeseries`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({
+              data: [sampleTimeseriesMetric],
+              nextCursor: null,
+            });
+          }
+        )
+      );
+
+      await client.searchMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+      });
+
+      expect(capturedUrl).toContain("/signals/metrics/timeseries");
+      expect(capturedBody).toMatchObject({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+      });
+    });
+
+    it("rejects timeBucket without aggregate", async () => {
+      await expect(
+        // @ts-expect-error testing runtime validation of invalid input
+        client.searchMetricsTimeSeries({
+          metricType: "Sum",
+          groupBy: ["model"],
+          timeBucket: "1d",
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects timeBucket without groupBy", async () => {
+      await expect(
+        // @ts-expect-error testing runtime validation of invalid input
+        client.searchMetricsTimeSeries({
+          metricType: "Sum",
+          aggregate: "sum",
+          timeBucket: "1d",
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects cursor with timeBucket", async () => {
+      await expect(
+        client.searchMetricsTimeSeries({
+          metricType: "Sum",
+          aggregate: "sum",
+          groupBy: ["model"],
+          timeBucket: "1d",
+          cursor: "abc",
+        })
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("searchLogsAggregate", () => {
+    it("returns aggregated log rows", async () => {
+      const result = await client.searchLogsAggregate({
+        serviceName: "claude-code",
+        aggregate: "count",
+        groupBy: ["tool_name", "decision"],
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toEqual(sampleAggregatedLog);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("posts to /signals/logs/search with aggregate body", async () => {
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(`${BASE_URL}/signals/logs/search`, async ({ request }) => {
+          capturedBody = await request.clone().json();
+          return HttpResponse.json({
+            data: [sampleAggregatedLog],
+            nextCursor: null,
+          });
+        })
+      );
+
+      await client.searchLogsAggregate({
+        serviceName: "claude-code",
+        aggregate: "count",
+        groupBy: ["tool_name"],
+      });
+
+      expect(capturedBody).toMatchObject({
+        serviceName: "claude-code",
+        aggregate: "count",
+        groupBy: ["tool_name"],
+      });
+    });
+
+    it("rejects groupBy without aggregate", async () => {
+      await expect(
+        // @ts-expect-error testing runtime validation of invalid input
+        client.searchLogsAggregate({
+          serviceName: "claude-code",
+          groupBy: ["tool_name"],
+        })
+      ).rejects.toThrow();
+    });
+
+    it("rejects cursor with aggregate", async () => {
+      await expect(
+        client.searchLogsAggregate({
+          aggregate: "count",
+          groupBy: ["tool_name"],
+          cursor: "abc",
         })
       ).rejects.toThrow();
     });

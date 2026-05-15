@@ -115,7 +115,7 @@ export const tracesDataFilterSchema = z.object({
 
 export type TracesDataFilter = z.infer<typeof tracesDataFilterSchema>;
 
-export const logsDataFilterSchema = z.object({
+const logsDataFilterBaseSchema = z.object({
   // Exact match filters
   traceId: z
     .string()
@@ -194,6 +194,18 @@ export const logsDataFilterSchema = z.object({
     .optional()
     .describe("Attributes of the instrumentation scope."),
 
+  // Aggregation
+  aggregate: z
+    .literal("count")
+    .optional()
+    .describe("Aggregation function. Only 'count' supported for logs."),
+  groupBy: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Attribute keys to group by. Requires aggregate. Looks up keys in LogAttributes first."
+    ),
+
   // Pagination
   limit: z
     .number()
@@ -212,7 +224,20 @@ export const logsDataFilterSchema = z.object({
     .describe("Sort by timestamp. ASC = oldest first, DESC = newest first."),
 });
 
-export type LogsDataFilter = z.infer<typeof logsDataFilterSchema>;
+export const logsDataFilterSchema = logsDataFilterBaseSchema
+  .refine((data) => !(data.groupBy && !data.aggregate), {
+    message: "groupBy requires aggregate to be set",
+    path: ["groupBy"],
+  })
+  .refine((data) => !(data.aggregate && data.cursor), {
+    message: "cursor is incompatible with aggregate",
+    path: ["cursor"],
+  });
+
+// Inferred from base schema (not refined) so downstream code sees aggregate/groupBy fields.
+// Runtime validation (groupBy requires aggregate, cursor incompatible with aggregate)
+// is enforced by logsDataFilterSchema's .refine() calls.
+export type LogsDataFilter = z.infer<typeof logsDataFilterBaseSchema>;
 
 const metricsDataFilterBaseSchema = z.object({
   metricType: z
@@ -269,6 +294,12 @@ const metricsDataFilterBaseSchema = z.object({
     .describe(
       "Attribute keys to group by when aggregating (e.g. ['tenant.id', 'signal'])."
     ),
+  timeBucket: z
+    .enum(["1m", "5m", "1h", "1d"])
+    .optional()
+    .describe(
+      "Time-bucket interval for timeseries grouping. Requires aggregate and groupBy."
+    ),
 
   // Pagination
   limit: z
@@ -306,7 +337,23 @@ export const metricsDataFilterSchema = metricsDataFilterBaseSchema
       message: "aggregate is only supported for Gauge and Sum metric types",
       path: ["aggregate"],
     }
-  );
+  )
+  .refine((data) => !(data.timeBucket && !data.aggregate), {
+    message: "timeBucket requires aggregate to be set",
+    path: ["timeBucket"],
+  })
+  .refine(
+    (data) =>
+      !(data.timeBucket && (!data.groupBy || data.groupBy.length === 0)),
+    {
+      message: "timeBucket requires groupBy to be a non-empty array",
+      path: ["timeBucket"],
+    }
+  )
+  .refine((data) => !(data.timeBucket && data.cursor), {
+    message: "cursor is incompatible with timeBucket",
+    path: ["cursor"],
+  });
 
 // Inferred from base schema (not refined) so downstream code sees aggregate/groupBy fields.
 // Runtime validation (groupBy requires aggregate, cursor incompatible with aggregate)

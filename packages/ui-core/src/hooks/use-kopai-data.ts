@@ -25,6 +25,11 @@ function fetchForDataSource(
         dataSource.params as Parameters<typeof client.searchLogsPage>[0],
         { signal }
       );
+    case "searchLogsAggregate":
+      return client.searchLogsAggregate(
+        dataSource.params as Parameters<typeof client.searchLogsAggregate>[0],
+        { signal }
+      );
     case "searchMetricsPage":
       return client.searchMetricsPage(
         dataSource.params as Parameters<typeof client.searchMetricsPage>[0],
@@ -34,6 +39,13 @@ function fetchForDataSource(
       return client.searchAggregatedMetrics(
         dataSource.params as Parameters<
           typeof client.searchAggregatedMetrics
+        >[0],
+        { signal }
+      );
+    case "searchMetricsTimeSeries":
+      return client.searchMetricsTimeSeries(
+        dataSource.params as Parameters<
+          typeof client.searchMetricsTimeSeries
         >[0],
         { signal }
       );
