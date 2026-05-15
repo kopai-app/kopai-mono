@@ -17,8 +17,13 @@ vi.mock("../client.js", async (importOriginal) => {
 
 import { createLogsCommand } from "./logs.js";
 
-function runCommand(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
+interface RunResult {
+  output: string;
+  error?: unknown;
+}
+
+function runCommand(args: string[]): Promise<RunResult> {
+  return new Promise((resolve) => {
     const logs: string[] = [];
     vi.spyOn(console, "log").mockImplementation((...a: unknown[]) =>
       logs.push(a.join(" "))
@@ -35,8 +40,8 @@ function runCommand(args: string[]): Promise<string> {
     program.addCommand(createLogsCommand());
 
     program.parseAsync(["node", "test", "logs", ...args]).then(
-      () => resolve(logs.join("\n")),
-      (err) => reject(err)
+      () => resolve({ output: logs.join("\n") }),
+      (err) => resolve({ output: logs.join("\n"), error: err })
     );
   });
 }
@@ -90,18 +95,33 @@ describe("logs search aggregate", () => {
   });
 
   it("rejects --aggregate without --group-by", async () => {
-    let caught: unknown;
-    try {
-      await runCommand(["search", "--aggregate", "count", "--json"]);
-    } catch (err) {
-      caught = err;
-    }
-    // Either commander throws or the command exits non-zero; in both
-    // cases searchLogsAggregate must NOT have been invoked.
+    const result = await runCommand([
+      "search",
+      "--aggregate",
+      "count",
+      "--json",
+    ]);
+
     expect(searchLogsAggregateMock).not.toHaveBeenCalled();
-    // Smoke check that we surfaced an error path
-    expect(
-      caught !== undefined || searchLogsAggregateMock.mock.calls.length === 0
-    ).toBe(true);
+    expect(result.error).toBeDefined();
+    expect(result.output).toContain(
+      "--aggregate requires at least one --group-by"
+    );
+  });
+
+  it("rejects --group-by without --aggregate", async () => {
+    const result = await runCommand([
+      "search",
+      "--service",
+      "claude-code",
+      "--group-by",
+      "tool_name",
+      "--json",
+    ]);
+
+    expect(searchLogsPageMock).not.toHaveBeenCalled();
+    expect(searchLogsAggregateMock).not.toHaveBeenCalled();
+    expect(result.error).toBeDefined();
+    expect(result.output).toContain("--group-by requires --aggregate");
   });
 });

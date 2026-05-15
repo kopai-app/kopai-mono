@@ -41,6 +41,19 @@ describe("logsDataFilterSchema", () => {
     }
   });
 
+  it("rejects empty groupBy with aggregate", () => {
+    const result = logsDataFilterSchema.safeParse({
+      serviceName: "claude-code",
+      aggregate: "count",
+      groupBy: [],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const flat = JSON.stringify(result.error.issues);
+      expect(flat).toMatch(/non-empty/);
+    }
+  });
+
   it("rejects aggregate + cursor combination", () => {
     const result = logsDataFilterSchema.safeParse({
       serviceName: "claude-code",
@@ -131,6 +144,35 @@ describe("metricsDataFilterSchema timeBucket refinements", () => {
       timeBucket: "30s",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("rejects empty groupBy with aggregate (no timeBucket)", () => {
+    const result = metricsDataFilterSchema.safeParse({
+      metricType: "Sum",
+      metricName: "x",
+      aggregate: "sum",
+      groupBy: [],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const flat = JSON.stringify(result.error.issues);
+      expect(flat).toMatch(/non-empty/);
+    }
+  });
+
+  it("rejects empty groupBy with aggregate + timeBucket", () => {
+    const result = metricsDataFilterSchema.safeParse({
+      metricType: "Sum",
+      metricName: "x",
+      aggregate: "sum",
+      groupBy: [],
+      timeBucket: "1d",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const flat = JSON.stringify(result.error.issues);
+      expect(flat).toMatch(/non-empty/);
+    }
   });
 
   it("rejects timeBucket + cursor combination", () => {

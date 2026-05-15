@@ -276,44 +276,6 @@ describe("signalsRoutes", () => {
       expect(getLogsSpy).not.toHaveBeenCalled();
     });
 
-    it("calls getAggregatedLogs when aggregate is set", async () => {
-      const aggregatedResult = {
-        data: [{ groups: { tool_name: "Bash", decision: "accept" }, value: 7 }],
-        nextCursor: null,
-      };
-      getAggregatedLogsSpy.mockResolvedValue(aggregatedResult);
-
-      const filter = {
-        serviceName: "claude-code",
-        aggregate: "count" as const,
-        groupBy: ["tool_name", "decision"],
-      };
-      const response = await server.inject({
-        method: "POST",
-        url: "/signals/logs/search",
-        payload: filter,
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual(aggregatedResult);
-      expect(getAggregatedLogsSpy).toHaveBeenCalled();
-      expect(getLogsSpy).not.toHaveBeenCalled();
-    });
-
-    it("calls getLogs (not getAggregatedLogs) when aggregate is absent", async () => {
-      getLogsSpy.mockResolvedValue({ data: [mockLog], nextCursor: null });
-
-      const response = await server.inject({
-        method: "POST",
-        url: "/signals/logs/search",
-        payload: { serviceName: "claude-code" },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(getLogsSpy).toHaveBeenCalled();
-      expect(getAggregatedLogsSpy).not.toHaveBeenCalled();
-    });
-
     it("rejects groupBy without aggregate", async () => {
       const response = await server.inject({
         method: "POST",
@@ -323,18 +285,77 @@ describe("signalsRoutes", () => {
 
       expect(response.statusCode).toBe(400);
     });
+  });
+
+  describe("POST /signals/logs/aggregate", () => {
+    const validBody = {
+      serviceName: "claude-code",
+      aggregate: "count" as const,
+      groupBy: ["tool_name", "decision"],
+    };
+
+    const sampleAggregatedRow = {
+      groups: { tool_name: "Bash", decision: "accept" },
+      value: 7,
+    };
+
+    it("returns aggregated rows and calls getAggregatedLogs", async () => {
+      getAggregatedLogsSpy.mockResolvedValue({
+        data: [sampleAggregatedRow],
+        nextCursor: null,
+      });
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/aggregate",
+        payload: validBody,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        data: [sampleAggregatedRow],
+        nextCursor: null,
+      });
+      expect(getAggregatedLogsSpy).toHaveBeenCalled();
+      expect(getLogsSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when aggregate is missing", async () => {
+      const { aggregate: _aggregate, ...withoutAggregate } = validBody;
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/aggregate",
+        payload: withoutAggregate,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(getAggregatedLogsSpy).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when groupBy is missing", async () => {
+      const { groupBy: _groupBy, ...withoutGroupBy } = validBody;
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/logs/aggregate",
+        payload: withoutGroupBy,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(getAggregatedLogsSpy).not.toHaveBeenCalled();
+    });
 
     it("rejects cursor with aggregate", async () => {
       const response = await server.inject({
         method: "POST",
-        url: "/signals/logs/search",
+        url: "/signals/logs/aggregate",
         payload: {
-          aggregate: "count",
+          ...validBody,
           cursor: "123:456",
         },
       });
 
       expect(response.statusCode).toBe(400);
+      expect(getAggregatedLogsSpy).not.toHaveBeenCalled();
     });
   });
 

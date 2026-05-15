@@ -387,9 +387,13 @@ export function buildMetricsTimeSeriesQuery(
   // `toStartOfInterval(DateTime64, INTERVAL X)` returns plain `DateTime` (no
   // sub-second precision), so we convert via `toUnixTimestamp(...) * 1e9` to
   // nanoseconds. Buckets are at most minute-resolution, so dropping sub-
-  // second precision here is lossless.
+  // second precision here is lossless. The explicit `toInt64()` cast is for
+  // self-documentation: ClickHouse already auto-promotes the UInt32 result
+  // of `toUnixTimestamp()` to UInt64 during the multiplication, but the
+  // cast makes the resulting type unambiguous for future readers and
+  // guards against accidental overflow if upstream types change.
   selectCols.push(
-    `toUnixTimestamp(toStartOfInterval(TimeUnix, ${interval})) * 1000000000 AS timeBucketNs`
+    `toInt64(toUnixTimestamp(toStartOfInterval(TimeUnix, ${interval}))) * 1000000000 AS timeBucketNs`
   );
   groupByCols.push("timeBucketNs");
 

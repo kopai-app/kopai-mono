@@ -229,6 +229,18 @@ export const logsDataFilterSchema = logsDataFilterBaseSchema
     message: "groupBy requires aggregate to be set",
     path: ["groupBy"],
   })
+  .refine(
+    (data) =>
+      !(
+        data.aggregate !== undefined &&
+        data.groupBy !== undefined &&
+        data.groupBy.length === 0
+      ),
+    {
+      message: "groupBy must be non-empty when set",
+      path: ["groupBy"],
+    }
+  )
   .refine((data) => !(data.aggregate && data.cursor), {
     message: "cursor is incompatible with aggregate",
     path: ["cursor"],
@@ -324,6 +336,18 @@ export const metricsDataFilterSchema = metricsDataFilterBaseSchema
     message: "groupBy requires aggregate to be set",
     path: ["groupBy"],
   })
+  .refine(
+    (data) =>
+      !(
+        data.aggregate !== undefined &&
+        data.groupBy !== undefined &&
+        data.groupBy.length === 0
+      ),
+    {
+      message: "groupBy must be non-empty when set",
+      path: ["groupBy"],
+    }
+  )
   .refine((data) => !(data.aggregate && data.cursor), {
     message: "cursor is incompatible with aggregate",
     path: ["cursor"],

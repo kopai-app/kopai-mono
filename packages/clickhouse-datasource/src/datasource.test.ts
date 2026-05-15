@@ -1987,7 +1987,12 @@ describe("ClickHouseReadDatasource", () => {
           (r) => r.timeBucketNs === ts && r.groups.model === model
         );
 
-      expect(findRow(DAY_1_NS, "opus")?.value).toBe(4);
+      // Explicit timeBucketNs assertions for 2024+ timestamps. Validates
+      // that `toInt64(toUnixTimestamp(...)) * 1e9` round-trips ≥
+      // 1.7e18-nanosecond values without UInt32 overflow.
+      const day1Opus = findRow(DAY_1_NS, "opus");
+      expect(day1Opus?.timeBucketNs).toBe(DAY_1_NS);
+      expect(day1Opus?.value).toBe(4);
       expect(findRow(DAY_1_NS, "sonnet")?.value).toBe(2);
       expect(findRow(DAY_2_NS, "opus")?.value).toBe(10);
       expect(findRow(DAY_2_NS, "sonnet")?.value).toBe(50);

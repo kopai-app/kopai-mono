@@ -19,8 +19,13 @@ vi.mock("../client.js", async (importOriginal) => {
 
 import { createMetricsCommand } from "./metrics.js";
 
-function runCommand(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
+interface RunResult {
+  output: string;
+  error?: unknown;
+}
+
+function runCommand(args: string[]): Promise<RunResult> {
+  return new Promise((resolve) => {
     const logs: string[] = [];
     vi.spyOn(console, "log").mockImplementation((...a: unknown[]) =>
       logs.push(a.join(" "))
@@ -37,8 +42,8 @@ function runCommand(args: string[]): Promise<string> {
     program.addCommand(createMetricsCommand());
 
     program.parseAsync(["node", "test", "metrics", ...args]).then(
-      () => resolve(logs.join("\n")),
-      (err) => reject(err)
+      () => resolve({ output: logs.join("\n") }),
+      (err) => resolve({ output: logs.join("\n"), error: err })
     );
   });
 }
@@ -126,73 +131,74 @@ describe("metrics search timeseries", () => {
   });
 
   it("rejects --time-bucket without --aggregate", async () => {
-    let caught: unknown;
-    try {
-      await runCommand([
-        "search",
-        "--type",
-        "Sum",
-        "--group-by",
-        "model",
-        "--time-bucket",
-        "1d",
-        "--json",
-      ]);
-    } catch (err) {
-      caught = err;
-    }
+    const result = await runCommand([
+      "search",
+      "--type",
+      "Sum",
+      "--group-by",
+      "model",
+      "--time-bucket",
+      "1d",
+      "--json",
+    ]);
+
     expect(searchMetricsTimeSeriesMock).not.toHaveBeenCalled();
-    expect(
-      caught !== undefined ||
-        searchMetricsTimeSeriesMock.mock.calls.length === 0
-    ).toBe(true);
+    expect(result.error).toBeDefined();
+    expect(result.output).toContain("--time-bucket requires --aggregate");
   });
 
   it("rejects --time-bucket without --group-by", async () => {
-    let caught: unknown;
-    try {
-      await runCommand([
-        "search",
-        "--type",
-        "Sum",
-        "--aggregate",
-        "sum",
-        "--time-bucket",
-        "1d",
-        "--json",
-      ]);
-    } catch (err) {
-      caught = err;
-    }
+    const result = await runCommand([
+      "search",
+      "--type",
+      "Sum",
+      "--aggregate",
+      "sum",
+      "--time-bucket",
+      "1d",
+      "--json",
+    ]);
+
     expect(searchMetricsTimeSeriesMock).not.toHaveBeenCalled();
-    expect(
-      caught !== undefined ||
-        searchMetricsTimeSeriesMock.mock.calls.length === 0
-    ).toBe(true);
+    expect(result.error).toBeDefined();
+    expect(result.output).toContain(
+      "--time-bucket requires at least one --group-by"
+    );
   });
 
   it("rejects invalid --time-bucket value", async () => {
-    let caught: unknown;
-    try {
-      await runCommand([
-        "search",
-        "--type",
-        "Sum",
-        "--aggregate",
-        "sum",
-        "--group-by",
-        "model",
-        "--time-bucket",
-        "10s",
-        "--json",
-      ]);
-    } catch (err) {
-      caught = err;
-    }
+    const result = await runCommand([
+      "search",
+      "--type",
+      "Sum",
+      "--aggregate",
+      "sum",
+      "--group-by",
+      "model",
+      "--time-bucket",
+      "10s",
+      "--json",
+    ]);
+
     expect(searchMetricsTimeSeriesMock).not.toHaveBeenCalled();
-    expect(
-      caught !== undefined ||
-        searchMetricsTimeSeriesMock.mock.calls.length === 0
-    ).toBe(true);
+    expect(result.error).toBeDefined();
+    expect(result.output).toContain("Invalid time bucket");
+  });
+
+  it("rejects --group-by without --aggregate", async () => {
+    const result = await runCommand([
+      "search",
+      "--type",
+      "Sum",
+      "--group-by",
+      "model",
+      "--json",
+    ]);
+
+    expect(searchMetricsPageMock).not.toHaveBeenCalled();
+    expect(searchAggregatedMetricsMock).not.toHaveBeenCalled();
+    expect(searchMetricsTimeSeriesMock).not.toHaveBeenCalled();
+    expect(result.error).toBeDefined();
+    expect(result.output).toContain("--group-by requires --aggregate");
   });
 });

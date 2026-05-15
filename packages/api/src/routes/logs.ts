@@ -20,6 +20,16 @@ export const logsRoutes: FastifyPluginAsyncZod<{
     nextCursor: z.null(),
   });
 
+  const aggregateBodySchema = dataFilterSchemas.logsDataFilterSchema
+    .refine((d) => d.aggregate !== undefined, {
+      message: "aggregate is required for /aggregate endpoint",
+      path: ["aggregate"],
+    })
+    .refine((d) => d.groupBy !== undefined && d.groupBy.length > 0, {
+      message: "groupBy is required for /aggregate endpoint",
+      path: ["groupBy"],
+    });
+
   fastify.route({
     method: "POST",
     url: "/signals/logs/search",
@@ -27,16 +37,38 @@ export const logsRoutes: FastifyPluginAsyncZod<{
       description: "Search logs matching a filter",
       body: dataFilterSchemas.logsDataFilterSchema,
       response: {
-        200: z.union([searchResponseSchema, aggregatedResponseSchema]),
+        200: searchResponseSchema,
         "4xx": problemDetailsSchema,
         "5xx": problemDetailsSchema,
       },
     },
     handler: async (req, res) => {
-      const params = { ...req.body, requestContext: req.requestContext };
-      const result = req.body.aggregate
-        ? await opts.readLogsDatasource.getAggregatedLogs(params)
-        : await opts.readLogsDatasource.getLogs(params);
+      const result = await opts.readLogsDatasource.getLogs({
+        ...req.body,
+        requestContext: req.requestContext,
+      });
+      res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "POST",
+    url: "/signals/logs/aggregate",
+    schema: {
+      description:
+        "Aggregate logs matching a filter (requires aggregate + groupBy)",
+      body: aggregateBodySchema,
+      response: {
+        200: aggregatedResponseSchema,
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async (req, res) => {
+      const result = await opts.readLogsDatasource.getAggregatedLogs({
+        ...req.body,
+        requestContext: req.requestContext,
+      });
       res.send(result);
     },
   });

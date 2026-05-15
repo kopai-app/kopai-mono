@@ -95,6 +95,9 @@ export function createLogsCommand(): Command {
           "--aggregate requires at least one --group-by"
         );
       }
+      if (groupBy && !aggregate) {
+        throw new InvalidArgumentError("--group-by requires --aggregate");
+      }
 
       const filter = {
         traceId: opts.traceId,

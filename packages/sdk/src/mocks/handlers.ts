@@ -183,7 +183,7 @@ export const handlers = [
     } satisfies SearchResult<OtelTracesRow>);
   }),
 
-  // Logs endpoint
+  // Logs search endpoint (paginated)
   http.post(`${BASE_URL}/signals/logs/search`, async (info) => {
     const { request } = info;
 
@@ -200,13 +200,6 @@ export const handlers = [
     }
 
     const body = (await request.clone().json()) as Record<string, unknown>;
-
-    if (body.aggregate) {
-      return HttpResponse.json({
-        data: [sampleAggregatedLog],
-        nextCursor: null,
-      });
-    }
 
     if (body.cursor === "page2") {
       return HttpResponse.json({
@@ -226,6 +219,28 @@ export const handlers = [
       data: [sampleLog],
       nextCursor: null,
     } satisfies SearchResult<OtelLogsRow>);
+  }),
+
+  // Logs aggregate endpoint
+  http.post(`${BASE_URL}/signals/logs/aggregate`, async (info) => {
+    const { request } = info;
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader) {
+      return HttpResponse.json(
+        {
+          type: "about:blank",
+          title: "Unauthorized",
+          code: "UNAUTHORIZED",
+        } satisfies ApiErrorResponse,
+        { status: 401 }
+      );
+    }
+
+    return HttpResponse.json({
+      data: [sampleAggregatedLog] satisfies AggregatedLogRow[],
+      nextCursor: null,
+    });
   }),
 
   // Metrics endpoint
@@ -290,7 +305,7 @@ export const handlers = [
     }
 
     return HttpResponse.json({
-      data: [sampleTimeseriesMetric],
+      data: [sampleTimeseriesMetric] satisfies TimeseriesMetricRow[],
       nextCursor: null,
     });
   }),

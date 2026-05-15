@@ -224,6 +224,8 @@ export class KopaiClient {
    * Search aggregated logs (requires aggregate + groupBy in filter).
    * Returns grouped count values instead of raw log rows.
    *
+   * Posts to the dedicated `/signals/logs/aggregate` endpoint.
+   *
    * Note: the server enforces a hard cap of 1000 result groups; pagination
    * is not supported for aggregated queries (nextCursor is always null).
    */
@@ -238,7 +240,7 @@ export class KopaiClient {
       dataFilterSchemas.logsDataFilterSchema.parse(filter);
 
     return request(
-      `${this.baseUrl}/signals/logs/search`,
+      `${this.baseUrl}/signals/logs/aggregate`,
       aggregatedLogsResponseSchema,
       {
         method: "POST",

@@ -293,10 +293,12 @@ describe("KopaiClient", () => {
       expect(result.nextCursor).toBeNull();
     });
 
-    it("posts to /signals/logs/search with aggregate body", async () => {
+    it("posts to /signals/logs/aggregate with body", async () => {
       let capturedBody: unknown = null;
+      let capturedUrl: string | null = null;
       server.use(
-        http.post(`${BASE_URL}/signals/logs/search`, async ({ request }) => {
+        http.post(`${BASE_URL}/signals/logs/aggregate`, async ({ request }) => {
+          capturedUrl = request.url;
           capturedBody = await request.clone().json();
           return HttpResponse.json({
             data: [sampleAggregatedLog],
@@ -311,6 +313,7 @@ describe("KopaiClient", () => {
         groupBy: ["tool_name"],
       });
 
+      expect(capturedUrl).toContain("/signals/logs/aggregate");
       expect(capturedBody).toMatchObject({
         serviceName: "claude-code",
         aggregate: "count",

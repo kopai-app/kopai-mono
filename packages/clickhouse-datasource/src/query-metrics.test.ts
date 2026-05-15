@@ -150,7 +150,9 @@ describe("buildMetricsTimeSeriesQuery", () => {
     expect(query).toContain("Attributes[{groupByKey0:String}] AS group_0");
     expect(query).toContain("INTERVAL 1 DAY");
     expect(query).toContain("AS timeBucketNs");
-    expect(query).toContain("toStartOfInterval(TimeUnix, INTERVAL 1 DAY)");
+    expect(query).toContain(
+      "toInt64(toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 1 DAY))) * 1000000000 AS timeBucketNs"
+    );
     expect(query).toContain("GROUP BY group_0, timeBucketNs");
     expect(query).toContain("ORDER BY timeBucketNs ASC");
     expect(query).toContain("AggregationTemporality = 1");
