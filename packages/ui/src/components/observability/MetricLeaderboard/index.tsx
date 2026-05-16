@@ -37,14 +37,11 @@ function coerceGroupLabel(groups: Record<string, unknown>): string {
   const values = Object.values(groups);
   if (values.length === 0) return "(no value)";
   const parts = values.map((v) => {
-    if (v === null || v === undefined) return "";
-    return String(v);
+    if (v === null || v === undefined) return "(no value)";
+    const s = String(v);
+    return s.length === 0 ? "(no value)" : s;
   });
-  const joined = parts.join(" / ");
-  if (joined.trim().length === 0) return "(no value)";
-  // If any individual segment is empty, fall back to "(no value)" only when the
-  // entire combined label is empty. Otherwise preserve combined label.
-  return joined;
+  return parts.join(" / ");
 }
 
 function buildDisplayRows(

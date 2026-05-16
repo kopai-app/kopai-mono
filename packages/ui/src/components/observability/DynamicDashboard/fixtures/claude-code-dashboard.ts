@@ -80,13 +80,7 @@ export const claudeCodeDashboard = {
       key: "kpi-row-1",
       type: "Grid" as const,
       parentKey: "root",
-      children: [
-        "kpi-cost",
-        "kpi-sessions",
-        "kpi-commits",
-        "kpi-prs",
-        "kpi-loc-added",
-      ],
+      children: ["kpi-cost", "kpi-sessions", "kpi-commits", "kpi-prs"],
       props: { columns: 4, gap: "md" as const },
     },
 
@@ -157,7 +151,7 @@ export const claudeCodeDashboard = {
     "kpi-loc-added": {
       key: "kpi-loc-added",
       type: "MetricStat" as const,
-      parentKey: "kpi-row-1",
+      parentKey: "kpi-row-2",
       children: [],
       props: { label: "LOC Added", showSparkline: true },
       dataSource: {
@@ -176,10 +170,10 @@ export const claudeCodeDashboard = {
       type: "Grid" as const,
       parentKey: "root",
       children: [
+        "kpi-loc-added",
         "kpi-loc-removed",
         "kpi-active-cli",
         "kpi-active-user",
-        "kpi-cache-reads",
       ],
       props: { columns: 4, gap: "md" as const },
     },
@@ -238,7 +232,7 @@ export const claudeCodeDashboard = {
     "kpi-cache-reads": {
       key: "kpi-cache-reads",
       type: "MetricStat" as const,
-      parentKey: "kpi-row-2",
+      parentKey: "kpi-row-3",
       children: [],
       props: { label: "Cache Read Tokens", showSparkline: true },
       dataSource: {
@@ -256,8 +250,8 @@ export const claudeCodeDashboard = {
       key: "kpi-row-3",
       type: "Grid" as const,
       parentKey: "root",
-      children: ["kpi-cache-writes"],
-      props: { columns: 4, gap: "md" as const },
+      children: ["kpi-cache-reads", "kpi-cache-writes"],
+      props: { columns: 2, gap: "md" as const },
     },
 
     "kpi-cache-writes": {

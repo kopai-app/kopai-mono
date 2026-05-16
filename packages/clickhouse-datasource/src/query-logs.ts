@@ -223,6 +223,11 @@ export function buildAggregatedLogsQuery(
   const groupByClause =
     groupByCols.length > 0 ? `GROUP BY ${groupByCols.join(", ")}` : "";
 
+  const requestedLimit = Number.isFinite(filter.limit)
+    ? Math.max(0, Math.floor(filter.limit as number))
+    : AGGREGATED_LOGS_LIMIT;
+  const limit = Math.min(requestedLimit, AGGREGATED_LOGS_LIMIT);
+
   const query = `
 SELECT
   ${selectCols.join(",\n  ")}
@@ -230,7 +235,7 @@ FROM otel_logs
 ${whereClause}
 ${groupByClause}
 ORDER BY value DESC
-LIMIT ${String(AGGREGATED_LOGS_LIMIT)}`;
+LIMIT ${String(limit)}`;
 
   return { query, params };
 }

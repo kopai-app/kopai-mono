@@ -783,7 +783,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       const limit = filter.limit ?? 1000;
       const metricType = filter.metricType;
       if (metricType !== "Gauge" && metricType !== "Sum") {
-        throw new Error(`aggregate is not supported for ${metricType}`);
+        throw new Error(`time-series metrics not supported for ${metricType}`);
       }
       if (!filter.timeBucket) {
         throw new Error("timeBucket is required for getMetricsTimeSeries");
@@ -1194,8 +1194,13 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         query = query.groupBy(kyselySql.ref(`group_${String(i)}`));
       }
 
-      // ORDER BY value DESC, LIMIT 1000 (max page size for aggregations)
-      query = query.orderBy(kyselySql`value`, "desc").limit(1000);
+      // ORDER BY value DESC, LIMIT capped at 1000 (max page size for aggregations).
+      // Respect caller-supplied filter.limit when present.
+      const requestedLimit = Number.isFinite(filter.limit)
+        ? Math.max(0, Math.floor(filter.limit as number))
+        : 1000;
+      const limit = Math.min(requestedLimit, 1000);
+      query = query.orderBy(kyselySql`value`, "desc").limit(limit);
 
       // Execute
       const { sql, parameters } = query.compile();

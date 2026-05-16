@@ -189,7 +189,10 @@ export const observabilityCatalog = createCatalog({
       hasChildren: false,
       description:
         "Donut chart showing proportional distribution across groups (e.g. token type breakdown).",
-      acceptsDataFrom: ["searchAggregatedMetrics"] as const,
+      acceptsDataFrom: [
+        "searchAggregatedMetrics",
+        "searchLogsAggregate",
+      ] as const,
     },
 
     MetricLeaderboard: {

@@ -56,6 +56,9 @@ export interface MetricBarChartProps {
 interface BarDatum {
   label: string;
   value: number;
+  /** Pre-clamp value preserved so tooltips display the true number even
+   *  when `logScale: true` forces `value` up to `Math.max(1, value)`. */
+  originalValue: number;
 }
 
 function coerceGroupLabel(groups: AggregatedMetricRow["groups"]): string {
@@ -85,6 +88,7 @@ export function MetricBarChart({
     let mapped = rows.map<BarDatum>((row) => ({
       label: coerceGroupLabel(row.groups),
       value: row.value,
+      originalValue: row.value,
     }));
 
     if (logScale) {
@@ -262,7 +266,9 @@ export function MetricBarChart({
                   <p className="text-gray-300 text-sm font-medium mb-1">
                     {datum.label}
                   </p>
-                  <p className="text-white text-sm">{fmt(datum.value, unit)}</p>
+                  <p className="text-white text-sm">
+                    {fmt(datum.originalValue ?? datum.value, unit)}
+                  </p>
                 </div>
               );
             }}
