@@ -3,9 +3,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import {
   dataFilterSchemas,
   denormalizedSignals,
+  logsKopaiQuerySchema,
   type datasource,
 } from "@kopai/core";
 import { problemDetailsSchema } from "./error-schema-zod.js";
+import { NotImplementedError } from "./errors.js";
 
 export const logsRoutes: FastifyPluginAsyncZod<{
   readLogsDatasource: datasource.ReadLogsDatasource;
@@ -33,6 +35,25 @@ export const logsRoutes: FastifyPluginAsyncZod<{
         requestContext: req.requestContext,
       });
       res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "POST",
+    url: "/signals/logs/query",
+    schema: {
+      description:
+        "Execute a typed KopaiQuery against logs. Schema-wired but not yet backed by a datasource (returns 501).",
+      body: logsKopaiQuerySchema,
+      response: {
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async () => {
+      throw new NotImplementedError(
+        "Logs query endpoint is not yet wired to a datasource"
+      );
     },
   });
 };

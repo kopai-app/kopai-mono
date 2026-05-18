@@ -3,7 +3,11 @@ import {
   type FastifyReply,
   type FastifyRequest,
 } from "fastify";
-import { ApiError, DashboardNotFoundError } from "./errors.js";
+import {
+  ApiError,
+  DashboardNotFoundError,
+  NotImplementedError,
+} from "./errors.js";
 import type { ApiErrorResponse } from "./error-schema-zod.js";
 export function errorHandler(
   error: FastifyError | Error | string,
@@ -44,6 +48,16 @@ export function errorHandler(
       type: "https://docs.kopai.app/errors/dashboard-not-found",
       status: 404,
       title: "Dashboard not found",
+      detail: error.message,
+    } satisfies ApiErrorResponse);
+  }
+
+  if (error instanceof NotImplementedError) {
+    request.log.info(error.message);
+    return reply.status(501).send({
+      type: "https://docs.kopai.app/errors/signals-api-not-implemented",
+      status: 501,
+      title: "Not Implemented",
       detail: error.message,
     } satisfies ApiErrorResponse);
   }

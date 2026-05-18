@@ -3,9 +3,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import {
   dataFilterSchemas,
   denormalizedSignals,
+  metricsKopaiQuerySchema,
   type datasource,
 } from "@kopai/core";
 import { problemDetailsSchema } from "./error-schema-zod.js";
+import { NotImplementedError } from "./errors.js";
 
 export const metricsRoutes: FastifyPluginAsyncZod<{
   readMetricsDatasource: datasource.ReadMetricsDatasource;
@@ -38,6 +40,25 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
         ? await opts.readMetricsDatasource.getAggregatedMetrics(params)
         : await opts.readMetricsDatasource.getMetrics(params);
       res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "POST",
+    url: "/signals/metrics/query",
+    schema: {
+      description:
+        "Execute a typed KopaiQuery against metrics. Schema-wired but not yet backed by a datasource (returns 501).",
+      body: metricsKopaiQuerySchema,
+      response: {
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async () => {
+      throw new NotImplementedError(
+        "Metrics query endpoint is not yet wired to a datasource"
+      );
     },
   });
 

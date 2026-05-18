@@ -30,3 +30,6 @@ export {
   KopaiTimeoutError,
   KopaiValidationError,
 } from "./errors.js";
+
+// Type-safe query SDK
+export * from "./query/index.js";

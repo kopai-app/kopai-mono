@@ -52,6 +52,13 @@ function fetchForDataSource(
         >[0],
         { signal }
       );
+    case "executeTracesQuery":
+    case "executeLogsQuery":
+    case "executeMetricsQuery":
+      // Wiring deferred — schema-only landing. See followup in plan.
+      throw new Error(
+        `Method not yet wired in useKopaiData: ${dataSource.method}`
+      );
     default: {
       const exhaustiveCheck: never = dataSource;
       throw new Error(
