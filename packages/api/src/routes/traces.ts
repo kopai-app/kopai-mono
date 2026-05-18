@@ -102,7 +102,9 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
     },
   });
 
-  registerQueryRoute(fastify, "traces", tracesKopaiQuerySchema);
+  registerQueryRoute(fastify, "traces", tracesKopaiQuerySchema, (body) =>
+    opts.readTracesDatasource.executeTracesQuery(body)
+  );
 
   fastify.route({
     method: "POST",

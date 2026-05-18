@@ -3,6 +3,9 @@ import {
   type datasource,
   type dataFilterSchemas,
   type denormalizedSignals,
+  type TracesKopaiQuery,
+  type LogsKopaiQuery,
+  type MetricsKopaiQuery,
 } from "@kopai/core";
 import { DbDatasource } from "./db-datasource.js";
 
@@ -139,6 +142,22 @@ export class OptimizedDatasource implements datasource.TelemetryDatasource {
     nextCursor: string | null;
   }> {
     return this.dbDatasource.getTraceSummaries(filter);
+  }
+
+  executeTracesQuery(
+    q: TracesKopaiQuery
+  ): Promise<datasource.KopaiQueryResult> {
+    return this.dbDatasource.executeTracesQuery(q);
+  }
+
+  executeLogsQuery(q: LogsKopaiQuery): Promise<datasource.KopaiQueryResult> {
+    return this.dbDatasource.executeLogsQuery(q);
+  }
+
+  executeMetricsQuery(
+    q: MetricsKopaiQuery
+  ): Promise<datasource.KopaiQueryResult> {
+    return this.dbDatasource.executeMetricsQuery(q);
   }
 
   async discoverMetrics(): Promise<datasource.MetricsDiscoveryResult> {

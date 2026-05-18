@@ -43,7 +43,9 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
     },
   });
 
-  registerQueryRoute(fastify, "metrics", metricsKopaiQuerySchema);
+  registerQueryRoute(fastify, "metrics", metricsKopaiQuerySchema, (body) =>
+    opts.readMetricsDatasource.executeMetricsQuery(body)
+  );
 
   fastify.route({
     method: "GET",

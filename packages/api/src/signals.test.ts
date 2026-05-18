@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { datasource } from "@kopai/core";
 import { signalsRoutes } from "./index.js";
 import { SignalsApiError } from "./routes/errors.js";
+import { mockQueryExecutors } from "./__test-helpers__/mock-query-executors.js";
 
 class TestSignalsApiError extends SignalsApiError {
   readonly code = "TEST_ERROR";
@@ -61,6 +62,7 @@ describe("signalsRoutes", () => {
         getServices: getServicesSpy,
         getOperations: getOperationsSpy,
         getTraceSummaries: getTraceSummariesSpy,
+        ...mockQueryExecutors(),
       },
     });
     await server.ready();

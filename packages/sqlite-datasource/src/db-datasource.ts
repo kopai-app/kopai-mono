@@ -15,8 +15,25 @@ import {
   type otlpMetrics,
   type dataFilterSchemas,
   type denormalizedSignals,
+  type TracesKopaiQuery,
+  type LogsKopaiQuery,
+  type MetricsKopaiQuery,
 } from "@kopai/core";
-import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
+import {
+  SqliteDatasourceBadRequestError,
+  SqliteDatasourceNotImplementedError,
+  SqliteDatasourceQueryError,
+} from "./sqlite-datasource-error.js";
+import {
+  CURSOR_TB_ALIAS,
+  CURSOR_TS_ALIAS,
+  translateLogsQuery,
+  translateMetricsQuery,
+  translateTracesQuery,
+  type DecoderKind,
+  type TranslateResult,
+} from "./kopai-query-translator.js";
+import { escapeJsonPath } from "./json-path.js";
 
 import type {
   DB,
@@ -41,14 +58,6 @@ const queryBuilder = new Kysely<DB>({
 /** Type predicate: narrows unknown to a string-keyed record. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Escape a key for use in a SQLite json_extract path (e.g. $."key").
- *  SQLite JSON paths use backslash to escape double quotes inside quoted keys.
- *  The result should be passed via a bound parameter (not kyselySql.lit)
- *  to avoid double-escaping of single quotes. */
-function escapeJsonPath(key: string): string {
-  return `$."${key.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 /** Default lookback for services/operations discovery (7 days in ms). */
@@ -1343,6 +1352,108 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         cause: error,
       });
     }
+  }
+
+  executeTracesQuery(
+    q: TracesKopaiQuery
+  ): Promise<datasource.KopaiQueryResult> {
+    return this.runKopaiQuery(translateTracesQuery(q), "traces");
+  }
+
+  executeLogsQuery(q: LogsKopaiQuery): Promise<datasource.KopaiQueryResult> {
+    return this.runKopaiQuery(translateLogsQuery(q), "logs");
+  }
+
+  executeMetricsQuery(
+    q: MetricsKopaiQuery
+  ): Promise<datasource.KopaiQueryResult> {
+    return this.runKopaiQuery(translateMetricsQuery(q), "metrics");
+  }
+
+  private async runKopaiQuery(
+    translated: TranslateResult,
+    signal: "traces" | "logs" | "metrics"
+  ): Promise<datasource.KopaiQueryResult> {
+    try {
+      const { compiled, isAgg, effectiveLimit, decoders } = translated;
+      const stmt = this.sqliteConnection.prepare(compiled.sql);
+      stmt.setReadBigInts(true);
+      const raw = stmt.all(
+        ...(compiled.parameters as (string | number | bigint | null)[])
+      ) as Record<string, unknown>[];
+
+      let cursor: string | null = null;
+      let data: Record<string, unknown>[] = raw;
+      if (!isAgg) {
+        const hasMore = raw.length > effectiveLimit;
+        data = hasMore ? raw.slice(0, effectiveLimit) : raw;
+        const last = hasMore ? data[data.length - 1] : undefined;
+        if (last) {
+          const ts = last[CURSOR_TS_ALIAS];
+          const tb = last[CURSOR_TB_ALIAS];
+          if (ts !== undefined && tb !== undefined) {
+            cursor = `${String(ts)}:${String(tb)}`;
+          }
+        }
+      }
+
+      const rows = data.map((row) => decodeRow(row, decoders));
+      return { rows, cursor, isAgg };
+    } catch (error) {
+      if (
+        error instanceof SqliteDatasourceNotImplementedError ||
+        error instanceof SqliteDatasourceBadRequestError
+      ) {
+        throw error;
+      }
+      throw new SqliteDatasourceQueryError(
+        `Failed to execute ${signal} query`,
+        {
+          cause: error,
+        }
+      );
+    }
+  }
+}
+
+/**
+ * Convert one row from the raw DB result into the user-facing shape:
+ *  - drop hidden cursor aliases,
+ *  - JSON-parse aliases tagged as 'json' by the translator,
+ *  - stringify bigints (timestamps, durations).
+ *
+ * Generic bigint→number coercion (the trailing branch) can lose precision
+ * above 2^53. We rely on the translator tagging nanosecond columns as
+ * 'nanoString' so anything left here is a bounded value (rowid, counts,
+ * small aggregates) where `Number` is safe.
+ */
+function decodeRow(
+  row: Record<string, unknown>,
+  decoders: Readonly<Record<string, DecoderKind>>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (key === CURSOR_TS_ALIAS || key === CURSOR_TB_ALIAS) continue;
+    const kind = decoders[key];
+    if (kind === "json") {
+      out[key] = parseJsonValue(value);
+    } else if (kind === "nanoString") {
+      out[key] = value == null ? value : String(value);
+    } else if (typeof value === "bigint") {
+      out[key] = Number(value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
   }
 }
 

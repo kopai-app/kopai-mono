@@ -38,5 +38,7 @@ export const logsRoutes: FastifyPluginAsyncZod<{
     },
   });
 
-  registerQueryRoute(fastify, "logs", logsKopaiQuerySchema);
+  registerQueryRoute(fastify, "logs", logsKopaiQuerySchema, (body) =>
+    opts.readLogsDatasource.executeLogsQuery(body)
+  );
 };
