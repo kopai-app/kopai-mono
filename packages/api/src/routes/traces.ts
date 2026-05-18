@@ -7,7 +7,7 @@ import {
   type datasource,
 } from "@kopai/core";
 import { problemDetailsSchema } from "./error-schema-zod.js";
-import { NotImplementedError } from "./errors.js";
+import { registerQueryRoute } from "./query-route.js";
 
 export const tracesRoutes: FastifyPluginAsyncZod<{
   readTracesDatasource: datasource.ReadTracesDatasource &
@@ -102,24 +102,7 @@ export const tracesRoutes: FastifyPluginAsyncZod<{
     },
   });
 
-  fastify.route({
-    method: "POST",
-    url: "/signals/traces/query",
-    schema: {
-      description:
-        "Execute a typed KopaiQuery against traces. Schema-wired but not yet backed by a datasource (returns 501).",
-      body: tracesKopaiQuerySchema,
-      response: {
-        "4xx": problemDetailsSchema,
-        "5xx": problemDetailsSchema,
-      },
-    },
-    handler: async () => {
-      throw new NotImplementedError(
-        "Traces query endpoint is not yet wired to a datasource"
-      );
-    },
-  });
+  registerQueryRoute(fastify, "traces", tracesKopaiQuerySchema);
 
   fastify.route({
     method: "POST",

@@ -50,7 +50,6 @@ type ExecutableQuery<R, IsAgg extends boolean> = {
 
 const DEFAULT_TIMEOUT = 30_000;
 
-// Response schemas
 const tracesResponseSchema = z.object({
   data: z.array(denormalizedSignals.otelTracesSchema),
   nextCursor: z.string().nullable(),
@@ -89,6 +88,11 @@ const operationsResponseSchema = z.object({
 const traceSummariesResponseSchema = z.object({
   data: z.array(dataFilterSchemas.traceSummaryRowSchema),
   nextCursor: z.string().nullable(),
+});
+
+const executeResponseSchema = z.object({
+  rows: z.array(z.unknown()),
+  cursor: z.string().nullable().optional(),
 });
 
 const metricsDiscoverySchema = z.object({
@@ -458,20 +462,19 @@ export class KopaiClient {
    */
   async execute<R, IsAgg extends boolean>(
     q: ExecutableQuery<R, IsAgg>,
-    opts?: { signal?: AbortSignal }
+    opts?: RequestOptions
   ): Promise<ExecuteResult<R, IsAgg>> {
-    const path = `/signals/${q.signal}/query`;
-    const responseSchema: z.ZodType<ExecuteResult<R, IsAgg>> = z.object({
-      rows: z.array(z.unknown()),
-      cursor: z.string().nullable().optional(),
-    }) as z.ZodType<ExecuteResult<R, IsAgg>>;
-    return request(`${this.baseUrl}${path}`, responseSchema, {
-      method: "POST",
-      body: q,
-      signal: opts?.signal,
-      baseHeaders: this.baseHeaders,
-      fetchFn: this.fetchFn,
-      defaultTimeout: this.defaultTimeout,
-    });
+    return request(
+      `${this.baseUrl}/signals/${q.signal}/query`,
+      executeResponseSchema as unknown as z.ZodType<ExecuteResult<R, IsAgg>>,
+      {
+        method: "POST",
+        body: q,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
   }
 }

@@ -31,6 +31,14 @@ import {
   type AggCallNode,
 } from "@kopai/core";
 
+type Signal = "traces" | "logs" | "metrics";
+
+const SCHEMAS = {
+  traces: tracesKopaiQuerySchema,
+  logs: logsKopaiQuerySchema,
+  metrics: metricsKopaiQuerySchema,
+} as const;
+
 import type { ColumnRef, Kind } from "./columns.js";
 import type { AggExpr } from "./aggs.js";
 import {
@@ -74,7 +82,7 @@ export type HasAgg<M extends SelectMap> = {
 /* Per-signal wire-query union                                        */
 /* ------------------------------------------------------------------ */
 
-type SignalQuery<S extends "traces" | "logs" | "metrics"> = S extends "traces"
+type SignalQuery<S extends Signal> = S extends "traces"
   ? TracesKopaiQuery
   : S extends "logs"
     ? LogsKopaiQuery
@@ -85,7 +93,7 @@ type SignalQuery<S extends "traces" | "logs" | "metrics"> = S extends "traces"
 /* ------------------------------------------------------------------ */
 
 interface BuilderState {
-  signal: "traces" | "logs" | "metrics";
+  signal: Signal;
   metricType?:
     | "gauge"
     | "sum"
@@ -101,10 +109,6 @@ interface BuilderState {
   cursor?: string;
 }
 
-function cloneState(s: BuilderState): BuilderState {
-  return { ...s };
-}
-
 /* ------------------------------------------------------------------ */
 /* QueryBuilder class                                                 */
 /* ------------------------------------------------------------------ */
@@ -114,7 +118,7 @@ function cloneState(s: BuilderState): BuilderState {
  * `true` when an aggregation is present in `.select`.
  */
 export class QueryBuilder<
-  Signal extends "traces" | "logs" | "metrics",
+  S extends Signal,
   // Cols carried as a generic for downstream method type inference.
   Cols,
   Row = never,
@@ -129,29 +133,29 @@ export class QueryBuilder<
 
   select<M extends SelectMap>(
     map: M
-  ): QueryBuilder<Signal, Cols, InferRow<M>, HasAgg<M>> {
+  ): QueryBuilder<S, Cols, InferRow<M>, HasAgg<M>> {
     const select: Record<string, ColumnRefNode | AggCallNode> = {};
     for (const [k, v] of Object.entries(map)) {
       select[k] = v.toNode();
     }
-    return new QueryBuilder<Signal, Cols, InferRow<M>, HasAgg<M>>({
-      ...cloneState(this._state),
+    return new QueryBuilder<S, Cols, InferRow<M>, HasAgg<M>>({
+      ...this._state,
       select,
     });
   }
 
-  where(expr: ExprNode): QueryBuilder<Signal, Cols, Row, IsAgg> {
-    return new QueryBuilder<Signal, Cols, Row, IsAgg>({
-      ...cloneState(this._state),
+  where(expr: ExprNode): QueryBuilder<S, Cols, Row, IsAgg> {
+    return new QueryBuilder<S, Cols, Row, IsAgg>({
+      ...this._state,
       where: expr,
     });
   }
 
   groupBy(
     ...cols: ColumnRef<string, unknown, Kind>[]
-  ): QueryBuilder<Signal, Cols, Row, IsAgg> {
-    return new QueryBuilder<Signal, Cols, Row, IsAgg>({
-      ...cloneState(this._state),
+  ): QueryBuilder<S, Cols, Row, IsAgg> {
+    return new QueryBuilder<S, Cols, Row, IsAgg>({
+      ...this._state,
       groupBy: cols.map((c) => c.toNode()),
     });
   }
@@ -159,27 +163,26 @@ export class QueryBuilder<
   orderBy(ob: {
     col: ColumnRef<string, unknown, Kind>;
     dir: "asc" | "desc";
-  }): QueryBuilder<Signal, Cols, Row, IsAgg> {
-    const next = cloneState(this._state);
-    const list = next.orderBy ? [...next.orderBy] : [];
-    list.push({ col: ob.col.toNode(), dir: ob.dir });
-    next.orderBy = list;
-    return new QueryBuilder<Signal, Cols, Row, IsAgg>(next);
+  }): QueryBuilder<S, Cols, Row, IsAgg> {
+    return new QueryBuilder<S, Cols, Row, IsAgg>({
+      ...this._state,
+      orderBy: [
+        ...(this._state.orderBy ?? []),
+        { col: ob.col.toNode(), dir: ob.dir },
+      ],
+    });
   }
 
-  limit(n: number): QueryBuilder<Signal, Cols, Row, IsAgg> {
-    return new QueryBuilder<Signal, Cols, Row, IsAgg>({
-      ...cloneState(this._state),
+  limit(n: number): QueryBuilder<S, Cols, Row, IsAgg> {
+    return new QueryBuilder<S, Cols, Row, IsAgg>({
+      ...this._state,
       limit: n,
     });
   }
 
-  timeRange(
-    start: string,
-    end: string
-  ): QueryBuilder<Signal, Cols, Row, IsAgg> {
-    return new QueryBuilder<Signal, Cols, Row, IsAgg>({
-      ...cloneState(this._state),
+  timeRange(start: string, end: string): QueryBuilder<S, Cols, Row, IsAgg> {
+    return new QueryBuilder<S, Cols, Row, IsAgg>({
+      ...this._state,
       timeRange: { start, end },
     });
   }
@@ -190,11 +193,11 @@ export class QueryBuilder<
    * narrows the receiver type to enforce this at the type level.
    */
   cursor(
-    this: QueryBuilder<Signal, Cols, Row, false>,
+    this: QueryBuilder<S, Cols, Row, false>,
     c: string
-  ): QueryBuilder<Signal, Cols, Row, false> {
-    return new QueryBuilder<Signal, Cols, Row, false>({
-      ...cloneState(this._state),
+  ): QueryBuilder<S, Cols, Row, false> {
+    return new QueryBuilder<S, Cols, Row, false>({
+      ...this._state,
       cursor: c,
     });
   }
@@ -203,7 +206,7 @@ export class QueryBuilder<
    * Build and validate the wire AST. Returns the parsed query branded
    * with phantom `__row` and `__isAgg` fields (type-only).
    */
-  toQuery(): SignalQuery<Signal> & { __row: Row; __isAgg: IsAgg } {
+  toQuery(): SignalQuery<S> & { __row: Row; __isAgg: IsAgg } {
     if (!this._state.select) {
       throw new Error("QueryBuilder.toQuery: .select() is required");
     }
@@ -219,18 +222,8 @@ export class QueryBuilder<
     if (this._state.timeRange) raw.timeRange = this._state.timeRange;
     if (this._state.cursor !== undefined) raw.cursor = this._state.cursor;
 
-    let parsed: TracesKopaiQuery | LogsKopaiQuery | MetricsKopaiQuery;
-    if (this._state.signal === "traces") {
-      parsed = tracesKopaiQuerySchema.parse(raw);
-    } else if (this._state.signal === "logs") {
-      parsed = logsKopaiQuerySchema.parse(raw);
-    } else {
-      parsed = metricsKopaiQuerySchema.parse(raw);
-    }
-    return parsed as SignalQuery<Signal> & {
-      __row: Row;
-      __isAgg: IsAgg;
-    };
+    const parsed = SCHEMAS[this._state.signal].parse(raw);
+    return parsed as SignalQuery<S> & { __row: Row; __isAgg: IsAgg };
   }
 }
 
@@ -244,35 +237,29 @@ export class QueryBuilder<
  * accessor (e.g. `traces.spanId`) and the builder seed (e.g.
  * `traces.select({...})`).
  */
-type SignalEntry<Signal extends "traces" | "logs" | "metrics", Cols> = Cols & {
+type SignalEntry<S extends Signal, Cols> = Cols & {
   select<M extends SelectMap>(
     map: M
-  ): QueryBuilder<Signal, Cols, InferRow<M>, HasAgg<M>>;
-  where(expr: ExprNode): QueryBuilder<Signal, Cols, never, false>;
+  ): QueryBuilder<S, Cols, InferRow<M>, HasAgg<M>>;
+  where(expr: ExprNode): QueryBuilder<S, Cols, never, false>;
   groupBy(
     ...cols: ColumnRef<string, unknown, Kind>[]
-  ): QueryBuilder<Signal, Cols, never, false>;
+  ): QueryBuilder<S, Cols, never, false>;
   orderBy(ob: {
     col: ColumnRef<string, unknown, Kind>;
     dir: "asc" | "desc";
-  }): QueryBuilder<Signal, Cols, never, false>;
-  limit(n: number): QueryBuilder<Signal, Cols, never, false>;
-  timeRange(
-    start: string,
-    end: string
-  ): QueryBuilder<Signal, Cols, never, false>;
+  }): QueryBuilder<S, Cols, never, false>;
+  limit(n: number): QueryBuilder<S, Cols, never, false>;
+  timeRange(start: string, end: string): QueryBuilder<S, Cols, never, false>;
 };
 
-function buildEntry<
-  Signal extends "traces" | "logs" | "metrics",
-  Cols extends Record<string, unknown>,
->(
-  signal: Signal,
+function buildEntry<S extends Signal, Cols extends Record<string, unknown>>(
+  signal: S,
   cols: Cols,
   metricType?: BuilderState["metricType"]
-): SignalEntry<Signal, Cols> {
-  const seed = (): QueryBuilder<Signal, Cols, never, false> =>
-    new QueryBuilder<Signal, Cols, never, false>({ signal, metricType });
+): SignalEntry<S, Cols> {
+  const seed = (): QueryBuilder<S, Cols, never, false> =>
+    new QueryBuilder<S, Cols, never, false>({ signal, metricType });
 
   const methods = {
     select: <M extends SelectMap>(map: M) => seed().select(map),
@@ -287,7 +274,7 @@ function buildEntry<
     timeRange: (start: string, end: string) => seed().timeRange(start, end),
   };
 
-  return Object.assign({}, cols, methods) as SignalEntry<Signal, Cols>;
+  return Object.assign({}, cols, methods) as SignalEntry<S, Cols>;
 }
 
 /* ------------------------------------------------------------------ */

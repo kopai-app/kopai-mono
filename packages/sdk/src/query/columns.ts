@@ -219,90 +219,76 @@ export type LogsColumns = typeof logsColumns;
 /* ------------------------------------------------------------------ */
 
 /** Columns common to every metric type. */
-function metricsBaseColumns() {
-  return {
-    timeUnix: makeCol<"timeUnix", string, "numericString">("timeUnix"),
-    startTimeUnix: makeCol<"startTimeUnix", string, "numericString">(
-      "startTimeUnix"
-    ),
-    attributes: makeAttrMap<
-      "attributes",
-      Record<string, AttributeValue> | undefined
-    >("attributes"),
-    metricName: makeCol<"metricName", string | undefined, "string">(
-      "metricName"
-    ),
-    metricDescription: makeCol<
-      "metricDescription",
-      string | undefined,
-      "string"
-    >("metricDescription"),
-    metricUnit: makeCol<"metricUnit", string | undefined, "string">(
-      "metricUnit"
-    ),
-    resourceAttributes: makeAttrMap<
-      "resourceAttributes",
-      Record<string, AttributeValue> | undefined
-    >("resourceAttributes"),
-    resourceSchemaUrl: makeCol<
-      "resourceSchemaUrl",
-      string | undefined,
-      "string"
-    >("resourceSchemaUrl"),
-    scopeAttributes: makeAttrMap<
-      "scopeAttributes",
-      Record<string, AttributeValue> | undefined
-    >("scopeAttributes"),
-    scopeDroppedAttrCount: makeCol<
-      "scopeDroppedAttrCount",
-      number | undefined,
-      "number"
-    >("scopeDroppedAttrCount"),
-    scopeName: makeCol<"scopeName", string | undefined, "string">("scopeName"),
-    scopeSchemaUrl: makeCol<"scopeSchemaUrl", string | undefined, "string">(
-      "scopeSchemaUrl"
-    ),
-    scopeVersion: makeCol<"scopeVersion", string | undefined, "string">(
-      "scopeVersion"
-    ),
-    serviceName: makeCol<"serviceName", string | undefined, "string">(
-      "serviceName"
-    ),
-    exemplarsFilteredAttributes: makeCol<
-      "exemplarsFilteredAttributes",
-      Array<Record<string, AttributeValue>> | undefined,
-      "array"
-    >("exemplarsFilteredAttributes"),
-    exemplarsSpanId: makeCol<"exemplarsSpanId", string[] | undefined, "array">(
-      "exemplarsSpanId"
-    ),
-    exemplarsTimeUnix: makeCol<
-      "exemplarsTimeUnix",
-      string[] | undefined,
-      "array"
-    >("exemplarsTimeUnix"),
-    exemplarsTraceId: makeCol<
-      "exemplarsTraceId",
-      string[] | undefined,
-      "array"
-    >("exemplarsTraceId"),
-    exemplarsValue: makeCol<"exemplarsValue", number[] | undefined, "array">(
-      "exemplarsValue"
-    ),
-    metricType: makeCol<"metricType", string | undefined, "string">(
-      "metricType"
-    ),
-  } as const;
-}
+const metricsBaseColumns = {
+  timeUnix: makeCol<"timeUnix", string, "numericString">("timeUnix"),
+  startTimeUnix: makeCol<"startTimeUnix", string, "numericString">(
+    "startTimeUnix"
+  ),
+  attributes: makeAttrMap<
+    "attributes",
+    Record<string, AttributeValue> | undefined
+  >("attributes"),
+  metricName: makeCol<"metricName", string | undefined, "string">("metricName"),
+  metricDescription: makeCol<"metricDescription", string | undefined, "string">(
+    "metricDescription"
+  ),
+  metricUnit: makeCol<"metricUnit", string | undefined, "string">("metricUnit"),
+  resourceAttributes: makeAttrMap<
+    "resourceAttributes",
+    Record<string, AttributeValue> | undefined
+  >("resourceAttributes"),
+  resourceSchemaUrl: makeCol<"resourceSchemaUrl", string | undefined, "string">(
+    "resourceSchemaUrl"
+  ),
+  scopeAttributes: makeAttrMap<
+    "scopeAttributes",
+    Record<string, AttributeValue> | undefined
+  >("scopeAttributes"),
+  scopeDroppedAttrCount: makeCol<
+    "scopeDroppedAttrCount",
+    number | undefined,
+    "number"
+  >("scopeDroppedAttrCount"),
+  scopeName: makeCol<"scopeName", string | undefined, "string">("scopeName"),
+  scopeSchemaUrl: makeCol<"scopeSchemaUrl", string | undefined, "string">(
+    "scopeSchemaUrl"
+  ),
+  scopeVersion: makeCol<"scopeVersion", string | undefined, "string">(
+    "scopeVersion"
+  ),
+  serviceName: makeCol<"serviceName", string | undefined, "string">(
+    "serviceName"
+  ),
+  exemplarsFilteredAttributes: makeCol<
+    "exemplarsFilteredAttributes",
+    Array<Record<string, AttributeValue>> | undefined,
+    "array"
+  >("exemplarsFilteredAttributes"),
+  exemplarsSpanId: makeCol<"exemplarsSpanId", string[] | undefined, "array">(
+    "exemplarsSpanId"
+  ),
+  exemplarsTimeUnix: makeCol<
+    "exemplarsTimeUnix",
+    string[] | undefined,
+    "array"
+  >("exemplarsTimeUnix"),
+  exemplarsTraceId: makeCol<"exemplarsTraceId", string[] | undefined, "array">(
+    "exemplarsTraceId"
+  ),
+  exemplarsValue: makeCol<"exemplarsValue", number[] | undefined, "array">(
+    "exemplarsValue"
+  ),
+  metricType: makeCol<"metricType", string | undefined, "string">("metricType"),
+} as const;
 
 export const gaugeColumns = {
-  ...metricsBaseColumns(),
+  ...metricsBaseColumns,
   value: makeCol<"value", number, "number">("value"),
   flags: makeCol<"flags", number | undefined, "number">("flags"),
 } as const;
 
 export const sumColumns = {
-  ...metricsBaseColumns(),
+  ...metricsBaseColumns,
   value: makeCol<"value", number, "number">("value"),
   flags: makeCol<"flags", number | undefined, "number">("flags"),
   aggregationTemporality: makeCol<
@@ -316,7 +302,7 @@ export const sumColumns = {
 } as const;
 
 export const histogramColumns = {
-  ...metricsBaseColumns(),
+  ...metricsBaseColumns,
   count: makeCol<"count", number | undefined, "number">("count"),
   sum: makeCol<"sum", number | undefined, "number">("sum"),
   min: makeCol<"min", number | null | undefined, "number">("min"),
@@ -335,7 +321,7 @@ export const histogramColumns = {
 } as const;
 
 export const exponentialHistogramColumns = {
-  ...metricsBaseColumns(),
+  ...metricsBaseColumns,
   count: makeCol<"count", number | undefined, "number">("count"),
   sum: makeCol<"sum", number | undefined, "number">("sum"),
   min: makeCol<"min", number | null | undefined, "number">("min"),
@@ -369,7 +355,7 @@ export const exponentialHistogramColumns = {
 } as const;
 
 export const summaryColumns = {
-  ...metricsBaseColumns(),
+  ...metricsBaseColumns,
   count: makeCol<"count", number | undefined, "number">("count"),
   sum: makeCol<"sum", number | undefined, "number">("sum"),
   valueAtQuantilesQuantile: makeCol<
