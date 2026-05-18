@@ -94,14 +94,7 @@ When creation fails, read the error message, fix the tree, and retry. Do not gue
 
 ## Post-Creation
 
-After the dashboard is created, display the URL to the user:
-
-```
-<baseUrl>/?tab=metrics&dashboardId=<id>
-```
-
-- `<id>` — the `id` field from the CLI JSON response
-- `<baseUrl>` — the URL used for the CLI command: the `--url` flag value, or `http://localhost:8000` if omitted
+After the dashboard is created, display the URL to the user. The CLI JSON response includes a `url` field — the fully-resolved dashboard URL based on the active `.kopairc` (or `--url` flag, or default). Show that value directly. Do not construct the URL yourself.
 
 Common pitfalls:
 
