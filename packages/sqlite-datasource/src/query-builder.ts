@@ -375,18 +375,37 @@ function buildCursorWhere(
   };
 }
 
-interface RawResult {
-  data:
-    | denormalizedSignals.OtelTracesRow[]
-    | denormalizedSignals.OtelLogsRow[]
-    | denormalizedSignals.OtelMetricsRow[];
+export interface RawTracesResult {
+  data: denormalizedSignals.OtelTracesRow[];
   nextCursor: string | null;
 }
 
-function runRaw(
+export interface RawLogsResult {
+  data: denormalizedSignals.OtelLogsRow[];
+  nextCursor: string | null;
+}
+
+export interface RawMetricsResult {
+  data: denormalizedSignals.OtelMetricsRow[];
+  nextCursor: string | null;
+}
+
+interface RawPage {
+  rows: Record<string, unknown>[];
+  nextCursor: string | null;
+  resolvedMetricType: datasource.MetricType | null;
+}
+
+/**
+ * Shared SQL build + fetch for raw queries across all three signals.
+ * Returns the still-raw rows plus the resolved metric type (for the
+ * metrics row mapper). The per-signal narrow runners below own the
+ * mapping step so each has a concrete return shape.
+ */
+function runRawCore(
   conn: DatabaseSync,
   q: KopaiQuery & { mode: "raw" }
-): RawResult {
+): RawPage {
   const signal = q.signal;
   const filters: AnyFilterExpr[] = q.filters ?? [];
 
@@ -476,20 +495,42 @@ function runRaw(
     nextCursor = `${ts}|${id}`;
   }
 
-  if (signal === "traces") {
-    return { data: pageRows.map(mapRowToOtelTraces), nextCursor };
-  }
-  if (signal === "logs") {
-    return { data: pageRows.map(mapRowToOtelLogs), nextCursor };
-  }
-  if (resolvedMetricType === null) {
+  return { rows: pageRows, nextCursor, resolvedMetricType };
+}
+
+export function runRawTraces(
+  conn: DatabaseSync,
+  q: kopaiQueryNs.TraceRawQuery
+): RawTracesResult {
+  const page = runRawCore(conn, q);
+  return {
+    data: page.rows.map(mapRowToOtelTraces),
+    nextCursor: page.nextCursor,
+  };
+}
+
+export function runRawLogs(
+  conn: DatabaseSync,
+  q: kopaiQueryNs.LogRawQuery
+): RawLogsResult {
+  const page = runRawCore(conn, q);
+  return { data: page.rows.map(mapRowToOtelLogs), nextCursor: page.nextCursor };
+}
+
+export function runRawMetrics(
+  conn: DatabaseSync,
+  q: kopaiQueryNs.MetricRawQuery
+): RawMetricsResult {
+  const page = runRawCore(conn, q);
+  if (page.resolvedMetricType === null) {
     throw new kopaiQueryCompiler.KopaiQueryValidationError(
       "Metric raw query is missing MetricType filter."
     );
   }
+  const metricType = page.resolvedMetricType;
   return {
-    data: pageRows.map((r) => mapRowToOtelMetrics(r, resolvedMetricType)),
-    nextCursor,
+    data: page.rows.map((r) => mapRowToOtelMetrics(r, metricType)),
+    nextCursor: page.nextCursor,
   };
 }
 
@@ -509,11 +550,11 @@ const NUMERIC_AGG: Record<string, { fn: string; rate: boolean }> = {
   RATE_MAX: { fn: "MAX", rate: true },
 };
 
-interface AggregateResult {
+export interface AggregateResult {
   data: kopaiQueryNs.KopaiAggregateRow[];
 }
 
-function runAggregate(
+export function runAggregate(
   conn: DatabaseSync,
   q: KopaiQuery & { mode: "aggregate" }
 ): AggregateResult {
@@ -726,17 +767,4 @@ function normalizeCellValue(v: unknown): string | number | null {
   if (typeof v === "string") return v;
   if (typeof v === "boolean") return v ? 1 : 0;
   return String(v);
-}
-
-// ============================================================
-// Public entry point
-// ============================================================
-
-export function executeKopaiQuery(
-  conn: DatabaseSync,
-  q: KopaiQuery
-): RawResult | AggregateResult {
-  kopaiQueryCompiler.validateKopaiQuery(q);
-  if (q.mode === "raw") return runRaw(conn, q);
-  return runAggregate(conn, q);
 }

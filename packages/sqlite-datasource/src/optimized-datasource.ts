@@ -148,6 +148,51 @@ export class OptimizedDatasource implements datasource.TelemetryDatasource {
     return this.dbDatasource.query(q);
   }
 
+  async queryTracesRaw(
+    q: kopaiQueryNs.TraceRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelTracesRow[];
+    nextCursor: string | null;
+  }> {
+    return this.dbDatasource.queryTracesRaw(q);
+  }
+
+  async queryTracesAggregate(
+    q: kopaiQueryNs.TraceAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.dbDatasource.queryTracesAggregate(q);
+  }
+
+  async queryLogsRaw(
+    q: kopaiQueryNs.LogRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelLogsRow[];
+    nextCursor: string | null;
+  }> {
+    return this.dbDatasource.queryLogsRaw(q);
+  }
+
+  async queryLogsAggregate(
+    q: kopaiQueryNs.LogAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.dbDatasource.queryLogsAggregate(q);
+  }
+
+  async queryMetricsRaw(
+    q: kopaiQueryNs.MetricRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelMetricsRow[];
+    nextCursor: string | null;
+  }> {
+    return this.dbDatasource.queryMetricsRaw(q);
+  }
+
+  async queryMetricsAggregate(
+    q: kopaiQueryNs.MetricAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.dbDatasource.queryMetricsAggregate(q);
+  }
+
   async discoverMetrics(): Promise<datasource.MetricsDiscoveryResult> {
     // Return from in-memory state (O(1))
     const metrics: datasource.DiscoveredMetric[] = [];

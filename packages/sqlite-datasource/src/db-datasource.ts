@@ -19,7 +19,12 @@ import {
   type kopaiQuery as kopaiQueryNs,
 } from "@kopai/core";
 import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
-import { executeKopaiQuery } from "./query-builder.js";
+import {
+  runAggregate,
+  runRawLogs,
+  runRawMetrics,
+  runRawTraces,
+} from "./query-builder.js";
 
 import type {
   DB,
@@ -1348,16 +1353,80 @@ export class DbDatasource implements datasource.TelemetryDatasource {
     }
   }
 
-  async query<Q extends kopaiQueryNs.KopaiQuery>(
-    q: Q & { requestContext?: unknown }
-  ): Promise<kopaiQueryNs.KopaiQueryResult<Q>> {
+  async queryTracesRaw(
+    q: kopaiQueryNs.TraceRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelTracesRow[];
+    nextCursor: string | null;
+  }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runRawTraces(this.sqliteConnection, q);
+    });
+  }
+
+  async queryTracesAggregate(
+    q: kopaiQueryNs.TraceAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runAggregate(this.sqliteConnection, q);
+    });
+  }
+
+  async queryLogsRaw(
+    q: kopaiQueryNs.LogRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelLogsRow[];
+    nextCursor: string | null;
+  }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runRawLogs(this.sqliteConnection, q);
+    });
+  }
+
+  async queryLogsAggregate(
+    q: kopaiQueryNs.LogAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runAggregate(this.sqliteConnection, q);
+    });
+  }
+
+  async queryMetricsRaw(
+    q: kopaiQueryNs.MetricRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelMetricsRow[];
+    nextCursor: string | null;
+  }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runRawMetrics(this.sqliteConnection, q);
+    });
+  }
+
+  async queryMetricsAggregate(
+    q: kopaiQueryNs.MetricAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runAggregate(this.sqliteConnection, q);
+    });
+  }
+
+  /**
+   * Centralized error envelope for KopaiQuery execution. Surfaces
+   * validation errors as-is and wraps everything else in
+   * SqliteDatasourceQueryError. Keeps the 6 narrow methods (and the
+   * dispatcher below) free of boilerplate.
+   */
+  private guardKopaiQuery<T>(run: () => T): T {
     try {
-      const result = executeKopaiQuery(this.sqliteConnection, q);
-      return result as kopaiQueryNs.KopaiQueryResult<Q>;
+      return run();
     } catch (error) {
       if (error instanceof SqliteDatasourceQueryError) throw error;
-      // Validation errors are user-facing; surface them as-is so callers
-      // can pattern-match on KopaiQueryValidationError without unwrapping.
       if (error instanceof kopaiQueryCompiler.KopaiQueryValidationError) {
         throw error;
       }
@@ -1365,6 +1434,39 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         cause: error,
       });
     }
+  }
+
+  async query<Q extends kopaiQueryNs.KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<kopaiQueryNs.KopaiQueryResult<Q>> {
+    // Dispatch on (signal, mode) to one of the 6 narrow methods. Each
+    // narrow method returns a concrete shape; the conditional
+    // `KopaiQueryResult<Q>` is not provable through this dispatch tree,
+    // so a single cast bridges from the concrete union to the
+    // conditional return type. Justified per the Phase 1a plan: the
+    // alternative is rewriting `KopaiQueryResult` as an overload map.
+    let result:
+      | { data: denormalizedSignals.OtelTracesRow[]; nextCursor: string | null }
+      | { data: denormalizedSignals.OtelLogsRow[]; nextCursor: string | null }
+      | {
+          data: denormalizedSignals.OtelMetricsRow[];
+          nextCursor: string | null;
+        }
+      | { data: kopaiQueryNs.KopaiAggregateRow[] };
+    if (q.signal === "traces" && q.mode === "raw") {
+      result = await this.queryTracesRaw(q);
+    } else if (q.signal === "traces") {
+      result = await this.queryTracesAggregate(q);
+    } else if (q.signal === "logs" && q.mode === "raw") {
+      result = await this.queryLogsRaw(q);
+    } else if (q.signal === "logs") {
+      result = await this.queryLogsAggregate(q);
+    } else if (q.mode === "raw") {
+      result = await this.queryMetricsRaw(q);
+    } else {
+      result = await this.queryMetricsAggregate(q);
+    }
+    return result as kopaiQueryNs.KopaiQueryResult<Q>;
   }
 }
 

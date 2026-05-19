@@ -626,63 +626,26 @@ export class ClickHouseReadDatasource
     }
   }
 
-  async query<Q extends kopaiQuery.KopaiQuery>(
-    q: Q & { requestContext?: unknown }
-  ): Promise<kopaiQuery.KopaiQueryResult<Q>> {
+  async queryTracesRaw(
+    q: kopaiQuery.TraceRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelTracesRow[];
+    nextCursor: string | null;
+  }> {
     assertClickHouseRequestContext(q.requestContext);
-    const { database, username } = q.requestContext;
-    const log = getLogger(q.requestContext);
+    const ctx = q.requestContext;
+    const log = getLogger(ctx);
     const start = performance.now();
-
+    const method = "queryTracesRaw";
     kopaiQueryCompiler.validateKopaiQuery(q);
 
     let chNode: string | undefined;
     try {
       const { sql, params } = buildKopaiSql(q);
-      const resultSet = await this.clientQuery(q.requestContext, sql, params);
+      const resultSet = await this.clientQuery(ctx, sql, params);
       chNode = getChNode(resultSet);
 
-      if (q.mode === "raw") {
-        return (await this.collectQueryRaw(q, resultSet, {
-          database,
-          username,
-          chNode,
-          start,
-          log,
-        })) as kopaiQuery.KopaiQueryResult<Q>;
-      }
-      return (await this.collectQueryAggregate(q, resultSet, {
-        database,
-        username,
-        chNode,
-        start,
-        log,
-      })) as kopaiQuery.KopaiQueryResult<Q>;
-    } catch (err) {
-      const durationMs = Math.round(performance.now() - start);
-      log.error(
-        { database, username, method: "query", durationMs, chNode, err },
-        "query failed"
-      );
-      throw err;
-    }
-  }
-
-  private async collectQueryRaw(
-    q: kopaiQuery.KopaiQuery,
-    resultSet: ResultSet<"JSONEachRow">,
-    meta: {
-      database: string;
-      username: string;
-      chNode: string | undefined;
-      start: number;
-      log: Logger;
-    }
-  ): Promise<{ data: unknown[]; nextCursor: string | null }> {
-    if (q.mode !== "raw") throw new Error("collectQueryRaw on aggregate");
-    const limit = q.limit ?? 100;
-
-    if (q.signal === "traces") {
+      const limit = q.limit ?? 100;
       const rows: denormalizedSignals.OtelTracesRow[] = [];
       for await (const batch of resultSet.stream()) {
         for (const row of batch) {
@@ -694,10 +657,34 @@ export class ClickHouseReadDatasource
       const last = data[data.length - 1];
       const nextCursor =
         hasMore && last ? `${last.Timestamp}:${last.SpanId}` : null;
-      this.logQuerySuccess(meta, rows.length);
+      this.logQuerySuccess({ ctx, chNode, start, log, method }, rows.length);
       return { data, nextCursor };
+    } catch (err) {
+      this.logQueryFailure({ ctx, chNode, start, log, method }, err);
+      throw err;
     }
-    if (q.signal === "logs") {
+  }
+
+  async queryLogsRaw(
+    q: kopaiQuery.LogRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelLogsRow[];
+    nextCursor: string | null;
+  }> {
+    assertClickHouseRequestContext(q.requestContext);
+    const ctx = q.requestContext;
+    const log = getLogger(ctx);
+    const start = performance.now();
+    const method = "queryLogsRaw";
+    kopaiQueryCompiler.validateKopaiQuery(q);
+
+    let chNode: string | undefined;
+    try {
+      const { sql, params } = buildKopaiSql(q);
+      const resultSet = await this.clientQuery(ctx, sql, params);
+      chNode = getChNode(resultSet);
+
+      const limit = q.limit ?? 100;
       const rows: {
         parsed: denormalizedSignals.OtelLogsRow;
         _rowHash: string;
@@ -719,100 +706,222 @@ export class ClickHouseReadDatasource
         hasMore && lastItem
           ? `${lastItem.parsed.Timestamp}:${lastItem._rowHash}`
           : null;
-      this.logQuerySuccess(meta, rows.length);
+      this.logQuerySuccess({ ctx, chNode, start, log, method }, rows.length);
       return { data, nextCursor };
+    } catch (err) {
+      this.logQueryFailure({ ctx, chNode, start, log, method }, err);
+      throw err;
     }
-    // metrics raw
-    const metricType = kopaiQueryCompiler.extractMetricType(q);
-    const schema = metricSchemaMap[metricType];
-    const rows: {
-      parsed: z.output<typeof schema>;
-      _rowHash: string;
-    }[] = [];
-    for await (const batch of resultSet.stream()) {
-      for (const row of batch) {
-        const json = row.json() as Record<string, unknown>;
-        rows.push({
-          parsed: parseChRow(schema, json),
-          _rowHash: String(json._rowHash),
-        });
-      }
-    }
-    const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const data = items.map((r) => r.parsed);
-    const lastItem = items[items.length - 1];
-    const nextCursor =
-      hasMore && lastItem
-        ? `${lastItem.parsed.TimeUnix}:${lastItem._rowHash}`
-        : null;
-    this.logQuerySuccess(meta, rows.length);
-    return { data, nextCursor };
   }
 
-  private async collectQueryAggregate(
-    q: kopaiQuery.KopaiQuery,
-    resultSet: ResultSet<"JSONEachRow">,
-    meta: {
-      database: string;
-      username: string;
-      chNode: string | undefined;
-      start: number;
-      log: Logger;
-    }
-  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
-    if (q.mode !== "aggregate") throw new Error("collectQueryAggregate on raw");
-    const data: kopaiQuery.KopaiAggregateRow[] = [];
-    const isTimeSeries = q.output.type === "timeSeries";
-    for await (const batch of resultSet.stream()) {
-      for (const row of batch) {
-        const json = row.json() as Record<string, unknown>;
-        const out: Record<string, string | number | null> = {};
-        for (const [k, v] of Object.entries(json)) {
-          if (k === "bucket_start" && isTimeSeries) {
-            out[k] = typeof v === "string" ? v : String(v);
-          } else if (v === null || typeof v === "string") {
-            out[k] = v;
-          } else if (typeof v === "number") {
-            out[k] = v;
-          } else if (typeof v === "boolean") {
-            out[k] = v ? 1 : 0;
-          } else if (typeof v === "bigint") {
-            out[k] = Number(v);
-          } else if (v === undefined) {
-            out[k] = null;
-          } else {
-            out[k] = String(v);
-          }
+  async queryMetricsRaw(
+    q: kopaiQuery.MetricRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelMetricsRow[];
+    nextCursor: string | null;
+  }> {
+    assertClickHouseRequestContext(q.requestContext);
+    const ctx = q.requestContext;
+    const log = getLogger(ctx);
+    const start = performance.now();
+    const method = "queryMetricsRaw";
+    kopaiQueryCompiler.validateKopaiQuery(q);
+
+    let chNode: string | undefined;
+    try {
+      const { sql, params } = buildKopaiSql(q);
+      const resultSet = await this.clientQuery(ctx, sql, params);
+      chNode = getChNode(resultSet);
+
+      const limit = q.limit ?? 100;
+      const metricType = kopaiQueryCompiler.extractMetricType(q);
+      const schema = metricSchemaMap[metricType];
+      const rows: {
+        parsed: z.output<typeof schema>;
+        _rowHash: string;
+      }[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json() as Record<string, unknown>;
+          rows.push({
+            parsed: parseChRow(schema, json),
+            _rowHash: String(json._rowHash),
+          });
         }
-        data.push(out);
       }
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const data = items.map((r) => r.parsed);
+      const lastItem = items[items.length - 1];
+      const nextCursor =
+        hasMore && lastItem
+          ? `${lastItem.parsed.TimeUnix}:${lastItem._rowHash}`
+          : null;
+      this.logQuerySuccess({ ctx, chNode, start, log, method }, rows.length);
+      return { data, nextCursor };
+    } catch (err) {
+      this.logQueryFailure({ ctx, chNode, start, log, method }, err);
+      throw err;
     }
-    this.logQuerySuccess(meta, data.length);
-    return { data };
+  }
+
+  async queryTracesAggregate(
+    q: kopaiQuery.TraceAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    return this.runAggregate(q, "queryTracesAggregate");
+  }
+
+  async queryLogsAggregate(
+    q: kopaiQuery.LogAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    return this.runAggregate(q, "queryLogsAggregate");
+  }
+
+  async queryMetricsAggregate(
+    q: kopaiQuery.MetricAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    return this.runAggregate(q, "queryMetricsAggregate");
+  }
+
+  /**
+   * Shared aggregate execution: all three aggregate variants share an
+   * identical pipeline (validate → build SQL → stream → coerce JSON →
+   * collect). Per-signal SQL specialization happens entirely inside
+   * `buildKopaiSql`.
+   */
+  private async runAggregate(
+    q:
+      | (kopaiQuery.TraceAggregateQuery & { requestContext?: unknown })
+      | (kopaiQuery.LogAggregateQuery & { requestContext?: unknown })
+      | (kopaiQuery.MetricAggregateQuery & { requestContext?: unknown }),
+    method: string
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    assertClickHouseRequestContext(q.requestContext);
+    const ctx = q.requestContext;
+    const log = getLogger(ctx);
+    const start = performance.now();
+    kopaiQueryCompiler.validateKopaiQuery(q);
+
+    let chNode: string | undefined;
+    try {
+      const { sql, params } = buildKopaiSql(q);
+      const resultSet = await this.clientQuery(ctx, sql, params);
+      chNode = getChNode(resultSet);
+
+      const data: kopaiQuery.KopaiAggregateRow[] = [];
+      const isTimeSeries = q.output.type === "timeSeries";
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json() as Record<string, unknown>;
+          const out: Record<string, string | number | null> = {};
+          for (const [k, v] of Object.entries(json)) {
+            if (k === "bucket_start" && isTimeSeries) {
+              out[k] = typeof v === "string" ? v : String(v);
+            } else if (v === null || typeof v === "string") {
+              out[k] = v;
+            } else if (typeof v === "number") {
+              out[k] = v;
+            } else if (typeof v === "boolean") {
+              out[k] = v ? 1 : 0;
+            } else if (typeof v === "bigint") {
+              out[k] = Number(v);
+            } else if (v === undefined) {
+              out[k] = null;
+            } else {
+              out[k] = String(v);
+            }
+          }
+          data.push(out);
+        }
+      }
+      this.logQuerySuccess({ ctx, chNode, start, log, method }, data.length);
+      return { data };
+    } catch (err) {
+      this.logQueryFailure({ ctx, chNode, start, log, method }, err);
+      throw err;
+    }
+  }
+
+  async query<Q extends kopaiQuery.KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<kopaiQuery.KopaiQueryResult<Q>> {
+    // Dispatch on (signal, mode) to one of the six narrow methods. Each
+    // narrow method returns a concrete shape; the conditional
+    // `KopaiQueryResult<Q>` can't be proven through this dispatch tree,
+    // so a single cast bridges the concrete union to the conditional
+    // return type. Same justification as the sqlite-datasource dispatcher.
+    let result:
+      | {
+          data: denormalizedSignals.OtelTracesRow[];
+          nextCursor: string | null;
+        }
+      | { data: denormalizedSignals.OtelLogsRow[]; nextCursor: string | null }
+      | {
+          data: denormalizedSignals.OtelMetricsRow[];
+          nextCursor: string | null;
+        }
+      | { data: kopaiQuery.KopaiAggregateRow[] };
+    if (q.signal === "traces" && q.mode === "raw") {
+      result = await this.queryTracesRaw(q);
+    } else if (q.signal === "traces") {
+      result = await this.queryTracesAggregate(q);
+    } else if (q.signal === "logs" && q.mode === "raw") {
+      result = await this.queryLogsRaw(q);
+    } else if (q.signal === "logs") {
+      result = await this.queryLogsAggregate(q);
+    } else if (q.mode === "raw") {
+      result = await this.queryMetricsRaw(q);
+    } else {
+      result = await this.queryMetricsAggregate(q);
+    }
+    return result as kopaiQuery.KopaiQueryResult<Q>;
   }
 
   private logQuerySuccess(
     meta: {
-      database: string;
-      username: string;
+      ctx: ClickHouseRequestContext;
       chNode: string | undefined;
       start: number;
       log: Logger;
+      method: string;
     },
     rowCount: number
   ): void {
     const durationMs = Math.round(performance.now() - meta.start);
     meta.log.info(
       {
-        database: meta.database,
-        username: meta.username,
-        method: "query",
+        database: meta.ctx.database,
+        username: meta.ctx.username,
+        method: meta.method,
         durationMs,
         rowCount,
         chNode: meta.chNode,
       },
       "query complete"
+    );
+  }
+
+  private logQueryFailure(
+    meta: {
+      ctx: ClickHouseRequestContext;
+      chNode: string | undefined;
+      start: number;
+      log: Logger;
+      method: string;
+    },
+    err: unknown
+  ): void {
+    const durationMs = Math.round(performance.now() - meta.start);
+    meta.log.error(
+      {
+        database: meta.ctx.database,
+        username: meta.ctx.username,
+        method: meta.method,
+        durationMs,
+        chNode: meta.chNode,
+        err,
+      },
+      "query failed"
     );
   }
 

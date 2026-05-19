@@ -42,6 +42,24 @@ describe("signalsRoutes", () => {
     q: kopaiQuery.KopaiQuery & { requestContext?: unknown }
   ) => Promise<unknown>;
   let querySpy: ReturnType<typeof vi.fn<QuerySpyFn>>;
+  let queryTracesRawSpy: ReturnType<
+    typeof vi.fn<datasource.ReadQueryDatasource["queryTracesRaw"]>
+  >;
+  let queryTracesAggregateSpy: ReturnType<
+    typeof vi.fn<datasource.ReadQueryDatasource["queryTracesAggregate"]>
+  >;
+  let queryLogsRawSpy: ReturnType<
+    typeof vi.fn<datasource.ReadQueryDatasource["queryLogsRaw"]>
+  >;
+  let queryLogsAggregateSpy: ReturnType<
+    typeof vi.fn<datasource.ReadQueryDatasource["queryLogsAggregate"]>
+  >;
+  let queryMetricsRawSpy: ReturnType<
+    typeof vi.fn<datasource.ReadQueryDatasource["queryMetricsRaw"]>
+  >;
+  let queryMetricsAggregateSpy: ReturnType<
+    typeof vi.fn<datasource.ReadQueryDatasource["queryMetricsAggregate"]>
+  >;
 
   beforeEach(async () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
@@ -58,6 +76,17 @@ describe("signalsRoutes", () => {
     getTraceSummariesSpy =
       vi.fn<datasource.ReadTracesMetaDatasource["getTraceSummaries"]>();
     querySpy = vi.fn<QuerySpyFn>();
+    queryTracesRawSpy =
+      vi.fn<datasource.ReadQueryDatasource["queryTracesRaw"]>();
+    queryTracesAggregateSpy =
+      vi.fn<datasource.ReadQueryDatasource["queryTracesAggregate"]>();
+    queryLogsRawSpy = vi.fn<datasource.ReadQueryDatasource["queryLogsRaw"]>();
+    queryLogsAggregateSpy =
+      vi.fn<datasource.ReadQueryDatasource["queryLogsAggregate"]>();
+    queryMetricsRawSpy =
+      vi.fn<datasource.ReadQueryDatasource["queryMetricsRaw"]>();
+    queryMetricsAggregateSpy =
+      vi.fn<datasource.ReadQueryDatasource["queryMetricsAggregate"]>();
     server = Fastify();
     await server.register(signalsRoutes, {
       readTelemetryDatasource: {
@@ -70,6 +99,12 @@ describe("signalsRoutes", () => {
         getOperations: getOperationsSpy,
         getTraceSummaries: getTraceSummariesSpy,
         query: querySpy as datasource.ReadQueryDatasource["query"],
+        queryTracesRaw: queryTracesRawSpy,
+        queryTracesAggregate: queryTracesAggregateSpy,
+        queryLogsRaw: queryLogsRawSpy,
+        queryLogsAggregate: queryLogsAggregateSpy,
+        queryMetricsRaw: queryMetricsRawSpy,
+        queryMetricsAggregate: queryMetricsAggregateSpy,
       },
     });
     await server.ready();

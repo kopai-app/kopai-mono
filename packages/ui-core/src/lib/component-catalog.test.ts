@@ -28,6 +28,197 @@ describe("schemas", () => {
     } satisfies DataSource;
   });
 
+  describe("KopaiQuery dataSource variants", () => {
+    const validTimeDimension = {
+      type: "relative" as const,
+      lookback: "2h",
+    };
+
+    it("validates queryTracesRaw with a TraceRawQuery", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "queryTracesRaw",
+        params: {
+          signal: "traces",
+          mode: "raw",
+          dimensions: ["SpanId", "TraceId", "Duration"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("rejects queryTracesRaw with mismatched (aggregate) shape", () => {
+      const invalid = dataSourceSchema.safeParse({
+        method: "queryTracesRaw",
+        params: {
+          signal: "traces",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: { type: "summary" },
+        },
+      });
+      expect(invalid.success).toBe(false);
+    });
+
+    it("validates queryTracesAggregate with a TraceAggregateQuery", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "queryTracesAggregate",
+        params: {
+          signal: "traces",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: { type: "summary" },
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("rejects queryTracesAggregate with mismatched (raw) shape", () => {
+      const invalid = dataSourceSchema.safeParse({
+        method: "queryTracesAggregate",
+        params: {
+          signal: "traces",
+          mode: "raw",
+          dimensions: ["SpanId"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(invalid.success).toBe(false);
+    });
+
+    it("validates queryLogsRaw with a LogRawQuery", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "queryLogsRaw",
+        params: {
+          signal: "logs",
+          mode: "raw",
+          dimensions: ["Timestamp", "Body"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("rejects queryLogsRaw with mismatched signal", () => {
+      const invalid = dataSourceSchema.safeParse({
+        method: "queryLogsRaw",
+        params: {
+          signal: "traces",
+          mode: "raw",
+          dimensions: ["SpanId"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(invalid.success).toBe(false);
+    });
+
+    it("validates queryLogsAggregate with a LogAggregateQuery", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "queryLogsAggregate",
+        params: {
+          signal: "logs",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: { type: "summary" },
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("rejects queryLogsAggregate without measures", () => {
+      const invalid = dataSourceSchema.safeParse({
+        method: "queryLogsAggregate",
+        params: {
+          signal: "logs",
+          mode: "aggregate",
+          timeDimension: validTimeDimension,
+          output: { type: "summary" },
+        },
+      });
+      expect(invalid.success).toBe(false);
+    });
+
+    it("validates queryMetricsRaw with a MetricRawQuery", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "queryMetricsRaw",
+        params: {
+          signal: "metrics",
+          mode: "raw",
+          dimensions: ["MetricName", "Value"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("rejects queryMetricsRaw with mismatched mode", () => {
+      const invalid = dataSourceSchema.safeParse({
+        method: "queryMetricsRaw",
+        params: {
+          signal: "metrics",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: { type: "summary" },
+        },
+      });
+      expect(invalid.success).toBe(false);
+    });
+
+    it("validates queryMetricsAggregate with a MetricAggregateQuery", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "queryMetricsAggregate",
+        params: {
+          signal: "metrics",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: {
+            type: "timeSeries",
+            granularity: "5m",
+          },
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("rejects queryMetricsAggregate with invalid granularity", () => {
+      const invalid = dataSourceSchema.safeParse({
+        method: "queryMetricsAggregate",
+        params: {
+          signal: "metrics",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: {
+            type: "timeSeries",
+            granularity: "not-a-duration",
+          },
+        },
+      });
+      expect(invalid.success).toBe(false);
+    });
+
+    it("accepts optional refetchIntervalMs on every new variant", () => {
+      const methods = [
+        "queryTracesRaw",
+        "queryTracesAggregate",
+        "queryLogsRaw",
+        "queryLogsAggregate",
+        "queryMetricsRaw",
+        "queryMetricsAggregate",
+      ] as const;
+      for (const method of methods) {
+        type DataSource = z.infer<typeof dataSourceSchema>;
+        const ds = { method, refetchIntervalMs: 5000 } as Partial<DataSource>;
+        expect(ds.refetchIntervalMs).toBe(5000);
+      }
+    });
+  });
+
   describe("createCatalog", () => {
     it("creates uiTreeSchema that validates component props", () => {
       const catalog = createCatalog({

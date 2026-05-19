@@ -10,8 +10,21 @@ import {
   otelMetricsSchema,
   otelTracesSchema,
   type AggregatedMetricRow,
+  type OtelLogsRow,
+  type OtelMetricsRow,
+  type OtelTracesRow,
 } from "./denormalized-signals-zod.js";
-import type { KopaiQuery, KopaiQueryResult } from "./kopai-query.js";
+import type {
+  KopaiAggregateRow,
+  KopaiQuery,
+  KopaiQueryResult,
+  LogAggregateQuery,
+  LogRawQuery,
+  MetricAggregateQuery,
+  MetricRawQuery,
+  TraceAggregateQuery,
+  TraceRawQuery,
+} from "./kopai-query.js";
 import type { MetricsData, TracesData, LogsData } from "./otlp-generated.js";
 export type { MetricsData } from "./otlp-metrics-generated.js";
 export type { TracesData, LogsData } from "./otlp-generated.js";
@@ -148,6 +161,30 @@ export interface ReadQueryDatasource {
   query<Q extends KopaiQuery>(
     q: Q & { requestContext?: unknown }
   ): Promise<KopaiQueryResult<Q>>;
+
+  queryTracesRaw(
+    q: TraceRawQuery & { requestContext?: unknown }
+  ): Promise<{ data: OtelTracesRow[]; nextCursor: string | null }>;
+
+  queryTracesAggregate(
+    q: TraceAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: KopaiAggregateRow[] }>;
+
+  queryLogsRaw(
+    q: LogRawQuery & { requestContext?: unknown }
+  ): Promise<{ data: OtelLogsRow[]; nextCursor: string | null }>;
+
+  queryLogsAggregate(
+    q: LogAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: KopaiAggregateRow[] }>;
+
+  queryMetricsRaw(
+    q: MetricRawQuery & { requestContext?: unknown }
+  ): Promise<{ data: OtelMetricsRow[]; nextCursor: string | null }>;
+
+  queryMetricsAggregate(
+    q: MetricAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: KopaiAggregateRow[] }>;
 }
 
 export type ReadTelemetryDatasource = ReadTracesDatasource &

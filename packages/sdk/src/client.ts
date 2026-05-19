@@ -2,6 +2,7 @@ import {
   dataFilterSchemas,
   denormalizedSignals,
   dashboardDatasource,
+  kopaiQuery,
 } from "@kopai/core";
 import z from "zod";
 import { request } from "./request.js";
@@ -46,6 +47,13 @@ const metricsResponseSchema = z.object({
 const aggregatedMetricsResponseSchema = z.object({
   data: z.array(denormalizedSignals.aggregatedMetricSchema),
   nextCursor: z.null(),
+});
+
+// KopaiQuery aggregate-row response: dynamic dimension/measure keys.
+const aggregateResponseSchema = z.object({
+  data: z.array(
+    z.record(z.string(), z.union([z.string(), z.number(), z.null()]))
+  ),
 });
 
 const dashboardResponseSchema = dashboardDatasource.dashboardSchema;
@@ -416,6 +424,138 @@ export class KopaiClient {
       {
         method: "POST",
         body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run a raw trace query (KopaiQuery). Returns denormalized span rows.
+   */
+  async queryTracesRaw(
+    q: kopaiQuery.TraceRawQuery,
+    opts?: RequestOptions
+  ): Promise<SearchResult<OtelTracesRow>> {
+    const validated = kopaiQuery.TraceRawQuerySchema.parse(q);
+    return request(
+      `${this.baseUrl}/signals/query/traces/raw`,
+      tracesResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run an aggregate trace query (KopaiQuery). Returns grouped rows.
+   */
+  async queryTracesAggregate(
+    q: kopaiQuery.TraceAggregateQuery,
+    opts?: RequestOptions
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    const validated = kopaiQuery.TraceAggregateQuerySchema.parse(q);
+    return request(
+      `${this.baseUrl}/signals/query/traces/aggregate`,
+      aggregateResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run a raw log query (KopaiQuery). Returns denormalized log rows.
+   */
+  async queryLogsRaw(
+    q: kopaiQuery.LogRawQuery,
+    opts?: RequestOptions
+  ): Promise<SearchResult<OtelLogsRow>> {
+    const validated = kopaiQuery.LogRawQuerySchema.parse(q);
+    return request(
+      `${this.baseUrl}/signals/query/logs/raw`,
+      logsResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run an aggregate log query (KopaiQuery). Returns grouped rows.
+   */
+  async queryLogsAggregate(
+    q: kopaiQuery.LogAggregateQuery,
+    opts?: RequestOptions
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    const validated = kopaiQuery.LogAggregateQuerySchema.parse(q);
+    return request(
+      `${this.baseUrl}/signals/query/logs/aggregate`,
+      aggregateResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run a raw metric query (KopaiQuery). Returns denormalized data-point rows.
+   */
+  async queryMetricsRaw(
+    q: kopaiQuery.MetricRawQuery,
+    opts?: RequestOptions
+  ): Promise<SearchResult<OtelMetricsRow>> {
+    const validated = kopaiQuery.MetricRawQuerySchema.parse(q);
+    return request(
+      `${this.baseUrl}/signals/query/metrics/raw`,
+      metricsResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run an aggregate metric query (KopaiQuery). Returns grouped rows.
+   */
+  async queryMetricsAggregate(
+    q: kopaiQuery.MetricAggregateQuery,
+    opts?: RequestOptions
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    const validated = kopaiQuery.MetricAggregateQuerySchema.parse(q);
+    return request(
+      `${this.baseUrl}/signals/query/metrics/aggregate`,
+      aggregateResponseSchema,
+      {
+        method: "POST",
+        body: validated,
         ...opts,
         baseHeaders: this.baseHeaders,
         fetchFn: this.fetchFn,
