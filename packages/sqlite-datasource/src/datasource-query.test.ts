@@ -299,6 +299,239 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
       expect(row.SpanAttributes).toEqual({ key1: "value1" });
       expect(row.ResourceAttributes).toMatchObject({ env: "prod" });
     });
+
+    // Parity with old `searchTraces` filters: ParentSpanId, StatusCode,
+    // SpanKind, Duration range. None were covered before this commit.
+
+    it("filters by ParentSpanId (old searchTraces.parentSpanId parity)", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "root",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t1",
+        spanId: "child",
+        parentSpanId: "root",
+        startTimeNanos: "1000500000000000",
+        endTimeNanos: "1000900000000000",
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "raw",
+        dimensions: ["TraceId", "SpanId", "ParentSpanId"],
+        filters: [
+          { kind: "string", column: "ParentSpanId", op: "eq", value: "root" },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SpanId).toBe("child");
+    });
+
+    it("filters by StatusCode (old searchTraces.statusCode parity)", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "ok",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "err",
+        statusCode: otlp.StatusCode.STATUS_CODE_ERROR,
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "raw",
+        dimensions: ["SpanId", "StatusCode"],
+        filters: [
+          {
+            kind: "string",
+            column: "StatusCode",
+            op: "eq",
+            value: "STATUS_CODE_ERROR",
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SpanId).toBe("err");
+    });
+
+    it("filters by SpanKind (old searchTraces.spanKind parity)", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "server",
+        spanKind: otlp.SpanKind.SPAN_KIND_SERVER,
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "client",
+        spanKind: otlp.SpanKind.SPAN_KIND_CLIENT,
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "raw",
+        dimensions: ["SpanId", "SpanKind"],
+        filters: [
+          {
+            kind: "string",
+            column: "SpanKind",
+            op: "eq",
+            value: "SPAN_KIND_SERVER",
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SpanId).toBe("server");
+    });
+
+    it("filters by Duration range (old searchTraces.durationMin/Max parity)", async () => {
+      // The Duration range parity assumes the writer pipeline stores
+      // Duration as `endTimeNanos - startTimeNanos`. Assert that
+      // invariant explicitly on the matched row so a writer-side
+      // regression surfaces as a clearer failure here.
+      await insertSpan({
+        traceId: "t1",
+        spanId: "fast",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1000001000000000", // 1e9 ns
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "med",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2000005000000000", // 5e9 ns
+      });
+      await insertSpan({
+        traceId: "t3",
+        spanId: "slow",
+        startTimeNanos: "3000000000000000",
+        endTimeNanos: "3000020000000000", // 2e10 ns
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "raw",
+        dimensions: ["SpanId", "Duration"],
+        filters: [
+          {
+            kind: "number",
+            column: "Duration",
+            op: "gte",
+            value: 2_000_000_000,
+          },
+          {
+            kind: "number",
+            column: "Duration",
+            op: "lte",
+            value: 10_000_000_000,
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SpanId).toBe("med");
+      // Writer-pipeline sanity: Duration == endTimeNanos - startTimeNanos.
+      expect(Number(row.Duration)).toBe(5_000_000_000);
+    });
+
+    it("filters by ResourceAttributes container (old searchTraces.resourceAttributes parity)", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+        resourceAttributes: { "service.version": "1.0" },
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s2",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+        resourceAttributes: { "service.version": "2.0" },
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "raw",
+        dimensions: ["TraceId", "SpanId"],
+        filters: [
+          {
+            kind: "string",
+            column: {
+              container: "ResourceAttributes",
+              key: "service.version",
+            },
+            op: "eq",
+            value: "2.0",
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SpanId).toBe("s2");
+    });
+
+    it("orderBy ascending reverses default DESC (old sortOrder=ASC parity)", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s2",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+      await insertSpan({
+        traceId: "t3",
+        spanId: "s3",
+        startTimeNanos: "3000000000000000",
+        endTimeNanos: "3001000000000000",
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "raw",
+        dimensions: ["TraceId", "SpanId", "Timestamp"],
+        timeDimension: WIDE_WINDOW,
+        orderBy: [{ type: "dimension", column: "Timestamp", direction: "asc" }],
+      });
+
+      expect(result.data).toHaveLength(3);
+      const ids = result.data.map((r) => r.SpanId);
+      expect(ids).toEqual(["s1", "s2", "s3"]);
+    });
   });
 
   // ============================================================
@@ -448,6 +681,178 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
       const row = result.data[0];
       assertDefined(row);
       expect(row.Body).toContain("logged in");
+    });
+
+    // Parity with old SDK `searchLogs` capabilities that lacked tests:
+    // pagination, ASC sortOrder, SeverityText, ResourceAttributes,
+    // ScopeName, case-insensitive Body.contains.
+
+    it("respects limit + returns next cursor for pagination (old searchLogsPage parity)", async () => {
+      for (let i = 0; i < 5; i++) {
+        await insertLog({
+          timeNanos: `${String((i + 1) * 1_000_000_000_000_000)}`,
+          body: `log-${String(i)}`,
+        });
+      }
+
+      const page1 = await readDs.query({
+        signal: "logs",
+        mode: "raw",
+        dimensions: ["Timestamp", "Body"],
+        timeDimension: WIDE_WINDOW,
+        limit: 2,
+      });
+      expect(page1.data).toHaveLength(2);
+      expect(page1.nextCursor).not.toBeNull();
+      assertDefined(page1.nextCursor);
+
+      const page2 = await readDs.query({
+        signal: "logs",
+        mode: "raw",
+        dimensions: ["Timestamp", "Body"],
+        timeDimension: WIDE_WINDOW,
+        limit: 2,
+        cursor: page1.nextCursor,
+      });
+      expect(page2.data).toHaveLength(2);
+      // Pages must not overlap AND must cover 4 distinct logs (the 5th
+      // remains unread under the 2+2 pagination). Catches "cursor skips
+      // a row" regressions that a no-overlap check alone would miss.
+      const union = new Set([
+        ...page1.data.map((r) => r.Body),
+        ...page2.data.map((r) => r.Body),
+      ]);
+      expect(union.size).toBe(4);
+    });
+
+    it("orderBy ascending reverses default DESC (old sortOrder=ASC parity)", async () => {
+      await insertLog({ timeNanos: "1000000000000000", body: "first" });
+      await insertLog({ timeNanos: "2000000000000000", body: "second" });
+      await insertLog({ timeNanos: "3000000000000000", body: "third" });
+
+      const result = await readDs.query({
+        signal: "logs",
+        mode: "raw",
+        dimensions: ["Timestamp", "Body"],
+        timeDimension: WIDE_WINDOW,
+        orderBy: [{ type: "dimension", column: "Timestamp", direction: "asc" }],
+      });
+
+      expect(result.data).toHaveLength(3);
+      expect(result.data.map((r) => r.Body)).toEqual([
+        "first",
+        "second",
+        "third",
+      ]);
+    });
+
+    it("filters by SeverityText exact match (old searchLogs.severityText parity)", async () => {
+      await insertLog({ timeNanos: "1000000000000000", severityText: "INFO" });
+      await insertLog({ timeNanos: "2000000000000000", severityText: "ERROR" });
+      await insertLog({ timeNanos: "3000000000000000", severityText: "WARN" });
+
+      const result = await readDs.query({
+        signal: "logs",
+        mode: "raw",
+        dimensions: ["Timestamp", "SeverityText"],
+        filters: [
+          {
+            kind: "string",
+            column: "SeverityText",
+            op: "eq",
+            value: "ERROR",
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.SeverityText).toBe("ERROR");
+    });
+
+    it("filters by ResourceAttributes container (old searchLogs.resourceAttributes parity)", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        resourceAttributes: { "deployment.env": "prod" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        resourceAttributes: { "deployment.env": "staging" },
+      });
+
+      const result = await readDs.query({
+        signal: "logs",
+        mode: "raw",
+        dimensions: ["Timestamp"],
+        filters: [
+          {
+            kind: "string",
+            column: { container: "ResourceAttributes", key: "deployment.env" },
+            op: "eq",
+            value: "prod",
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Timestamp).toBe("1000000000000000");
+    });
+
+    it("filters by ScopeName structural column (old searchLogs.scopeName parity)", async () => {
+      await insertLog({ timeNanos: "1000000000000000", scopeName: "scope-a" });
+      await insertLog({ timeNanos: "2000000000000000", scopeName: "scope-b" });
+
+      const result = await readDs.query({
+        signal: "logs",
+        mode: "raw",
+        dimensions: ["Timestamp", "ScopeName"],
+        filters: [
+          { kind: "string", column: "ScopeName", op: "eq", value: "scope-b" },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ScopeName).toBe("scope-b");
+    });
+
+    it("body contains is case-insensitive (parity with old SDK bodyContains ILIKE)", async () => {
+      // Old SDK `searchLogs.bodyContains` compiled to ClickHouse ILIKE,
+      // which is case-insensitive. The new `contains` operator on the
+      // sqlite backend compiles to `LIKE` for parity — SQLite's default
+      // LIKE is case-insensitive for ASCII, matching ILIKE for typical
+      // log-body searches. Lowercase needle vs. capitalized body must
+      // still match.
+      await insertLog({
+        timeNanos: "1000000000000000",
+        body: "Database connection failed",
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        body: "User logged in",
+      });
+
+      const result = await readDs.query({
+        signal: "logs",
+        mode: "raw",
+        dimensions: ["Timestamp", "Body"],
+        filters: [
+          { kind: "string", column: "Body", op: "contains", value: "database" },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.Body).toBe("Database connection failed");
     });
   });
 
@@ -650,6 +1055,231 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         expect(row.Count).toBe(50);
         expect(row["ValueAtQuantiles.Quantile"]).toEqual([0.5, 0.9, 0.99]);
       }
+    });
+
+    // Parity with old SDK `searchMetrics` capabilities that lacked
+    // tests: pagination, ASC sortOrder, MetricName / attributes /
+    // service.name / ResourceAttributes filtering in raw mode.
+
+    it("respects limit + returns next cursor for pagination (old searchMetricsPage parity)", async () => {
+      for (let i = 0; i < 5; i++) {
+        await insertGauge({
+          metricName: "cpu.usage",
+          timeUnixNano: `${String((i + 1) * 1_000_000_000_000_000)}`,
+          value: i * 0.1,
+          attributes: { cpu: `${String(i)}` },
+        });
+      }
+
+      const page1 = await readDs.query({
+        signal: "metrics",
+        mode: "raw",
+        dimensions: ["MetricName", "MetricType", "Value"],
+        filters: [
+          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        ],
+        timeDimension: WIDE_WINDOW,
+        limit: 2,
+      });
+      expect(page1.data).toHaveLength(2);
+      expect(page1.nextCursor).not.toBeNull();
+      assertDefined(page1.nextCursor);
+
+      const page2 = await readDs.query({
+        signal: "metrics",
+        mode: "raw",
+        dimensions: ["MetricName", "MetricType", "Value"],
+        filters: [
+          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        ],
+        timeDimension: WIDE_WINDOW,
+        limit: 2,
+        cursor: page1.nextCursor,
+      });
+      expect(page2.data).toHaveLength(2);
+      // Pages must cover 4 distinct rows (5th remains unread). Catches
+      // "cursor skips a row" regressions. Discriminator: Value, since
+      // each seeded row has a unique value (i * 0.1).
+      const union = new Set([
+        ...page1.data.map((r) => (r.MetricType === "Gauge" ? r.Value : null)),
+        ...page2.data.map((r) => (r.MetricType === "Gauge" ? r.Value : null)),
+      ]);
+      expect(union.size).toBe(4);
+    });
+
+    it("orderBy ascending reverses default DESC (old sortOrder=ASC parity)", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.1,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.5,
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "3000000000000000",
+        value: 0.9,
+      });
+
+      const result = await readDs.query({
+        signal: "metrics",
+        mode: "raw",
+        dimensions: ["MetricName", "MetricType", "TimeUnix", "Value"],
+        filters: [
+          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        ],
+        timeDimension: WIDE_WINDOW,
+        orderBy: [{ type: "dimension", column: "TimeUnix", direction: "asc" }],
+      });
+
+      expect(result.data).toHaveLength(3);
+      const values = result.data.map((r) => {
+        if (r.MetricType !== "Gauge") throw new Error("expected Gauge");
+        return r.Value;
+      });
+      expect(values).toEqual([0.1, 0.5, 0.9]);
+    });
+
+    it("filters by MetricName (old searchMetrics.metricName parity)", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.5,
+      });
+      await insertGauge({
+        metricName: "memory.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.3,
+      });
+
+      const result = await readDs.query({
+        signal: "metrics",
+        mode: "raw",
+        dimensions: ["MetricName", "MetricType", "Value"],
+        filters: [
+          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+          {
+            kind: "string",
+            column: "MetricName",
+            op: "eq",
+            value: "memory.usage",
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.MetricName).toBe("memory.usage");
+    });
+
+    it("filters by Attributes container (old searchMetrics.attributes parity)", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.5,
+        attributes: { cpu: "0" },
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.6,
+        attributes: { cpu: "1" },
+      });
+
+      const result = await readDs.query({
+        signal: "metrics",
+        mode: "raw",
+        dimensions: ["MetricName", "MetricType", "Value"],
+        filters: [
+          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+          {
+            kind: "string",
+            column: { container: "Attributes", key: "cpu" },
+            op: "eq",
+            value: "1",
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      if (row.MetricType !== "Gauge") throw new Error("expected Gauge");
+      expect(row.Value).toBe(0.6);
+    });
+
+    it("filters by service.name (old searchMetrics.serviceName parity)", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.5,
+        serviceName: "alpha",
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.6,
+        serviceName: "beta",
+      });
+
+      const result = await readDs.query({
+        signal: "metrics",
+        mode: "raw",
+        dimensions: ["MetricName", "MetricType", "Value"],
+        filters: [
+          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+          { kind: "string", column: "service.name", op: "eq", value: "beta" },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      expect(row.ServiceName).toBe("beta");
+    });
+
+    it("filters by ResourceAttributes container (old searchMetrics.resourceAttributes parity)", async () => {
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "1000000000000000",
+        value: 0.5,
+        resourceAttributes: { region: "us-east" },
+      });
+      await insertGauge({
+        metricName: "cpu.usage",
+        timeUnixNano: "2000000000000000",
+        value: 0.6,
+        resourceAttributes: { region: "eu-west" },
+      });
+
+      const result = await readDs.query({
+        signal: "metrics",
+        mode: "raw",
+        dimensions: ["MetricName", "MetricType", "Value"],
+        filters: [
+          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+          {
+            kind: "string",
+            column: { container: "ResourceAttributes", key: "region" },
+            op: "eq",
+            value: "eu-west",
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      if (row.MetricType !== "Gauge") throw new Error("expected Gauge");
+      expect(row.Value).toBe(0.6);
     });
   });
 
@@ -1164,6 +1794,102 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
       assertDefined(rate);
       expect(typeof rate).toBe("number");
       expect(rate as number).toBeGreaterThan(0);
+    });
+
+    it("lists distinct ServiceName values — equivalent to old SDK getServices()", async () => {
+      // Old SDK `getServices()` → { services: string[] } is reproducible
+      // as a KopaiQuery aggregate over traces grouping by service.name.
+      // Demonstrates that getServices is fully replaceable.
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        serviceName: "alpha",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s2",
+        serviceName: "beta",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+      await insertSpan({
+        traceId: "t3",
+        spanId: "s3",
+        serviceName: "alpha",
+        startTimeNanos: "3000000000000000",
+        endTimeNanos: "3001000000000000",
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "aggregate",
+        dimensions: ["service.name"],
+        measures: [{ op: "COUNT", as: "n" }],
+        timeDimension: WIDE_WINDOW,
+        output: { type: "summary" },
+      });
+
+      const services = result.data
+        .map((r) => r["service.name"])
+        .filter((v): v is string => typeof v === "string")
+        .sort();
+      expect(services).toEqual(["alpha", "beta"]);
+    });
+
+    it("lists distinct SpanName values for a service — equivalent to old SDK getOperations(serviceName)", async () => {
+      // Old SDK `getOperations(serviceName)` → { operations: string[] }
+      // is reproducible as a KopaiQuery aggregate grouping by SpanName
+      // with a service.name filter. Demonstrates that getOperations is
+      // fully replaceable.
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        serviceName: "alpha",
+        spanName: "GET /a",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s2",
+        serviceName: "alpha",
+        spanName: "GET /b",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+      });
+      await insertSpan({
+        traceId: "t3",
+        spanId: "s3",
+        serviceName: "beta",
+        spanName: "GET /c",
+        startTimeNanos: "3000000000000000",
+        endTimeNanos: "3001000000000000",
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "aggregate",
+        dimensions: ["SpanName"],
+        filters: [
+          {
+            kind: "string",
+            column: "service.name",
+            op: "eq",
+            value: "alpha",
+          },
+        ],
+        measures: [{ op: "COUNT", as: "n" }],
+        timeDimension: WIDE_WINDOW,
+        output: { type: "summary" },
+      });
+
+      const ops = result.data
+        .map((r) => r.SpanName)
+        .filter((v): v is string => typeof v === "string")
+        .sort();
+      expect(ops).toEqual(["GET /a", "GET /b"]);
     });
   });
 

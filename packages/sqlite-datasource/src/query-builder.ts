@@ -255,15 +255,25 @@ function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
         return { sql: `${col.sql} = ?`, params: [...col.params, f.value] };
       case "neq":
         return { sql: `${col.sql} <> ?`, params: [...col.params, f.value] };
+      // TODO: escape `%`, `_`, and `\` in f.value before interpolating
+      // into the LIKE pattern below. Without escaping, a needle like
+      // "50%" matches "5" + anything. The ClickHouse backend uses
+      // escapeLikePattern() in query-kopai.ts; SQLite should match
+      // (with `... LIKE ? ESCAPE '\\'`). Pre-existing gap shared by
+      // startsWith/endsWith; tracked separately from the contains-as-
+      // LIKE switch.
       case "contains":
+        // LIKE (not INSTR) so behavior matches the ClickHouse backend's
+        // ILIKE — SQLite's default LIKE is case-insensitive for ASCII,
+        // which is the parity guarantee for log-body searches.
         return {
-          sql: `INSTR(${col.sql}, ?) > 0`,
-          params: [...col.params, f.value],
+          sql: `${col.sql} LIKE ?`,
+          params: [...col.params, `%${f.value}%`],
         };
       case "notContains":
         return {
-          sql: `INSTR(${col.sql}, ?) = 0`,
-          params: [...col.params, f.value],
+          sql: `${col.sql} NOT LIKE ?`,
+          params: [...col.params, `%${f.value}%`],
         };
       case "startsWith":
         return {

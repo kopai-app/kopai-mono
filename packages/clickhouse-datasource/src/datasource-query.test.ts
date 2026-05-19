@@ -25,6 +25,13 @@ let baseUrl: string;
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function assertDefined<T>(
+  value: T | undefined | null,
+  msg = "Expected defined"
+): asserts value is T {
+  if (value === undefined || value === null) throw new Error(msg);
+}
+
 function requestContext() {
   return {
     database: TEST_DATABASE,
@@ -326,7 +333,9 @@ async function seedLogs(client: ClickHouseClient) {
         ResourceSchemaUrl: "",
         ResourceAttributes: { "service.version": "1.0" },
         ScopeSchemaUrl: "",
-        ScopeName: "",
+        // Non-empty ScopeName so the ScopeName-filter parity test (old
+        // searchLogs.scopeName) has a unique value to match.
+        ScopeName: "auth-scope",
         ScopeVersion: "",
         ScopeAttributes: {},
         LogAttributes: { "request.id": "req-001" },
@@ -706,6 +715,133 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       })
     ).rejects.toThrow("requestContext must provide");
   });
+
+  // Parity with old `searchTraces` filters: ParentSpanId, StatusCode,
+  // SpanKind, Duration range. None of these were exercised before.
+
+  it("filters by ParentSpanId (old searchTraces.parentSpanId parity)", async () => {
+    // Seed has span-002 with ParentSpanId="span-001". Match only it.
+    const result = await ds.query({
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["TraceId", "SpanId", "ParentSpanId"],
+      filters: [
+        {
+          kind: "string",
+          column: "ParentSpanId",
+          op: "eq",
+          value: "span-001",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const row = result.data[0];
+    assertDefined(row);
+    expect(row.SpanId).toBe("span-002");
+  });
+
+  it("filters by StatusCode (old searchTraces.statusCode parity)", async () => {
+    const result = await ds.query({
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["SpanId", "StatusCode"],
+      filters: [
+        {
+          kind: "string",
+          column: "StatusCode",
+          op: "eq",
+          value: "STATUS_CODE_ERROR",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const row = result.data[0];
+    assertDefined(row);
+    expect(row.SpanId).toBe("span-003");
+  });
+
+  it("filters by SpanKind (old searchTraces.spanKind parity)", async () => {
+    // span-002 ('DB query') is CLIENT in the seed; the other two default
+    // to SERVER. Filter must discriminate.
+    const result = await ds.query({
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["SpanId", "SpanKind"],
+      filters: [
+        { kind: "string", column: "SpanKind", op: "eq", value: "CLIENT" },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const row = result.data[0];
+    assertDefined(row);
+    expect(row.SpanId).toBe("span-002");
+  });
+
+  it("filters by Duration range (old searchTraces.durationMin/Max parity)", async () => {
+    // Seed durations: span-001=5e6, span-002=2e6, span-003=15e6 ns.
+    // Match only spans in [3e6, 10e6] → span-001.
+    const result = await ds.query({
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["SpanId", "Duration"],
+      filters: [
+        { kind: "number", column: "Duration", op: "gte", value: 3000000 },
+        { kind: "number", column: "Duration", op: "lte", value: 10000000 },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const row = result.data[0];
+    assertDefined(row);
+    expect(row.SpanId).toBe("span-001");
+  });
+
+  it("filters by ResourceAttributes container (old searchTraces.resourceAttributes parity)", async () => {
+    // user-service spans have service.version=1.0; order-service is 2.0.
+    const result = await ds.query({
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["TraceId", "SpanId"],
+      filters: [
+        {
+          kind: "string",
+          column: { container: "ResourceAttributes", key: "service.version" },
+          op: "eq",
+          value: "2.0",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const row = result.data[0];
+    assertDefined(row);
+    expect(row.SpanId).toBe("span-003");
+  });
+
+  it("orderBy ascending reverses default DESC (old sortOrder=ASC parity)", async () => {
+    const result = await ds.query({
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["TraceId", "SpanId", "Timestamp"],
+      timeDimension: relativeWindow(),
+      orderBy: [{ type: "dimension", column: "Timestamp", direction: "asc" }],
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(3);
+    expect(result.data.map((r) => r.SpanId)).toEqual([
+      "span-001",
+      "span-002",
+      "span-003",
+    ]);
+  });
 });
 
 describe("ClickHouseReadDatasource.query — logs raw", () => {
@@ -788,6 +924,142 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
     });
     expect(result.data.length).toBe(1);
     expect(result.data[0]!.Body).toBe("Database connection failed");
+  });
+
+  // Parity with old `searchLogs` capabilities that lacked tests:
+  // pagination, ASC sortOrder, SeverityText, ResourceAttributes,
+  // ScopeName, and an explicit case-insensitive Body.contains.
+
+  it("respects limit + returns next cursor for pagination (old searchLogsPage parity)", async () => {
+    const page1 = await ds.query({
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Timestamp", "Body"],
+      timeDimension: relativeWindow(),
+      limit: 2,
+      requestContext: requestContext(),
+    });
+    expect(page1.data.length).toBe(2);
+    expect(page1.nextCursor).not.toBeNull();
+    assertDefined(page1.nextCursor);
+
+    const page2 = await ds.query({
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Timestamp", "Body"],
+      timeDimension: relativeWindow(),
+      limit: 2,
+      cursor: page1.nextCursor,
+      requestContext: requestContext(),
+    });
+    expect(page2.data.length).toBe(1);
+    expect(page2.nextCursor).toBeNull();
+    // Pages must not overlap AND must together cover all 3 seeded logs.
+    // Asserting only no-overlap would miss a "cursor skips a row" bug.
+    const page2Row = page2.data[0];
+    assertDefined(page2Row);
+    const union = new Set([...page1.data.map((r) => r.Body), page2Row.Body]);
+    expect(union.size).toBe(3);
+  });
+
+  it("orderBy ascending reverses default DESC (old sortOrder=ASC parity)", async () => {
+    const result = await ds.query({
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Timestamp", "SeverityText"],
+      timeDimension: relativeWindow(),
+      orderBy: [{ type: "dimension", column: "Timestamp", direction: "asc" }],
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(3);
+    expect(result.data.map((r) => r.SeverityText)).toEqual([
+      "INFO",
+      "ERROR",
+      "WARN",
+    ]);
+  });
+
+  it("filters by SeverityText exact match (old searchLogs.severityText parity)", async () => {
+    const result = await ds.query({
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Timestamp", "SeverityText"],
+      filters: [
+        { kind: "string", column: "SeverityText", op: "eq", value: "ERROR" },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const row = result.data[0];
+    assertDefined(row);
+    expect(row.SeverityText).toBe("ERROR");
+    expect(row.Body).toBe("Database connection failed");
+  });
+
+  it("filters by ResourceAttributes container (old searchLogs.resourceAttributes parity)", async () => {
+    // Seed: 2 logs have service.version=1.0 (the user-service ones), 1
+    // log has no resource attrs. Filter must match exactly those 2.
+    const result = await ds.query({
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Timestamp", "Body"],
+      filters: [
+        {
+          kind: "string",
+          column: { container: "ResourceAttributes", key: "service.version" },
+          op: "eq",
+          value: "1.0",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(2);
+  });
+
+  it("filters by ScopeName structural column (old searchLogs.scopeName parity)", async () => {
+    // Log #1 in the seed has ScopeName="auth-scope"; the others empty.
+    const result = await ds.query({
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Timestamp", "ScopeName"],
+      filters: [
+        {
+          kind: "string",
+          column: "ScopeName",
+          op: "eq",
+          value: "auth-scope",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const row = result.data[0];
+    assertDefined(row);
+    expect(row.ScopeName).toBe("auth-scope");
+  });
+
+  it("body contains is case-insensitive (explicit parity with old SDK bodyContains ILIKE)", async () => {
+    // Old SDK `searchLogs.bodyContains` compiled to ILIKE. The new
+    // `contains` op compiles to ILIKE here. Lowercase needle against
+    // capitalized body must still match — the prior test exercised this
+    // implicitly; this assertion makes the guarantee explicit.
+    const result = await ds.query({
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Timestamp", "Body"],
+      filters: [
+        { kind: "string", column: "Body", op: "contains", value: "database" },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const row = result.data[0];
+    assertDefined(row);
+    expect(row.Body).toBe("Database connection failed");
   });
 });
 
@@ -903,6 +1175,200 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       })
     ).rejects.toThrow(/MetricType/);
   });
+
+  // Parity with old `searchMetrics` filters that lacked tests:
+  // pagination, ASC sortOrder, MetricName discrimination, Attributes /
+  // service.name / ResourceAttributes filters in raw mode.
+
+  it("respects limit + returns next cursor for pagination (old searchMetricsPage parity)", async () => {
+    // Gauge seed has 3 cpu rows.
+    const page1 = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+      ],
+      timeDimension: relativeWindow(),
+      limit: 2,
+      requestContext: requestContext(),
+    });
+    expect(page1.data.length).toBe(2);
+    expect(page1.nextCursor).not.toBeNull();
+    assertDefined(page1.nextCursor);
+
+    const page2 = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+      ],
+      timeDimension: relativeWindow(),
+      limit: 2,
+      cursor: page1.nextCursor,
+      requestContext: requestContext(),
+    });
+    expect(page2.data.length).toBe(1);
+    expect(page2.nextCursor).toBeNull();
+    // Pages must cover all 3 gauge rows (seed: cpu 0/1/2). Discriminator
+    // is Value since each row has a unique gauge reading (0.75/0.82/0.6).
+    const page2Row = page2.data[0];
+    assertDefined(page2Row);
+    const union = new Set<number>();
+    for (const r of page1.data) {
+      if (r.MetricType === "Gauge") union.add(r.Value);
+    }
+    if (page2Row.MetricType === "Gauge") union.add(page2Row.Value);
+    expect(union.size).toBe(3);
+  });
+
+  it("orderBy ascending reverses default DESC (old sortOrder=ASC parity)", async () => {
+    const result = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "TimeUnix", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+      ],
+      timeDimension: relativeWindow(),
+      orderBy: [{ type: "dimension", column: "TimeUnix", direction: "asc" }],
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(3);
+    // Gauge seed: cpu 0 @00:00:01 → 0.75, cpu 1 @00:00:02 → 0.82, cpu 2 @00:00:03 → 0.6
+    const values = result.data.map((r) => {
+      if (r.MetricType !== "Gauge") throw new Error("expected Gauge");
+      return r.Value;
+    });
+    expect(values).toEqual([0.75, 0.82, 0.6]);
+  });
+
+  it("filters by MetricName discriminates non-matching rows (old searchMetrics.metricName parity)", async () => {
+    // Stronger than the existing test: assert the filter EXCLUDES rows
+    // whose MetricName doesn't match.
+    const result = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        {
+          kind: "string",
+          column: "MetricName",
+          op: "eq",
+          value: "nonexistent.metric",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(0);
+  });
+
+  it("filters by Attributes container (old searchMetrics.attributes parity)", async () => {
+    // Gauge seed has 3 cpu rows with Attributes {cpu: "0"|"1"|"2"}.
+    const result = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        {
+          kind: "string",
+          column: { container: "Attributes", key: "cpu" },
+          op: "eq",
+          value: "1",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(result.data.length).toBe(1);
+    const m = result.data[0];
+    assertDefined(m);
+    if (m.MetricType !== "Gauge") throw new Error("expected Gauge");
+    expect(m.Value).toBeCloseTo(0.82, 5);
+  });
+
+  it("filters by service.name (old searchMetrics.serviceName parity)", async () => {
+    // All metrics in the seed are user-service. Match must return >0 for
+    // the existing service and 0 for a different one.
+    const matching = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        {
+          kind: "string",
+          column: "service.name",
+          op: "eq",
+          value: "user-service",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(matching.data.length).toBe(3);
+
+    const nonMatching = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        {
+          kind: "string",
+          column: "service.name",
+          op: "eq",
+          value: "order-service",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(nonMatching.data.length).toBe(0);
+  });
+
+  it("filters by ResourceAttributes container (old searchMetrics.resourceAttributes parity)", async () => {
+    // Gauges have service.version=1.0 in their resource attributes.
+    const matching = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        {
+          kind: "string",
+          column: { container: "ResourceAttributes", key: "service.version" },
+          op: "eq",
+          value: "1.0",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(matching.data.length).toBe(3);
+
+    const nonMatching = await ds.query({
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName", "Value"],
+      filters: [
+        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        {
+          kind: "string",
+          column: { container: "ResourceAttributes", key: "service.version" },
+          op: "eq",
+          value: "9.9",
+        },
+      ],
+      timeDimension: relativeWindow(),
+      requestContext: requestContext(),
+    });
+    expect(nonMatching.data.length).toBe(0);
+  });
 });
 
 describe("ClickHouseReadDatasource.query — traces aggregate", () => {
@@ -998,6 +1464,57 @@ describe("ClickHouseReadDatasource.query — traces aggregate", () => {
     expect(result.data.length).toBe(1);
     expect(result.data[0]!["service.name"]).toBe("order-service");
     expect(Number(result.data[0]!.n)).toBe(1);
+  });
+
+  it("lists distinct ServiceName values — equivalent to old SDK getServices()", async () => {
+    // Old SDK `getServices()` → { services: string[] } is reproducible
+    // as a KopaiQuery aggregate over traces grouping by service.name.
+    // Demonstrates that getServices is fully replaceable.
+    const result = await ds.query({
+      signal: "traces",
+      mode: "aggregate",
+      dimensions: ["service.name"],
+      measures: [{ op: "COUNT", as: "n" }],
+      timeDimension: relativeWindow(),
+      output: { type: "summary" },
+      requestContext: requestContext(),
+    });
+
+    const services = result.data
+      .map((r) => r["service.name"])
+      .filter((v): v is string => typeof v === "string")
+      .sort();
+    expect(services).toEqual(["order-service", "user-service"]);
+  });
+
+  it("lists distinct SpanName values for a service — equivalent to old SDK getOperations(serviceName)", async () => {
+    // Old SDK `getOperations(serviceName)` → { operations: string[] }
+    // is reproducible as a KopaiQuery aggregate grouping by SpanName
+    // with a service.name filter. Demonstrates that getOperations is
+    // fully replaceable.
+    const result = await ds.query({
+      signal: "traces",
+      mode: "aggregate",
+      dimensions: ["SpanName"],
+      filters: [
+        {
+          kind: "string",
+          column: "service.name",
+          op: "eq",
+          value: "user-service",
+        },
+      ],
+      measures: [{ op: "COUNT", as: "n" }],
+      timeDimension: relativeWindow(),
+      output: { type: "summary" },
+      requestContext: requestContext(),
+    });
+
+    const operations = result.data
+      .map((r) => r.SpanName)
+      .filter((v): v is string => typeof v === "string")
+      .sort();
+    expect(operations).toEqual(["DB query", "GET /api/users"]);
   });
 });
 
