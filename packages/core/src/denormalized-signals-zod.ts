@@ -219,7 +219,7 @@ export const otelLogsSchema = z.object({
 export type OtelLogsRow = z.infer<typeof otelLogsSchema>;
 
 // Metrics - common fields shared by all metric types
-const metricsBaseSchema = z.object({
+export const metricsBaseSchema = z.object({
   TimeUnix: z
     .string()
     .describe(
