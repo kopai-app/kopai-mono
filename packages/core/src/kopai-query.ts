@@ -5,6 +5,9 @@ import {
   otelLogsSchema,
   otelMetricsSchema,
   otelTracesSchema,
+  type OtelLogsRow,
+  type OtelMetricsRow,
+  type OtelTracesRow,
 } from "./denormalized-signals-zod.js";
 
 // ============================================================
@@ -1121,6 +1124,48 @@ export type LogRawQuery = z.infer<typeof LogRawQuery>;
 export type MetricAggregateQuery = z.infer<typeof MetricAggregateQuery>;
 export type MetricRawQuery = z.infer<typeof MetricRawQuery>;
 
+// Per-signal narrow types — exposed so backends + tooling can consume
+// them directly instead of redefining looser shapes locally.
+
+export type TraceColumnRef = z.infer<typeof TraceColumnRef>;
+export type LogColumnRef = z.infer<typeof LogColumnRef>;
+export type MetricColumnRef = z.infer<typeof MetricColumnRef>;
+
+export type TraceMeasureExpr = z.infer<typeof TraceMeasureExpr>;
+export type LogMeasureExpr = z.infer<typeof LogMeasureExpr>;
+export type MetricMeasureExpr = z.infer<typeof MetricMeasureExpr>;
+
+export type TraceOrderExpr = z.infer<typeof TraceOrderExpr>;
+export type LogOrderExpr = z.infer<typeof LogOrderExpr>;
+export type MetricOrderExpr = z.infer<typeof MetricOrderExpr>;
+
+export type TraceFilterExpr = FilterExpr<TraceColumnRef>;
+export type LogFilterExpr = FilterExpr<LogColumnRef>;
+export type MetricFilterExpr = FilterExpr<MetricColumnRef>;
+
+// Numeric ops literal union — used by backends to discriminate
+// percentile/rate from regular aggregations without re-typing.
+export type NumericOp = z.infer<typeof NumericOp>;
+
+// MetricType literal — the 5 metric-storage tables. Mirrored from
+// telemetry-datasource.ts to keep this module self-contained, but the
+// two definitions MUST match (enforced by an `assertMetricType` helper
+// in kopai-query-compiler.ts that's the single runtime gate).
+export type MetricType =
+  | "Gauge"
+  | "Sum"
+  | "Histogram"
+  | "ExponentialHistogram"
+  | "Summary";
+
+export const METRIC_TYPES = [
+  "Gauge",
+  "Sum",
+  "Histogram",
+  "ExponentialHistogram",
+  "Summary",
+] as const satisfies readonly MetricType[];
+
 export {
   TraceAggregateQuery as TraceAggregateQuerySchema,
   TraceRawQuery as TraceRawQuerySchema,
@@ -1136,3 +1181,34 @@ export {
   MetricAttrContainer,
   NumericOp,
 };
+
+// ============================================================
+// Result types
+// ============================================================
+// Raw-mode results match the legacy dedicated SDK methods 1:1 — same
+// denormalized per-signal row types. The implementation may project
+// only the requested `dimensions` at the SQL level but always returns
+// the full denormalized shape so callers get the same row type they'd
+// get from `getTraces`/`getLogs`/`getMetrics`.
+//
+// Aggregate-mode rows are dynamic: keys come from dimension column
+// names (verbatim for top-level, "<container>.<key>" for attribute
+// refs) and measure aliases (verbatim). timeSeries output adds a
+// `bucket_start` ISO datetime key.
+
+export type KopaiAggregateRow = Record<string, string | number | null>;
+
+export type KopaiQueryResult<Q extends KopaiQuery = KopaiQuery> = Q extends {
+  signal: "traces";
+  mode: "raw";
+}
+  ? { data: OtelTracesRow[]; nextCursor: string | null }
+  : Q extends { signal: "logs"; mode: "raw" }
+    ? { data: OtelLogsRow[]; nextCursor: string | null }
+    : Q extends { signal: "metrics"; mode: "raw" }
+      ? { data: OtelMetricsRow[]; nextCursor: string | null }
+      : Q extends { mode: "aggregate"; output: { type: "summary" } }
+        ? { data: KopaiAggregateRow[] }
+        : Q extends { mode: "aggregate"; output: { type: "timeSeries" } }
+          ? { data: (KopaiAggregateRow & { bucket_start: string })[] }
+          : never;

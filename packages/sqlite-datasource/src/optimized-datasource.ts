@@ -3,6 +3,7 @@ import {
   type datasource,
   type dataFilterSchemas,
   type denormalizedSignals,
+  type kopaiQuery as kopaiQueryNs,
 } from "@kopai/core";
 import { DbDatasource } from "./db-datasource.js";
 
@@ -139,6 +140,12 @@ export class OptimizedDatasource implements datasource.TelemetryDatasource {
     nextCursor: string | null;
   }> {
     return this.dbDatasource.getTraceSummaries(filter);
+  }
+
+  async query<Q extends kopaiQueryNs.KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<kopaiQueryNs.KopaiQueryResult<Q>> {
+    return this.dbDatasource.query(q);
   }
 
   async discoverMetrics(): Promise<datasource.MetricsDiscoveryResult> {

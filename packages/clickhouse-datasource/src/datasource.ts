@@ -1,9 +1,11 @@
 import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import type { ResultSet } from "@clickhouse/client";
-import type {
-  dataFilterSchemas,
-  denormalizedSignals,
-  datasource,
+import {
+  kopaiQueryCompiler,
+  type dataFilterSchemas,
+  type denormalizedSignals,
+  type datasource,
+  type kopaiQuery,
 } from "@kopai/core";
 import type z from "zod";
 import {
@@ -31,6 +33,7 @@ import {
   chDiscoverAttrRowSchema,
   metricSchemaMap,
 } from "./ch-row-schemas.js";
+import { buildKopaiSql } from "./query-kopai.js";
 
 const MAX_ATTR_VALUES = 100;
 
@@ -621,6 +624,196 @@ export class ClickHouseReadDatasource
       );
       throw err;
     }
+  }
+
+  async query<Q extends kopaiQuery.KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<kopaiQuery.KopaiQueryResult<Q>> {
+    assertClickHouseRequestContext(q.requestContext);
+    const { database, username } = q.requestContext;
+    const log = getLogger(q.requestContext);
+    const start = performance.now();
+
+    kopaiQueryCompiler.validateKopaiQuery(q);
+
+    let chNode: string | undefined;
+    try {
+      const { sql, params } = buildKopaiSql(q);
+      const resultSet = await this.clientQuery(q.requestContext, sql, params);
+      chNode = getChNode(resultSet);
+
+      if (q.mode === "raw") {
+        return (await this.collectQueryRaw(q, resultSet, {
+          database,
+          username,
+          chNode,
+          start,
+          log,
+        })) as kopaiQuery.KopaiQueryResult<Q>;
+      }
+      return (await this.collectQueryAggregate(q, resultSet, {
+        database,
+        username,
+        chNode,
+        start,
+        log,
+      })) as kopaiQuery.KopaiQueryResult<Q>;
+    } catch (err) {
+      const durationMs = Math.round(performance.now() - start);
+      log.error(
+        { database, username, method: "query", durationMs, chNode, err },
+        "query failed"
+      );
+      throw err;
+    }
+  }
+
+  private async collectQueryRaw(
+    q: kopaiQuery.KopaiQuery,
+    resultSet: ResultSet<"JSONEachRow">,
+    meta: {
+      database: string;
+      username: string;
+      chNode: string | undefined;
+      start: number;
+      log: Logger;
+    }
+  ): Promise<{ data: unknown[]; nextCursor: string | null }> {
+    if (q.mode !== "raw") throw new Error("collectQueryRaw on aggregate");
+    const limit = q.limit ?? 100;
+
+    if (q.signal === "traces") {
+      const rows: denormalizedSignals.OtelTracesRow[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          rows.push(parseChRow(chTracesRowSchema, row.json()));
+        }
+      }
+      const hasMore = rows.length > limit;
+      const data = hasMore ? rows.slice(0, limit) : rows;
+      const last = data[data.length - 1];
+      const nextCursor =
+        hasMore && last ? `${last.Timestamp}:${last.SpanId}` : null;
+      this.logQuerySuccess(meta, rows.length);
+      return { data, nextCursor };
+    }
+    if (q.signal === "logs") {
+      const rows: {
+        parsed: denormalizedSignals.OtelLogsRow;
+        _rowHash: string;
+      }[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json() as Record<string, unknown>;
+          rows.push({
+            parsed: parseChRow(chLogsRowSchema, json),
+            _rowHash: String(json._rowHash),
+          });
+        }
+      }
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const data = items.map((r) => r.parsed);
+      const lastItem = items[items.length - 1];
+      const nextCursor =
+        hasMore && lastItem
+          ? `${lastItem.parsed.Timestamp}:${lastItem._rowHash}`
+          : null;
+      this.logQuerySuccess(meta, rows.length);
+      return { data, nextCursor };
+    }
+    // metrics raw
+    const metricType = kopaiQueryCompiler.extractMetricType(q);
+    const schema = metricSchemaMap[metricType];
+    const rows: {
+      parsed: z.output<typeof schema>;
+      _rowHash: string;
+    }[] = [];
+    for await (const batch of resultSet.stream()) {
+      for (const row of batch) {
+        const json = row.json() as Record<string, unknown>;
+        rows.push({
+          parsed: parseChRow(schema, json),
+          _rowHash: String(json._rowHash),
+        });
+      }
+    }
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const data = items.map((r) => r.parsed);
+    const lastItem = items[items.length - 1];
+    const nextCursor =
+      hasMore && lastItem
+        ? `${lastItem.parsed.TimeUnix}:${lastItem._rowHash}`
+        : null;
+    this.logQuerySuccess(meta, rows.length);
+    return { data, nextCursor };
+  }
+
+  private async collectQueryAggregate(
+    q: kopaiQuery.KopaiQuery,
+    resultSet: ResultSet<"JSONEachRow">,
+    meta: {
+      database: string;
+      username: string;
+      chNode: string | undefined;
+      start: number;
+      log: Logger;
+    }
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    if (q.mode !== "aggregate") throw new Error("collectQueryAggregate on raw");
+    const data: kopaiQuery.KopaiAggregateRow[] = [];
+    const isTimeSeries = q.output.type === "timeSeries";
+    for await (const batch of resultSet.stream()) {
+      for (const row of batch) {
+        const json = row.json() as Record<string, unknown>;
+        const out: Record<string, string | number | null> = {};
+        for (const [k, v] of Object.entries(json)) {
+          if (k === "bucket_start" && isTimeSeries) {
+            out[k] = typeof v === "string" ? v : String(v);
+          } else if (v === null || typeof v === "string") {
+            out[k] = v;
+          } else if (typeof v === "number") {
+            out[k] = v;
+          } else if (typeof v === "boolean") {
+            out[k] = v ? 1 : 0;
+          } else if (typeof v === "bigint") {
+            out[k] = Number(v);
+          } else if (v === undefined) {
+            out[k] = null;
+          } else {
+            out[k] = String(v);
+          }
+        }
+        data.push(out);
+      }
+    }
+    this.logQuerySuccess(meta, data.length);
+    return { data };
+  }
+
+  private logQuerySuccess(
+    meta: {
+      database: string;
+      username: string;
+      chNode: string | undefined;
+      start: number;
+      log: Logger;
+    },
+    rowCount: number
+  ): void {
+    const durationMs = Math.round(performance.now() - meta.start);
+    meta.log.info(
+      {
+        database: meta.database,
+        username: meta.username,
+        method: "query",
+        durationMs,
+        rowCount,
+        chNode: meta.chNode,
+      },
+      "query complete"
+    );
   }
 
   async discoverMetrics(options?: {

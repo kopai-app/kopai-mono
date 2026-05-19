@@ -11,6 +11,7 @@ import {
   otelTracesSchema,
   type AggregatedMetricRow,
 } from "./denormalized-signals-zod.js";
+import type { KopaiQuery, KopaiQueryResult } from "./kopai-query.js";
 import type { MetricsData, TracesData, LogsData } from "./otlp-generated.js";
 export type { MetricsData } from "./otlp-metrics-generated.js";
 export type { TracesData, LogsData } from "./otlp-generated.js";
@@ -143,10 +144,17 @@ export interface ReadTracesMetaDatasource {
   }>;
 }
 
+export interface ReadQueryDatasource {
+  query<Q extends KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<KopaiQueryResult<Q>>;
+}
+
 export type ReadTelemetryDatasource = ReadTracesDatasource &
   ReadLogsDatasource &
   ReadMetricsDatasource &
-  ReadTracesMetaDatasource;
+  ReadTracesMetaDatasource &
+  ReadQueryDatasource;
 
 export type WriteTelemetryDatasource = WriteMetricsDatasource &
   WriteTracesDatasource &

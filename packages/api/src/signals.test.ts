@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { datasource } from "@kopai/core";
+import type { datasource, kopaiQuery } from "@kopai/core";
 import { signalsRoutes } from "./index.js";
 import { SignalsApiError } from "./routes/errors.js";
 
@@ -35,6 +35,13 @@ describe("signalsRoutes", () => {
   let getTraceSummariesSpy: ReturnType<
     typeof vi.fn<datasource.ReadTracesMetaDatasource["getTraceSummaries"]>
   >;
+  // `query` is generic; vi.fn can't preserve the type parameter, so the
+  // spy is modeled as the concrete projection and the readTelemetryDatasource
+  // entry casts back to the generic interface signature.
+  type QuerySpyFn = (
+    q: kopaiQuery.KopaiQuery & { requestContext?: unknown }
+  ) => Promise<unknown>;
+  let querySpy: ReturnType<typeof vi.fn<QuerySpyFn>>;
 
   beforeEach(async () => {
     getTracesSpy = vi.fn<datasource.ReadTracesDatasource["getTraces"]>();
@@ -50,6 +57,7 @@ describe("signalsRoutes", () => {
       vi.fn<datasource.ReadTracesMetaDatasource["getOperations"]>();
     getTraceSummariesSpy =
       vi.fn<datasource.ReadTracesMetaDatasource["getTraceSummaries"]>();
+    querySpy = vi.fn<QuerySpyFn>();
     server = Fastify();
     await server.register(signalsRoutes, {
       readTelemetryDatasource: {
@@ -61,6 +69,7 @@ describe("signalsRoutes", () => {
         getServices: getServicesSpy,
         getOperations: getOperationsSpy,
         getTraceSummaries: getTraceSummariesSpy,
+        query: querySpy as datasource.ReadQueryDatasource["query"],
       },
     });
     await server.ready();

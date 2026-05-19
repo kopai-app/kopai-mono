@@ -11,12 +11,15 @@ import {
 
 import {
   otlp,
+  kopaiQueryCompiler,
   type datasource,
   type otlpMetrics,
   type dataFilterSchemas,
   type denormalizedSignals,
+  type kopaiQuery as kopaiQueryNs,
 } from "@kopai/core";
 import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
+import { executeKopaiQuery } from "./query-builder.js";
 
 import type {
   DB,
@@ -1344,6 +1347,25 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       });
     }
   }
+
+  async query<Q extends kopaiQueryNs.KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<kopaiQueryNs.KopaiQueryResult<Q>> {
+    try {
+      const result = executeKopaiQuery(this.sqliteConnection, q);
+      return result as kopaiQueryNs.KopaiQueryResult<Q>;
+    } catch (error) {
+      if (error instanceof SqliteDatasourceQueryError) throw error;
+      // Validation errors are user-facing; surface them as-is so callers
+      // can pattern-match on KopaiQueryValidationError without unwrapping.
+      if (error instanceof kopaiQueryCompiler.KopaiQueryValidationError) {
+        throw error;
+      }
+      throw new SqliteDatasourceQueryError("Failed to execute query", {
+        cause: error,
+      });
+    }
+  }
 }
 
 /** In-memory state for a single discovered metric */
@@ -1748,7 +1770,7 @@ function exemplarsArrayToJson<T>(
   return JSON.stringify(exemplars.map(extractor));
 }
 
-function mapRowToOtelTraces(
+export function mapRowToOtelTraces(
   row: Record<string, unknown> // TODO: can we use kysely-generated type for this?
 ): denormalizedSignals.OtelTracesRow {
   return {
@@ -1842,7 +1864,7 @@ function toOptionalString(value: unknown): string | undefined {
   return value === "" ? undefined : value;
 }
 
-function mapRowToOtelLogs(
+export function mapRowToOtelLogs(
   row: Record<string, unknown> // TODO: can we use kysely-generated type for this?
 ): denormalizedSignals.OtelLogsRow {
   return {
@@ -1875,7 +1897,7 @@ const METRIC_TABLES = [
 
 const MAX_ATTR_VALUES = 100;
 
-function mapRowToOtelMetrics(
+export function mapRowToOtelMetrics(
   row: Record<string, unknown>, // TODO: can we use kysely-generated type for this?
   metricType: "Gauge" | "Sum" | "Histogram" | "ExponentialHistogram" | "Summary"
 ): denormalizedSignals.OtelMetricsRow {

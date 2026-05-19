@@ -9,3 +9,4 @@ export * as denormalizedSignals from "./denormalized-signals-zod.js";
 export * as dataFilterSchemas from "./data-filters-zod.js";
 export * as dashboardDatasource from "./dynamic-dashboard-datasource.js";
 export * as kopaiQuery from "./kopai-query.js";
+export * as kopaiQueryCompiler from "./kopai-query-compiler.js";
