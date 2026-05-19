@@ -4,7 +4,6 @@ import {
   type kopaiQuery,
 } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
-import { METRIC_TABLES } from "./query-metrics.js";
 
 type KopaiQuery = kopaiQuery.KopaiQuery;
 type TraceRawQuery = kopaiQuery.TraceRawQuery;
@@ -92,9 +91,7 @@ const TOPLEVEL_FOR_SEMCONV: Record<string, string> = {
   "service.name": "ServiceName",
 };
 
-const METRIC_TABLE_BY_TYPE: Record<string, string> = Object.fromEntries(
-  METRIC_TABLES.map(({ type, table }) => [type, table])
-);
+const METRIC_TABLE_BY_TYPE = kopaiQueryCompiler.METRIC_TYPE_TO_TABLE;
 
 // ---------------------------------------------------------------------------
 // SQL fragment builders
@@ -246,15 +243,7 @@ function compileFilter(
     case "number": {
       const numCol = numericCast(col);
       const p = nextParam(ctx, f.value, "n");
-      const opMap: Record<string, string> = {
-        eq: "=",
-        neq: "!=",
-        gt: ">",
-        gte: ">=",
-        lt: "<",
-        lte: "<=",
-      };
-      return `${numCol} ${opMap[f.op]} {${p}:Float64}`;
+      return `${numCol} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[f.op]} {${p}:Float64}`;
     }
     case "numberIn": {
       const numCol = numericCast(col);
@@ -296,17 +285,13 @@ function escapeLikePattern(text: string): string {
 // Time window
 // ---------------------------------------------------------------------------
 
-function timeColumnFor(signal: Signal): string {
-  return signal === "metrics" ? "TimeUnix" : "Timestamp";
-}
-
 function compileTimeRange(
   signal: Signal,
   td: KopaiQuery["timeDimension"],
   ctx: ParamCtx
 ): string {
   const win = kopaiQueryCompiler.compileTimeWindow(td);
-  const col = timeColumnFor(signal);
+  const col = kopaiQueryCompiler.timeColumnForSignal(signal);
   const lo = nextParam(ctx, nanosToDateTime64(win.startNs.toString()), "tsLo");
   const hi = nextParam(ctx, nanosToDateTime64(win.endNs.toString()), "tsHi");
   return `${col} >= {${lo}:DateTime64(9)} AND ${col} < {${hi}:DateTime64(9)}`;
@@ -396,10 +381,7 @@ function compileMeasure(
     return `count() AS ${alias}`;
   }
   if (m.op === "ERROR_RATE") {
-    // Both backends store OTel error status as the OTLP enum name
-    // "STATUS_CODE_ERROR" — the writer maps the proto enum to its name
-    // string before insertion.
-    return `avg(if(StatusCode = 'STATUS_CODE_ERROR', 1, 0)) AS ${alias}`;
+    return `avg(if(StatusCode = '${kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL}', 1, 0)) AS ${alias}`;
   }
   if (m.op === "THROUGHPUT") {
     const denom = bucketSeconds ?? windowSeconds;
@@ -826,7 +808,7 @@ function buildAggregateSql(args: {
     groupBySql.push(r.sql);
   }
   if (isTimeSeries) {
-    const tsCol = timeColumnFor(signal);
+    const tsCol = kopaiQueryCompiler.timeColumnForSignal(signal);
     const bucketExpr = `toStartOfInterval(${tsCol}, INTERVAL ${String(bucketSeconds!)} SECOND)`;
     selectDimSql.push(`${bucketExpr} AS bucket_start`);
     groupBySql.push(bucketExpr);
@@ -846,15 +828,9 @@ function buildAggregateSql(args: {
     const parts: string[] = [];
     for (const h of q.havings) {
       const p = nextParam(ctx, h.value, "hv");
-      const opMap: Record<string, string> = {
-        eq: "=",
-        neq: "!=",
-        gt: ">",
-        gte: ">=",
-        lt: "<",
-        lte: "<=",
-      };
-      parts.push(`${escapeIdent(h.measure)} ${opMap[h.op]} {${p}:Float64}`);
+      parts.push(
+        `${escapeIdent(h.measure)} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[h.op]} {${p}:Float64}`
+      );
     }
     havingSql = `HAVING ${parts.join(" AND ")}`;
   }

@@ -121,6 +121,36 @@ export function compileTimeWindow(
 }
 
 // ============================================================
+// Backend-shared SQL building blocks
+// ============================================================
+// Constants and helpers that both the sqlite and clickhouse executors
+// need. Keeping them here means a literal (StatusCode value, table
+// name, comparator map) lives in exactly one place.
+
+export const STATUS_CODE_ERROR_LITERAL = "STATUS_CODE_ERROR";
+
+export function timeColumnForSignal(signal: Signal): "TimeUnix" | "Timestamp" {
+  return signal === "metrics" ? "TimeUnix" : "Timestamp";
+}
+
+export const NUMBER_COMPARATOR_SQL = {
+  eq: "=",
+  neq: "<>",
+  gt: ">",
+  gte: ">=",
+  lt: "<",
+  lte: "<=",
+} as const;
+
+export const METRIC_TYPE_TO_TABLE: Record<MetricType, string> = {
+  Gauge: "otel_metrics_gauge",
+  Sum: "otel_metrics_sum",
+  Histogram: "otel_metrics_histogram",
+  ExponentialHistogram: "otel_metrics_exponential_histogram",
+  Summary: "otel_metrics_summary",
+};
+
+// ============================================================
 // MetricType narrowing
 // ============================================================
 // Runtime-checked narrower so backends never `as MetricType`-cast a

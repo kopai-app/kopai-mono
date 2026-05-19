@@ -98,13 +98,7 @@ const LOG_FULL_COLUMNS = [
   "ScopeSchemaUrl",
 ];
 
-const METRIC_TABLE_BY_TYPE: Record<string, string> = {
-  Gauge: "otel_metrics_gauge",
-  Sum: "otel_metrics_sum",
-  Histogram: "otel_metrics_histogram",
-  ExponentialHistogram: "otel_metrics_exponential_histogram",
-  Summary: "otel_metrics_summary",
-};
+const METRIC_TABLE_BY_TYPE = kopaiQueryCompiler.METRIC_TYPE_TO_TABLE;
 
 function metricFullColumns(metricType: string): string[] {
   const common = [
@@ -187,10 +181,6 @@ function metricFullColumns(metricType: string): string[] {
   }
 }
 
-function timeColumnFor(signal: Signal): string {
-  return signal === "metrics" ? "TimeUnix" : "Timestamp";
-}
-
 function escapeJsonPath(key: string): string {
   return `$."${key.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
@@ -233,10 +223,7 @@ function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
 
   // MetricType is synthetic on metrics — it routes table selection but
   // isn't a stored column. Drop the predicate; table choice enforces it.
-  if (signal === "metrics" && f.kind !== "null" && f.column === "MetricType") {
-    return { sql: "1=1", params: [] };
-  }
-  if (signal === "metrics" && f.kind === "null" && f.column === "MetricType") {
+  if (signal === "metrics" && f.column === "MetricType") {
     return { sql: "1=1", params: [] };
   }
 
@@ -255,17 +242,12 @@ function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
         return { sql: `${col.sql} = ?`, params: [...col.params, f.value] };
       case "neq":
         return { sql: `${col.sql} <> ?`, params: [...col.params, f.value] };
-      // TODO: escape `%`, `_`, and `\` in f.value before interpolating
-      // into the LIKE pattern below. Without escaping, a needle like
-      // "50%" matches "5" + anything. The ClickHouse backend uses
-      // escapeLikePattern() in query-kopai.ts; SQLite should match
-      // (with `... LIKE ? ESCAPE '\\'`). Pre-existing gap shared by
-      // startsWith/endsWith; tracked separately from the contains-as-
-      // LIKE switch.
+      // TODO: escape `%`, `_`, `\` in f.value before interpolating
+      // below — a needle "50%" currently matches "5" + anything. Fix:
+      // `... LIKE ? ESCAPE '\\'`. Same gap exists in startsWith/endsWith.
       case "contains":
-        // LIKE (not INSTR) so behavior matches the ClickHouse backend's
-        // ILIKE — SQLite's default LIKE is case-insensitive for ASCII,
-        // which is the parity guarantee for log-body searches.
+        // LIKE (not INSTR) matches the ClickHouse backend's ILIKE:
+        // SQLite's default LIKE is case-insensitive for ASCII.
         return {
           sql: `${col.sql} LIKE ?`,
           params: [...col.params, `%${f.value}%`],
@@ -298,16 +280,8 @@ function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
   }
 
   if (f.kind === "number") {
-    const opMap = {
-      eq: "=",
-      neq: "<>",
-      gt: ">",
-      gte: ">=",
-      lt: "<",
-      lte: "<=",
-    } as const;
     return {
-      sql: `${col.sql} ${opMap[f.op]} ?`,
+      sql: `${col.sql} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[f.op]} ?`,
       params: [...col.params, f.value],
     };
   }
@@ -337,10 +311,9 @@ function metricTypeFromQuery(q: KopaiQuery): datasource.MetricType {
 
 function buildTimeWhere(
   signal: Signal,
-  td: KopaiQuery["timeDimension"]
+  win: kopaiQueryCompiler.CompiledTimeWindow
 ): SqlFragment {
-  const win = kopaiQueryCompiler.compileTimeWindow(td);
-  const col = timeColumnFor(signal);
+  const col = kopaiQueryCompiler.timeColumnForSignal(signal);
   return {
     sql: `${col} >= ? AND ${col} < ?`,
     params: [win.startNs, win.endNs],
@@ -369,7 +342,7 @@ function buildCursorWhere(
   const tsStr = cursor.slice(0, pipeIdx);
   const idStr = cursor.slice(pipeIdx + 1);
   const tsNs = BigInt(tsStr);
-  const timeCol = timeColumnFor(signal);
+  const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
 
   if (signal === "traces") {
     if (direction === "desc") {
@@ -438,7 +411,8 @@ function runRaw(
     selectCols = metricFullColumns(resolvedMetricType);
   }
 
-  const wheres: SqlFragment[] = [buildTimeWhere(signal, q.timeDimension)];
+  const win = kopaiQueryCompiler.compileTimeWindow(q.timeDimension);
+  const wheres: SqlFragment[] = [buildTimeWhere(signal, win)];
   for (const f of filters) wheres.push(buildFilter(signal, f));
 
   const order = q.orderBy as OrderItemShape[] | undefined;
@@ -463,7 +437,7 @@ function runRaw(
       orderParts.push(`${colExpr.sql} ${o.direction.toUpperCase()}`);
     }
   } else {
-    const timeCol = timeColumnFor(signal);
+    const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
     orderParts.push(`${timeCol} ${direction.toUpperCase()}`);
   }
   // Always append tiebreaker for stable pagination.
@@ -525,6 +499,16 @@ function runRaw(
 
 const PERCENTILE_OPS = new Set(["P50", "P75", "P90", "P95", "P99", "P999"]);
 
+const NUMERIC_AGG: Record<string, { fn: string; rate: boolean }> = {
+  SUM: { fn: "SUM", rate: false },
+  AVG: { fn: "AVG", rate: false },
+  MIN: { fn: "MIN", rate: false },
+  MAX: { fn: "MAX", rate: false },
+  RATE_SUM: { fn: "SUM", rate: true },
+  RATE_AVG: { fn: "AVG", rate: true },
+  RATE_MAX: { fn: "MAX", rate: true },
+};
+
 interface AggregateResult {
   data: kopaiQueryNs.KopaiAggregateRow[];
 }
@@ -550,7 +534,7 @@ function runAggregate(
   }
 
   const win = kopaiQueryCompiler.compileTimeWindow(q.timeDimension);
-  const timeCol = timeColumnFor(signal);
+  const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
   const windowSeconds = Number((win.endNs - win.startNs) / 1_000_000_000n) || 1;
 
   const isTimeSeries = q.output.type === "timeSeries";
@@ -601,7 +585,7 @@ function runAggregate(
     }
     if (m.op === "ERROR_RATE") {
       measureSelectParts.push(
-        `AVG(CASE WHEN StatusCode = 'STATUS_CODE_ERROR' THEN 1.0 ELSE 0.0 END) AS ${quoteAlias(m.as)}`
+        `AVG(CASE WHEN StatusCode = '${kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL}' THEN 1.0 ELSE 0.0 END) AS ${quoteAlias(m.as)}`
       );
       continue;
     }
@@ -625,51 +609,38 @@ function runAggregate(
         "Percentile measures (P50-P999) are not yet supported on the sqlite backend."
       );
     }
-    // Numeric ops
+    // Numeric ops: every remaining measure compiles to `FN(expr)`,
+    // optionally divided by the bucket window seconds for the RATE_*
+    // variants. The op→fn map collapses 7 near-identical branches.
+    const agg = NUMERIC_AGG[m.op];
+    if (!agg) {
+      throw new kopaiQueryCompiler.KopaiQueryValidationError(
+        `Unsupported numeric measure op "${m.op}".`
+      );
+    }
     const expr = columnSqlExpr(signal, m.column);
-    if (m.op === "SUM") {
-      measureSelectParts.push(`SUM(${expr.sql}) AS ${quoteAlias(m.as)}`);
-      measureSelectParams.push(...expr.params);
-    } else if (m.op === "AVG") {
-      measureSelectParts.push(`AVG(${expr.sql}) AS ${quoteAlias(m.as)}`);
-      measureSelectParams.push(...expr.params);
-    } else if (m.op === "MIN") {
-      measureSelectParts.push(`MIN(${expr.sql}) AS ${quoteAlias(m.as)}`);
-      measureSelectParams.push(...expr.params);
-    } else if (m.op === "MAX") {
-      measureSelectParts.push(`MAX(${expr.sql}) AS ${quoteAlias(m.as)}`);
-      measureSelectParams.push(...expr.params);
-    } else if (m.op === "RATE_AVG") {
-      measureSelectParts.push(`(AVG(${expr.sql}) / ?) AS ${quoteAlias(m.as)}`);
+    if (agg.rate) {
+      measureSelectParts.push(
+        `(${agg.fn}(${expr.sql}) / ?) AS ${quoteAlias(m.as)}`
+      );
       measureSelectParams.push(...expr.params, bucketWidthSeconds);
-    } else if (m.op === "RATE_SUM") {
-      measureSelectParts.push(`(SUM(${expr.sql}) / ?) AS ${quoteAlias(m.as)}`);
-      measureSelectParams.push(...expr.params, bucketWidthSeconds);
-    } else if (m.op === "RATE_MAX") {
-      measureSelectParts.push(`(MAX(${expr.sql}) / ?) AS ${quoteAlias(m.as)}`);
-      measureSelectParams.push(...expr.params, bucketWidthSeconds);
+    } else {
+      measureSelectParts.push(`${agg.fn}(${expr.sql}) AS ${quoteAlias(m.as)}`);
+      measureSelectParams.push(...expr.params);
     }
   }
 
-  // WHERE
-  const wheres: SqlFragment[] = [buildTimeWhere(signal, q.timeDimension)];
+  // WHERE — reuses the time window already compiled above.
+  const wheres: SqlFragment[] = [buildTimeWhere(signal, win)];
   for (const f of filters) wheres.push(buildFilter(signal, f));
 
   // HAVING
   let havingSql = "";
   const havingParams: SqlParam[] = [];
   if (q.havings && q.havings.length > 0) {
-    const opMap = {
-      eq: "=",
-      neq: "<>",
-      gt: ">",
-      gte: ">=",
-      lt: "<",
-      lte: "<=",
-    } as const;
     const parts = q.havings.map((h) => {
       havingParams.push(h.value);
-      return `${quoteAlias(h.measure)} ${opMap[h.op]} ?`;
+      return `${quoteAlias(h.measure)} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[h.op]} ?`;
     });
     havingSql = ` HAVING ${parts.join(" AND ")}`;
   }
