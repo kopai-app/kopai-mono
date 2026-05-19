@@ -563,4 +563,40 @@ export class KopaiClient {
       }
     );
   }
+
+  /**
+   * Polymorphic query dispatcher. Given any KopaiQuery, picks the matching
+   * narrow method by (signal, mode). Builder output (kq.traces.aggregate()
+   * ...build()) can be passed directly without choosing a method name.
+   */
+  async query<Q extends kopaiQuery.KopaiQuery>(
+    q: Q,
+    opts?: RequestOptions
+  ): Promise<kopaiQuery.KopaiQueryResult<Q>> {
+    // Dispatch on (signal, mode) to one of the six narrow methods. Each
+    // narrow method returns a concrete shape; the conditional
+    // `KopaiQueryResult<Q>` can't be proven through this dispatch tree,
+    // so a single cast bridges the concrete union to the conditional
+    // return type. Same justification as the sqlite/clickhouse datasource
+    // dispatchers.
+    let result:
+      | { data: OtelTracesRow[]; nextCursor: string | null }
+      | { data: OtelLogsRow[]; nextCursor: string | null }
+      | { data: OtelMetricsRow[]; nextCursor: string | null }
+      | { data: kopaiQuery.KopaiAggregateRow[] };
+    if (q.signal === "traces" && q.mode === "raw") {
+      result = await this.queryTracesRaw(q, opts);
+    } else if (q.signal === "traces") {
+      result = await this.queryTracesAggregate(q, opts);
+    } else if (q.signal === "logs" && q.mode === "raw") {
+      result = await this.queryLogsRaw(q, opts);
+    } else if (q.signal === "logs") {
+      result = await this.queryLogsAggregate(q, opts);
+    } else if (q.mode === "raw") {
+      result = await this.queryMetricsRaw(q, opts);
+    } else {
+      result = await this.queryMetricsAggregate(q, opts);
+    }
+    return result as kopaiQuery.KopaiQueryResult<Q>;
+  }
 }

@@ -50,33 +50,8 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
     refetchIntervalMs: z.number().optional(),
   }),
   z.object({
-    method: z.literal("queryTracesRaw"),
-    params: kopaiQuery.TraceRawQuerySchema,
-    refetchIntervalMs: z.number().optional(),
-  }),
-  z.object({
-    method: z.literal("queryTracesAggregate"),
-    params: kopaiQuery.TraceAggregateQuerySchema,
-    refetchIntervalMs: z.number().optional(),
-  }),
-  z.object({
-    method: z.literal("queryLogsRaw"),
-    params: kopaiQuery.LogRawQuerySchema,
-    refetchIntervalMs: z.number().optional(),
-  }),
-  z.object({
-    method: z.literal("queryLogsAggregate"),
-    params: kopaiQuery.LogAggregateQuerySchema,
-    refetchIntervalMs: z.number().optional(),
-  }),
-  z.object({
-    method: z.literal("queryMetricsRaw"),
-    params: kopaiQuery.MetricRawQuerySchema,
-    refetchIntervalMs: z.number().optional(),
-  }),
-  z.object({
-    method: z.literal("queryMetricsAggregate"),
-    params: kopaiQuery.MetricAggregateQuerySchema,
+    method: z.literal("query"),
+    params: kopaiQuery.KopaiQuery,
     refetchIntervalMs: z.number().optional(),
   }),
 ]);

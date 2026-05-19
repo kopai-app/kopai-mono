@@ -42,6 +42,7 @@ function createMockClient(): MockClient {
     queryLogsAggregate: vi.fn().mockResolvedValue({ data: [] }),
     queryMetricsRaw: vi.fn().mockResolvedValue({ data: [], nextCursor: null }),
     queryMetricsAggregate: vi.fn().mockResolvedValue({ data: [] }),
+    query: vi.fn().mockResolvedValue({ data: [], nextCursor: null }),
   };
 }
 

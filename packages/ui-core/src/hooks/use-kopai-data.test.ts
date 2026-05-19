@@ -23,12 +23,7 @@ const createMockClient = () => ({
   getServices: vi.fn(),
   getOperations: vi.fn(),
   searchTraceSummariesPage: vi.fn(),
-  queryTracesRaw: vi.fn(),
-  queryTracesAggregate: vi.fn(),
-  queryLogsRaw: vi.fn(),
-  queryLogsAggregate: vi.fn(),
-  queryMetricsRaw: vi.fn(),
-  queryMetricsAggregate: vi.fn(),
+  query: vi.fn(),
 });
 
 type MockClient = ReturnType<typeof createMockClient>;
@@ -314,55 +309,18 @@ describe("useKopaiData", () => {
     });
   });
 
-  describe("KopaiQuery methods", () => {
-    const relativeTime = {
-      type: "relative" as const,
-      lookback: "2h",
-    };
-
-    it("calls queryTracesRaw with TraceRawQuery params", async () => {
-      const mockData = {
-        data: [{ traceId: "t1" }],
-        nextCursor: null,
-      };
-      mockClient.queryTracesRaw.mockResolvedValue(mockData);
-
-      const dataSource: DataSource = {
-        method: "queryTracesRaw",
-        params: {
-          signal: "traces",
-          mode: "raw",
-          dimensions: ["SpanId", "Duration"],
-          timeDimension: relativeTime,
-        },
-      };
-
-      const { result } = renderHook(() => useKopaiData(dataSource), {
-        wrapper: wrapper(mockClient),
-      });
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(result.current.data).toEqual(mockData);
-      expect(mockClient.queryTracesRaw).toHaveBeenCalledWith(
-        dataSource.params,
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
-      );
-    });
-
-    it("calls queryTracesAggregate with TraceAggregateQuery params", async () => {
+  describe("query (KopaiQuery dispatcher)", () => {
+    it("calls client.query with the KopaiQuery payload", async () => {
       const mockData = { data: [{ n: 42 }] };
-      mockClient.queryTracesAggregate.mockResolvedValue(mockData);
+      mockClient.query.mockResolvedValue(mockData);
 
       const dataSource: DataSource = {
-        method: "queryTracesAggregate",
+        method: "query",
         params: {
           signal: "traces",
           mode: "aggregate",
           measures: [{ op: "COUNT", as: "n" }],
-          timeDimension: relativeTime,
+          timeDimension: { type: "relative", lookback: "2h" },
           output: { type: "summary" },
         },
       };
@@ -376,133 +334,7 @@ describe("useKopaiData", () => {
       });
 
       expect(result.current.data).toEqual(mockData);
-      expect(mockClient.queryTracesAggregate).toHaveBeenCalledWith(
-        dataSource.params,
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
-      );
-    });
-
-    it("calls queryLogsRaw with LogRawQuery params", async () => {
-      const mockData = {
-        data: [{ body: "log1" }],
-        nextCursor: null,
-      };
-      mockClient.queryLogsRaw.mockResolvedValue(mockData);
-
-      const dataSource: DataSource = {
-        method: "queryLogsRaw",
-        params: {
-          signal: "logs",
-          mode: "raw",
-          dimensions: ["Timestamp", "Body"],
-          timeDimension: relativeTime,
-        },
-      };
-
-      const { result } = renderHook(() => useKopaiData(dataSource), {
-        wrapper: wrapper(mockClient),
-      });
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(result.current.data).toEqual(mockData);
-      expect(mockClient.queryLogsRaw).toHaveBeenCalledWith(
-        dataSource.params,
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
-      );
-    });
-
-    it("calls queryLogsAggregate with LogAggregateQuery params", async () => {
-      const mockData = { data: [{ n: 7 }] };
-      mockClient.queryLogsAggregate.mockResolvedValue(mockData);
-
-      const dataSource: DataSource = {
-        method: "queryLogsAggregate",
-        params: {
-          signal: "logs",
-          mode: "aggregate",
-          measures: [{ op: "COUNT", as: "n" }],
-          timeDimension: relativeTime,
-          output: { type: "summary" },
-        },
-      };
-
-      const { result } = renderHook(() => useKopaiData(dataSource), {
-        wrapper: wrapper(mockClient),
-      });
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(result.current.data).toEqual(mockData);
-      expect(mockClient.queryLogsAggregate).toHaveBeenCalledWith(
-        dataSource.params,
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
-      );
-    });
-
-    it("calls queryMetricsRaw with MetricRawQuery params", async () => {
-      const mockData = {
-        data: [{ metricName: "cpu" }],
-        nextCursor: null,
-      };
-      mockClient.queryMetricsRaw.mockResolvedValue(mockData);
-
-      const dataSource: DataSource = {
-        method: "queryMetricsRaw",
-        params: {
-          signal: "metrics",
-          mode: "raw",
-          dimensions: ["MetricName", "Value"],
-          timeDimension: relativeTime,
-        },
-      };
-
-      const { result } = renderHook(() => useKopaiData(dataSource), {
-        wrapper: wrapper(mockClient),
-      });
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(result.current.data).toEqual(mockData);
-      expect(mockClient.queryMetricsRaw).toHaveBeenCalledWith(
-        dataSource.params,
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
-      );
-    });
-
-    it("calls queryMetricsAggregate with MetricAggregateQuery params", async () => {
-      const mockData = {
-        data: [{ bucket_start: "2024-01-01T00:00:00.000Z", n: 1 }],
-      };
-      mockClient.queryMetricsAggregate.mockResolvedValue(mockData);
-
-      const dataSource: DataSource = {
-        method: "queryMetricsAggregate",
-        params: {
-          signal: "metrics",
-          mode: "aggregate",
-          measures: [{ op: "COUNT", as: "n" }],
-          timeDimension: relativeTime,
-          output: { type: "timeSeries", granularity: "5m" },
-        },
-      };
-
-      const { result } = renderHook(() => useKopaiData(dataSource), {
-        wrapper: wrapper(mockClient),
-      });
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(result.current.data).toEqual(mockData);
-      expect(mockClient.queryMetricsAggregate).toHaveBeenCalledWith(
+      expect(mockClient.query).toHaveBeenCalledWith(
         dataSource.params,
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       );

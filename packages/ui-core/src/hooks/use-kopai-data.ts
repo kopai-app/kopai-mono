@@ -52,18 +52,8 @@ function fetchForDataSource(
         >[0],
         { signal }
       );
-    case "queryTracesRaw":
-      return client.queryTracesRaw(dataSource.params, { signal });
-    case "queryTracesAggregate":
-      return client.queryTracesAggregate(dataSource.params, { signal });
-    case "queryLogsRaw":
-      return client.queryLogsRaw(dataSource.params, { signal });
-    case "queryLogsAggregate":
-      return client.queryLogsAggregate(dataSource.params, { signal });
-    case "queryMetricsRaw":
-      return client.queryMetricsRaw(dataSource.params, { signal });
-    case "queryMetricsAggregate":
-      return client.queryMetricsAggregate(dataSource.params, { signal });
+    case "query":
+      return client.query(dataSource.params, { signal });
     default: {
       const exhaustiveCheck: never = dataSource;
       throw new Error(
