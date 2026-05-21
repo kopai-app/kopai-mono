@@ -184,28 +184,15 @@ export type ResolvedColumn =
   | { kind: "semconvAttr"; container: SemconvContainer; key: string }
   | { kind: "attribute"; container: string; key: string };
 
-// Top-level enum of structural columns per signal (mirrors STRUCTURAL
-// arrays inside kopai-query.ts). We re-derive from the exported enums
-// rather than duplicating the literal arrays.
-const TRACE_STRUCTURAL_SET = new Set<string>();
-const LOG_STRUCTURAL_SET = new Set<string>();
-const METRIC_STRUCTURAL_SET = new Set<string>();
-
-// Pull options out of the exported enum schemas. Structural cols are
-// PascalCase; semconv attrs are dotted-lowercase. Discriminate by case
-// of the first character (cheap and unambiguous given the convention).
-// Use a regex test instead of indexing `v[0]` — indexing returns
-// `string | undefined`, which would force a non-null assertion.
+// Structural cols are PascalCase; semconv attrs are dotted-lowercase.
+// Discriminate by case of the first character.
 const STARTS_WITH_UPPER = /^[A-Z]/;
-for (const v of TraceColumn.options) {
-  if (STARTS_WITH_UPPER.test(v)) TRACE_STRUCTURAL_SET.add(v);
-}
-for (const v of LogColumn.options) {
-  if (STARTS_WITH_UPPER.test(v)) LOG_STRUCTURAL_SET.add(v);
-}
-for (const v of MetricColumn.options) {
-  if (STARTS_WITH_UPPER.test(v)) METRIC_STRUCTURAL_SET.add(v);
-}
+const structuralSet = (options: readonly string[]): Set<string> =>
+  new Set(options.filter((v) => STARTS_WITH_UPPER.test(v)));
+
+const TRACE_STRUCTURAL_SET = structuralSet(TraceColumn.options);
+const LOG_STRUCTURAL_SET = structuralSet(LogColumn.options);
+const METRIC_STRUCTURAL_SET = structuralSet(MetricColumn.options);
 
 // Semconv → storage location.
 // For now: every semconv attribute is stored inside ResourceAttributes
@@ -447,10 +434,7 @@ export function findMetricTypePin(
           reason: `v1 supports only a single MetricType per query (got ${String(f.values.length)} values).`,
         };
       }
-      const v = f.values[0];
-      if (v === undefined) {
-        return { kind: "ambiguous", reason: "Empty MetricType values." };
-      }
+      const v = f.values[0]!;
       if (typeof v !== "string") {
         return {
           kind: "ambiguous",

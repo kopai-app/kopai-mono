@@ -35,9 +35,12 @@ const ISODateString = z
 
 const Alias = z
   .string()
-  .min(1)
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, {
+    error:
+      "Alias must start with a letter or underscore and contain only letters, digits, and underscores — e.g. p95_duration, error_count, requests_per_second.",
+  })
   .describe(
-    "Alias for the measure in result rows. Must be unique within the query. Use snake_case — e.g. p95_duration, error_count, requests_per_second."
+    "Alias for the measure in result rows. Must be unique within the query and match /^[A-Za-z_][A-Za-z0-9_]*$/. Use snake_case — e.g. p95_duration, error_count, requests_per_second."
   );
 
 export const Signal = z.enum(["traces", "logs", "metrics"]);
@@ -1102,10 +1105,8 @@ export type MetricFilterExpr = FilterExpr<MetricColumnRef>;
 // percentile/rate from regular aggregations without re-typing.
 export type NumericOp = z.infer<typeof NumericOp>;
 
-// MetricType literal — the 5 metric-storage tables. Mirrored from
-// telemetry-datasource.ts to keep this module self-contained, but the
-// two definitions MUST match (enforced by an `assertMetricType` helper
-// in kopai-query-compiler.ts that's the single runtime gate).
+// MetricType literal — must stay in sync with telemetry-datasource so
+// backends can use either type as a single source of metric storage.
 export type MetricType =
   | "Gauge"
   | "Sum"

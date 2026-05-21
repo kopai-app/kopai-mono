@@ -154,6 +154,13 @@ function escapeJsonPath(key: string): string {
   return `$."${key.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
+// Escapes user input for use inside a SQLite LIKE pattern with ESCAPE
+// '\'. Without this, literal `%` and `_` in the needle act as
+// wildcards (e.g. contains("50%") would match "5" + anything).
+function escapeLikePattern(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 // Type guard for ColumnRef. The per-signal column refs (TraceColumnRef,
 // LogColumnRef, MetricColumnRef) all share the structural shape
 // `string | { container: string; key: string }`. When iterating over
@@ -239,30 +246,29 @@ function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
       return { sql: `${col.sql} ${opSql} ?`, params: [...col.params, param] };
     }
 
-    // TODO: escape `%`, `_`, `\` in f.value before interpolating
-    // below — a needle "50%" currently matches "5" + anything. Fix:
-    // `... LIKE ? ESCAPE '\\'`. Same gap exists in startsWith/endsWith.
     case "contains":
       // LIKE (not INSTR) matches the ClickHouse backend's ILIKE:
-      // SQLite's default LIKE is case-insensitive for ASCII.
+      // SQLite's default LIKE is case-insensitive for ASCII. We escape
+      // `%`, `_`, `\` in the needle and declare `\` as the escape
+      // character so user input is matched literally.
       return {
-        sql: `${col.sql} LIKE ?`,
-        params: [...col.params, `%${f.value}%`],
+        sql: `${col.sql} LIKE ? ESCAPE '\\'`,
+        params: [...col.params, `%${escapeLikePattern(f.value)}%`],
       };
     case "notContains":
       return {
-        sql: `${col.sql} NOT LIKE ?`,
-        params: [...col.params, `%${f.value}%`],
+        sql: `${col.sql} NOT LIKE ? ESCAPE '\\'`,
+        params: [...col.params, `%${escapeLikePattern(f.value)}%`],
       };
     case "startsWith":
       return {
-        sql: `${col.sql} LIKE ?`,
-        params: [...col.params, `${f.value}%`],
+        sql: `${col.sql} LIKE ? ESCAPE '\\'`,
+        params: [...col.params, `${escapeLikePattern(f.value)}%`],
       };
     case "endsWith":
       return {
-        sql: `${col.sql} LIKE ?`,
-        params: [...col.params, `%${f.value}`],
+        sql: `${col.sql} LIKE ? ESCAPE '\\'`,
+        params: [...col.params, `%${escapeLikePattern(f.value)}`],
       };
 
     case "gt":
@@ -380,16 +386,20 @@ interface RawPage {
   resolvedMetricType: datasource.MetricType | null;
 }
 
+interface CompiledRaw {
+  sql: string;
+  params: SqlParam[];
+  signal: Signal;
+  limit: number;
+  resolvedMetricType: datasource.MetricType | null;
+}
+
 /**
- * Shared SQL build + fetch for raw queries across all three signals.
- * Returns the still-raw rows plus the resolved metric type (for the
- * metrics row mapper). The per-signal narrow runners below own the
- * mapping step so each has a concrete return shape.
+ * Pure SQL+params build for a raw query. Split from the executor so
+ * tests can assert on emitted SQL without a live DB connection (the
+ * public entrypoint is `buildKopaiSql`).
  */
-function runRawCore(
-  conn: DatabaseSync,
-  q: KopaiQuery & { mode: "raw" }
-): RawPage {
+function compileRawSql(q: KopaiQuery & { mode: "raw" }): CompiledRaw {
   const signal = q.signal;
   const filters: AnyFilterExpr[] = q.filters ?? [];
 
@@ -464,23 +474,44 @@ function runRawCore(
     limit + 1,
   ];
 
-  const stmt = conn.prepare(sql);
-  stmt.setReadBigInts(true);
-  const rawRows = stmt.all(...params);
+  return { sql, params, signal, limit, resolvedMetricType };
+}
 
-  const hasMore = rawRows.length > limit;
-  const pageRows = hasMore ? rawRows.slice(0, limit) : rawRows;
+/**
+ * Shared SQL build + fetch for raw queries across all three signals.
+ * Returns the still-raw rows plus the resolved metric type (for the
+ * metrics row mapper). The per-signal narrow runners below own the
+ * mapping step so each has a concrete return shape.
+ */
+function runRawCore(
+  conn: DatabaseSync,
+  q: KopaiQuery & { mode: "raw" }
+): RawPage {
+  const compiled = compileRawSql(q);
+  const stmt = conn.prepare(compiled.sql);
+  stmt.setReadBigInts(true);
+  const rawRows = stmt.all(...compiled.params);
+
+  const hasMore = rawRows.length > compiled.limit;
+  const pageRows = hasMore ? rawRows.slice(0, compiled.limit) : rawRows;
   const lastRow = pageRows[pageRows.length - 1];
 
   let nextCursor: string | null = null;
   if (hasMore && lastRow) {
-    const ts = signal === "metrics" ? lastRow.TimeUnix : lastRow.Timestamp;
+    const ts =
+      compiled.signal === "metrics" ? lastRow.TimeUnix : lastRow.Timestamp;
     const id =
-      signal === "traces" ? String(lastRow.SpanId) : String(lastRow._rowid);
+      compiled.signal === "traces"
+        ? String(lastRow.SpanId)
+        : String(lastRow._rowid);
     nextCursor = `${ts}|${id}`;
   }
 
-  return { rows: pageRows, nextCursor, resolvedMetricType };
+  return {
+    rows: pageRows,
+    nextCursor,
+    resolvedMetricType: compiled.resolvedMetricType,
+  };
 }
 
 export function runRawTraces(
@@ -539,10 +570,22 @@ export interface AggregateResult {
   data: kopaiQueryNs.KopaiAggregateRow[];
 }
 
-export function runAggregate(
-  conn: DatabaseSync,
+interface CompiledAggregate {
+  sql: string;
+  params: SqlParam[];
+  dimAliases: { alias: string; key: string }[];
+  measureAliases: string[];
+  isTimeSeries: boolean;
+}
+
+/**
+ * Pure SQL+params build for an aggregate query. Tests assert on the
+ * emitted SQL via `buildKopaiSql`; runAggregate calls this and then
+ * executes + post-processes the rows.
+ */
+function compileAggregateSql(
   q: KopaiQuery & { mode: "aggregate" }
-): AggregateResult {
+): CompiledAggregate {
   const signal = q.signal;
   const filters: AnyFilterExpr[] = q.filters ?? [];
 
@@ -561,7 +604,9 @@ export function runAggregate(
 
   const win = kopaiQueryCompiler.compileTimeWindow(q.timeDimension);
   const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
-  const windowSeconds = Number((win.endNs - win.startNs) / 1_000_000_000n) || 1;
+  // BigInt division here would truncate sub-second components and skew
+  // per-second rates (THROUGHPUT, SUM/denom, etc.). Convert to Number first.
+  const windowSeconds = Math.max(Number(win.endNs - win.startNs) / 1e9, 1);
 
   const granularitySeconds =
     q.output.type === "timeSeries"
@@ -611,8 +656,9 @@ export function runAggregate(
     }
     if (m.op === "ERROR_RATE") {
       measureSelectParts.push(
-        `AVG(CASE WHEN StatusCode = '${kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL}' THEN 1.0 ELSE 0.0 END) AS ${quoteAlias(m.as)}`
+        `AVG(CASE WHEN StatusCode = ? THEN 1.0 ELSE 0.0 END) AS ${quoteAlias(m.as)}`
       );
+      measureSelectParams.push(kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL);
       continue;
     }
     if (m.op === "THROUGHPUT") {
@@ -722,28 +768,55 @@ export function runAggregate(
     ...limitParams,
   ];
 
-  const stmt = conn.prepare(sql);
+  return { sql, params, dimAliases, measureAliases, isTimeSeries };
+}
+
+export function runAggregate(
+  conn: DatabaseSync,
+  q: KopaiQuery & { mode: "aggregate" }
+): AggregateResult {
+  const compiled = compileAggregateSql(q);
+
+  const stmt = conn.prepare(compiled.sql);
   stmt.setReadBigInts(true);
-  const rawRows = stmt.all(...params);
+  const rawRows = stmt.all(...compiled.params);
 
   const data: kopaiQueryNs.KopaiAggregateRow[] = rawRows.map((row) => {
     const out: kopaiQueryNs.KopaiAggregateRow = {};
-    if (isTimeSeries) {
+    if (compiled.isTimeSeries) {
       const ns = row.bucket_start_ns;
       const ms =
         typeof ns === "bigint" ? Number(ns / 1_000_000n) : Number(ns) / 1e6;
       out.bucket_start = new Date(ms).toISOString();
     }
-    for (const dim of dimAliases) {
+    for (const dim of compiled.dimAliases) {
       out[dim.key] = normalizeCellValue(row[dim.alias]);
     }
-    for (const alias of measureAliases) {
+    for (const alias of compiled.measureAliases) {
       out[alias] = normalizeCellValue(row[alias]);
     }
     return out;
   });
 
   return { data };
+}
+
+/**
+ * Top-level dispatcher: returns the SQL string + positional params that
+ * would be prepared for `q`, without touching a connection. Tests use
+ * this to assert on emitted SQL; production paths call the runners,
+ * which call this internally.
+ */
+export function buildKopaiSql(q: KopaiQuery): {
+  sql: string;
+  params: SqlParam[];
+} {
+  if (q.mode === "raw") {
+    const compiled = compileRawSql(q);
+    return { sql: compiled.sql, params: compiled.params };
+  }
+  const compiled = compileAggregateSql(q);
+  return { sql: compiled.sql, params: compiled.params };
 }
 
 function normalizeCellValue(v: unknown): string | number | null {

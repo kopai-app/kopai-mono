@@ -52,59 +52,37 @@ function toColumnRef(value: unknown): ColumnRefStructural {
 
 // ---------------------------------------------------------------------------
 // Per-signal column references that exist as top-level columns in ClickHouse.
-// "ServiceName" is exposed via "service.name" semconv but stored as its own
-// top-level column. We special-case it so resolved attribute lookups hit the
-// fast column instead of ResourceAttributes['service.name'].
+// Derived from core's per-signal structural enums so a new structural column
+// in @kopai/core is picked up automatically. "ServiceName" is an additional
+// override: it isn't exposed in the public TraceColumn/LogColumn/MetricColumn
+// enum (callers see it as the "service.name" semconv), but it's a real
+// top-level column in CH storage, so we add it explicitly so resolved
+// attribute lookups hit the fast column instead of ResourceAttributes[...].
 // ---------------------------------------------------------------------------
 
+const SERVICE_NAME_COLUMN = "ServiceName";
+
 const TRACE_TOPLEVEL_COLUMNS = new Set<string>([
-  "Timestamp",
-  "TraceId",
-  "SpanId",
-  "ParentSpanId",
-  "TraceState",
-  "SpanName",
-  "SpanKind",
-  "ServiceName",
-  "ScopeName",
-  "ScopeVersion",
-  "Duration",
-  "StatusCode",
-  "StatusMessage",
+  ...kopaiQueryCompiler.allStructuralColumns("traces"),
+  SERVICE_NAME_COLUMN,
 ]);
 
 const LOG_TOPLEVEL_COLUMNS = new Set<string>([
-  "Timestamp",
-  "TraceId",
-  "SpanId",
-  "TraceFlags",
-  "SeverityText",
-  "SeverityNumber",
-  "ServiceName",
-  "Body",
-  "EventName",
-  "ResourceSchemaUrl",
-  "ScopeSchemaUrl",
-  "ScopeName",
-  "ScopeVersion",
+  ...kopaiQueryCompiler.allStructuralColumns("logs"),
+  SERVICE_NAME_COLUMN,
 ]);
 
-const METRIC_TOPLEVEL_COLUMNS_COMMON = new Set<string>([
-  "TimeUnix",
-  "StartTimeUnix",
-  "ServiceName",
-  "MetricName",
-  "MetricDescription",
-  "MetricUnit",
-  "ScopeName",
-  "ScopeVersion",
-  "ScopeSchemaUrl",
-  "ResourceSchemaUrl",
+// All metric structural columns (common + type-specific). The validator's
+// MetricType pin guarantees a single target table; we trust that the caller
+// only references columns that exist on the chosen table.
+const METRIC_TOPLEVEL_COLUMNS = new Set<string>([
+  ...kopaiQueryCompiler.allStructuralColumns("metrics"),
+  SERVICE_NAME_COLUMN,
 ]);
 
 // Maps semconv keys to a top-level column when one exists.
 const TOPLEVEL_FOR_SEMCONV: Record<string, string> = {
-  "service.name": "ServiceName",
+  "service.name": SERVICE_NAME_COLUMN,
 };
 
 const METRIC_TABLE_BY_TYPE = kopaiQueryCompiler.METRIC_TYPE_TO_TABLE;
@@ -152,15 +130,8 @@ function resolveRefSql(signal: Signal, ref: ColumnRef): ResolvedRef {
       ? TRACE_TOPLEVEL_COLUMNS
       : signal === "logs"
         ? LOG_TOPLEVEL_COLUMNS
-        : METRIC_TOPLEVEL_COLUMNS_COMMON;
+        : METRIC_TOPLEVEL_COLUMNS;
   if (topLevelSet.has(ref)) {
-    return { sql: `\`${ref}\``, projectionKey: ref, isString: false };
-  }
-  // metric type-specific top-level cols (Value, Sum, Count, Min, Max, etc.) —
-  // the validator ensured the MetricType filter pins the table, so we trust
-  // that the caller knows the column exists. Fall through to top-level.
-  // We detect "structural-shaped" names by leading uppercase letter.
-  if (ref[0] && ref[0] >= "A" && ref[0] <= "Z") {
     return { sql: `\`${ref}\``, projectionKey: ref, isString: false };
   }
   // semconv attribute — check the override map for ServiceName-style shortcuts.
@@ -193,9 +164,13 @@ function quoteLiteral(s: string): string {
 function escapeIdent(name: string): string {
   // ClickHouse backtick-quoted identifiers — accept any printable chars in
   // our controlled namespace (alpha/num/underscore/dot/dash). The set is
-  // intentionally narrow; aliases come from KopaiQuery zod-validated input.
+  // intentionally narrow; aliases come from KopaiQuery zod-validated input
+  // (Alias regex is even stricter), so this throw is defensive. Surface as
+  // a validation error so the API maps it to 400, not 500.
   if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(name)) {
-    throw new Error(`Refusing unsafe SQL identifier: ${JSON.stringify(name)}`);
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      `Refusing unsafe SQL identifier: ${JSON.stringify(name)}`
+    );
   }
   return `\`${name}\``;
 }
@@ -233,10 +208,18 @@ function compileFilter(
     case "eq":
     case "neq": {
       if (typeof f.value === "boolean") {
-        const v = f.value ? "true" : "false";
-        const p = nextParam(ctx, v, "b");
         const eq = f.op === "eq" ? "=" : "!=";
-        return `${col.sql} ${eq} {${p}:String}`;
+        if (col.isString) {
+          // Attribute Map() values are stored as String — bind a string
+          // literal so the equality matches stringified booleans.
+          const v = f.value ? "true" : "false";
+          const p = nextParam(ctx, v, "b");
+          return `${col.sql} ${eq} {${p}:String}`;
+        }
+        // Top-level Bool column (e.g. IsMonotonic) — bind as :Bool so CH
+        // doesn't have to coerce a string literal.
+        const p = nextParam(ctx, f.value, "b");
+        return `${col.sql} ${eq} {${p}:Bool}`;
       }
       if (typeof f.value === "number") {
         const numCol = numericCast(col);
@@ -313,10 +296,9 @@ function escapeLikePattern(text: string): string {
 
 function compileTimeRange(
   signal: Signal,
-  td: KopaiQuery["timeDimension"],
+  win: kopaiQueryCompiler.CompiledTimeWindow,
   ctx: ParamCtx
 ): string {
-  const win = kopaiQueryCompiler.compileTimeWindow(td);
   const col = kopaiQueryCompiler.timeColumnForSignal(signal);
   const lo = nextParam(ctx, nanosToDateTime64(win.startNs.toString()), "tsLo");
   const hi = nextParam(ctx, nanosToDateTime64(win.endNs.toString()), "tsHi");
@@ -403,14 +385,20 @@ function compileMeasure(
   signal: Signal,
   m: MeasureExprShape,
   bucketSeconds: number | null,
-  windowSeconds: number
+  windowSeconds: number,
+  ctx: ParamCtx
 ): string {
   const alias = escapeIdent(m.as);
   if (m.op === "COUNT") {
     return `count() AS ${alias}`;
   }
   if (m.op === "ERROR_RATE") {
-    return `avg(if(StatusCode = '${kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL}', 1, 0)) AS ${alias}`;
+    const p = nextParam(
+      ctx,
+      kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL,
+      "errStatus"
+    );
+    return `avg(if(StatusCode = {${p}:String}, 1, 0)) AS ${alias}`;
   }
   if (m.op === "THROUGHPUT") {
     const denom = bucketSeconds ?? windowSeconds;
@@ -454,8 +442,9 @@ function compileMeasure(
 // Window seconds (summary/throughput denominator)
 // ---------------------------------------------------------------------------
 
-function windowSecondsFromTimeDim(td: KopaiQuery["timeDimension"]): number {
-  const win = kopaiQueryCompiler.compileTimeWindow(td);
+function windowSecondsFromWindow(
+  win: kopaiQueryCompiler.CompiledTimeWindow
+): number {
   const diffNs = win.endNs - win.startNs;
   const seconds = Number(diffNs) / 1e9;
   return Math.max(seconds, 1);
@@ -519,8 +508,9 @@ function buildTraceRaw(q: TraceRawQuery): {
   params: Record<string, unknown>;
 } {
   const ctx = newParamCtx();
+  const win = kopaiQueryCompiler.compileTimeWindow(q.timeDimension);
   const conds: string[] = [];
-  conds.push(compileTimeRange("traces", q.timeDimension, ctx));
+  conds.push(compileTimeRange("traces", win, ctx));
 
   const filterSql = compileFilters("traces", q.filters, ctx);
   if (filterSql) conds.push(filterSql);
@@ -586,8 +576,9 @@ function buildLogRaw(q: LogRawQuery): {
   params: Record<string, unknown>;
 } {
   const ctx = newParamCtx();
+  const win = kopaiQueryCompiler.compileTimeWindow(q.timeDimension);
   const conds: string[] = [];
-  conds.push(compileTimeRange("logs", q.timeDimension, ctx));
+  conds.push(compileTimeRange("logs", win, ctx));
 
   const filterSql = compileFilters("logs", q.filters, ctx);
   if (filterSql) conds.push(filterSql);
@@ -707,8 +698,9 @@ function buildMetricRaw(q: MetricRawQuery): {
   ];
 
   const ctx = newParamCtx();
+  const win = kopaiQueryCompiler.compileTimeWindow(q.timeDimension);
   const conds: string[] = [];
-  conds.push(compileTimeRange("metrics", q.timeDimension, ctx));
+  conds.push(compileTimeRange("metrics", win, ctx));
 
   const stripped = stripMetricTypeFilter(q.filters);
   const filterSql = compileFilters("metrics", stripped, ctx);
@@ -801,8 +793,12 @@ function buildAggregateSql(args: {
 }): { sql: string; params: Record<string, unknown> } {
   const { signal, table, q } = args;
   const ctx = newParamCtx();
+  // Compute the time window once: both the WHERE-clause range and the
+  // per-window RATE_*/THROUGHPUT denominator derive from the same
+  // `now`. Recomputing would let the two disagree by sub-ms.
+  const win = kopaiQueryCompiler.compileTimeWindow(q.timeDimension);
   const conds: string[] = [];
-  conds.push(compileTimeRange(signal, q.timeDimension, ctx));
+  conds.push(compileTimeRange(signal, win, ctx));
   const filters = args.stripFilters
     ? stripMetricTypeFilter(q.filters)
     : q.filters;
@@ -814,8 +810,7 @@ function buildAggregateSql(args: {
     q.output.type === "timeSeries"
       ? kopaiQueryCompiler.granularityToSeconds(q.output.granularity)
       : null;
-  const isTimeSeries = bucketSeconds !== null;
-  const windowSeconds = windowSecondsFromTimeDim(q.timeDimension);
+  const windowSeconds = windowSecondsFromWindow(win);
 
   // dimensions
   const dims: unknown[] = q.dimensions ?? [];
@@ -827,10 +822,7 @@ function buildAggregateSql(args: {
     selectDimSql.push(`${r.sql} AS ${alias}`);
     groupBySql.push(r.sql);
   }
-  if (isTimeSeries) {
-    if (bucketSeconds === null) {
-      throw new Error("Internal: timeSeries output requires bucketSeconds");
-    }
+  if (bucketSeconds !== null) {
     const tsCol = kopaiQueryCompiler.timeColumnForSignal(signal);
     const bucketExpr = `toStartOfInterval(${tsCol}, INTERVAL ${String(bucketSeconds)} SECOND)`;
     selectDimSql.push(`${bucketExpr} AS bucket_start`);
@@ -839,7 +831,7 @@ function buildAggregateSql(args: {
 
   // measures
   const measureSql = q.measures.map((m) =>
-    compileMeasure(signal, m, bucketSeconds, windowSeconds)
+    compileMeasure(signal, m, bucketSeconds, windowSeconds, ctx)
   );
 
   const selectAll = [...selectDimSql, ...measureSql];
