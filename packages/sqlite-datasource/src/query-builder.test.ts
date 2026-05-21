@@ -580,7 +580,7 @@ describe("cursor pagination (sqlite)", () => {
         startTime: "2024-01-01T00:00:00.000Z",
         endTime: "2024-01-02T00:00:00.000Z",
       },
-      cursor: "1704067200000000000|span-abc",
+      cursor: "1704067200000000000:span-abc",
     });
     expect(sql).toContain(`(Timestamp < ? OR (Timestamp = ? AND SpanId < ?))`);
     expect(params).toContain(1704067200000000000n);
@@ -597,7 +597,7 @@ describe("cursor pagination (sqlite)", () => {
         endTime: "2024-01-02T00:00:00.000Z",
       },
       orderBy: [{ type: "dimension", column: "Timestamp", direction: "asc" }],
-      cursor: "1704067200000000000|span-abc",
+      cursor: "1704067200000000000:span-abc",
     });
     expect(sql).toContain(`(Timestamp > ? OR (Timestamp = ? AND SpanId > ?))`);
   });
@@ -611,7 +611,7 @@ describe("cursor pagination (sqlite)", () => {
         startTime: "2024-01-01T00:00:00.000Z",
         endTime: "2024-01-02T00:00:00.000Z",
       },
-      cursor: "1704067200000000000|42",
+      cursor: "1704067200000000000:42",
     });
     expect(sql).toContain(`(Timestamp < ? OR (Timestamp = ? AND rowid < ?))`);
     expect(params).toContain(42);
@@ -627,12 +627,12 @@ describe("cursor pagination (sqlite)", () => {
           startTime: "2024-01-01T00:00:00.000Z",
           endTime: "2024-01-02T00:00:00.000Z",
         },
-        cursor: "1704067200000000000|not-an-int",
+        cursor: "1704067200000000000:not-an-int",
       })
     ).toThrow(/Invalid cursor id/);
   });
 
-  it("rejects cursor missing the '|' separator", () => {
+  it("rejects cursor missing the separator", () => {
     expect(() =>
       buildKopaiSql({
         signal: "traces",
@@ -642,8 +642,28 @@ describe("cursor pagination (sqlite)", () => {
           startTime: "2024-01-01T00:00:00.000Z",
           endTime: "2024-01-02T00:00:00.000Z",
         },
-        cursor: "no-pipe-here",
+        cursor: "no-separator-here",
       })
     ).toThrow(/Invalid cursor format/);
+  });
+
+  // Both backends round-trip their own cursors, but the cursor field is part
+  // of the public KopaiQuery contract — the format must be the same shape on
+  // either side so a future shared integration test (or a caller debugging
+  // cross-backend) doesn't trip over a backend-specific separator.
+  it("accepts the canonical ':' separator (parity with clickhouse)", () => {
+    const { sql, params } = buildKopaiSql({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: {
+        type: "absolute",
+        startTime: "2024-01-01T00:00:00.000Z",
+        endTime: "2024-01-02T00:00:00.000Z",
+      },
+      cursor: "1704067200000000000:span-abc",
+    });
+    expect(sql).toContain(`(Timestamp < ? OR (Timestamp = ? AND SpanId < ?))`);
+    expect(params).toContain(1704067200000000000n);
+    expect(params).toContain("span-abc");
   });
 });

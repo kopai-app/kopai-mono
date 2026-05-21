@@ -835,7 +835,7 @@ const buildOrderExpr = (columnRef: z.ZodType) =>
       }),
     ])
     .describe(
-      "Sort key. Either a column (must also appear in `dimensions`) or a measure alias."
+      "Sort key. In aggregate mode a dimension column must also appear in `dimensions`, and a measure alias must match one declared in `measures`. In raw mode any structural column is sortable (the backend returns the full denormalized row regardless of `dimensions`); measure-typed sort is not allowed."
     );
 
 const TraceOrderExpr = buildOrderExpr(TraceColumnRef);

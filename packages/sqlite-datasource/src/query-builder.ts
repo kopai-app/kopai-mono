@@ -323,14 +323,17 @@ function buildCursorWhere(
   cursor: string,
   direction: "asc" | "desc"
 ): SqlFragment {
-  const pipeIdx = cursor.indexOf("|");
-  if (pipeIdx === -1) {
+  // Canonical "<timestamp-nanos>:<id>" matches the clickhouse backend so
+  // cursors round-trip identically regardless of which datasource served
+  // the previous page.
+  const sepIdx = cursor.indexOf(":");
+  if (sepIdx === -1) {
     throw new kopaiQueryCompiler.KopaiQueryValidationError(
-      `Invalid cursor format "${cursor}". Expected "<timestamp>|<id>".`
+      `Invalid cursor format "${cursor}". Expected "<timestamp>:<id>".`
     );
   }
-  const tsStr = cursor.slice(0, pipeIdx);
-  const idStr = cursor.slice(pipeIdx + 1);
+  const tsStr = cursor.slice(0, sepIdx);
+  const idStr = cursor.slice(sepIdx + 1);
   const tsNs = BigInt(tsStr);
   const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
 
@@ -504,7 +507,7 @@ function runRawCore(
       compiled.signal === "traces"
         ? String(lastRow.SpanId)
         : String(lastRow._rowid);
-    nextCursor = `${ts}|${id}`;
+    nextCursor = `${ts}:${id}`;
   }
 
   return {

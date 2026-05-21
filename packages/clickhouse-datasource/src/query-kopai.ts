@@ -324,7 +324,9 @@ function compileOrderByRaw(
   const parts: string[] = [];
   for (const o of orderBy) {
     if (o.type === "measure") {
-      throw new Error("Raw mode does not allow measure-typed orderBy");
+      throw new kopaiQueryCompiler.KopaiQueryValidationError(
+        "Raw mode does not allow measure-typed orderBy."
+      );
     }
     const r = resolveRefSql(signal, toColumnRef(o.column));
     sortKeySqls.push(r.sql);
@@ -462,12 +464,14 @@ export interface RawCursorParts {
 export function parseCursor(cursor: string): RawCursorParts {
   const colon = cursor.indexOf(":");
   if (colon === -1) {
-    throw new Error("Invalid cursor format: expected '{timestamp}:{id}'");
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      "Invalid cursor format: expected '{timestamp}:{id}'"
+    );
   }
   const ts = cursor.slice(0, colon);
   const id = cursor.slice(colon + 1);
   if (!/^\d+$/.test(ts)) {
-    throw new Error(
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
       `Invalid cursor timestamp: expected numeric string, got '${ts}'`
     );
   }
@@ -687,7 +691,9 @@ function buildMetricRaw(q: MetricRawQuery): {
   const metricType = metricTypeFromQuery(q);
   const table = METRIC_TABLE_BY_TYPE[metricType];
   if (!table) {
-    throw new Error(`Unknown metric type: ${metricType}`);
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      `Unknown metric type: ${metricType}`
+    );
   }
   const typeSpecific = METRIC_TYPE_SPECIFIC_COLS[metricType] ?? [];
   const includeExemplars = metricType !== "Summary";
@@ -775,7 +781,9 @@ function buildMetricAggregate(q: MetricAggregateQuery): {
   const metricType = metricTypeFromQuery(q);
   const table = METRIC_TABLE_BY_TYPE[metricType];
   if (!table) {
-    throw new Error(`Unknown metric type: ${metricType}`);
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      `Unknown metric type: ${metricType}`
+    );
   }
   return buildAggregateSql({
     signal: "metrics",
@@ -877,6 +885,19 @@ ${limitSql}`.trim();
 // Helpers
 // ---------------------------------------------------------------------------
 
+function containsMetricTypeFilter(filters: AnyFilterExpr[]): boolean {
+  for (const f of filters) {
+    if ("and" in f) {
+      if (containsMetricTypeFilter(f.and)) return true;
+    } else if ("or" in f) {
+      if (containsMetricTypeFilter(f.or)) return true;
+    } else if (f.column === "MetricType") {
+      return true;
+    }
+  }
+  return false;
+}
+
 function stripMetricTypeFilter(
   filters: AnyFilterExpr[] | undefined
 ): AnyFilterExpr[] | undefined {
@@ -889,8 +910,16 @@ function stripMetricTypeFilter(
         out.push({ and: inner });
       }
     } else if ("or" in f) {
-      // OR groups can't be partially stripped without changing semantics, so
-      // pass through untouched. MetricType pinning lives in top-level AND only.
+      // OR groups can't be partially stripped without changing semantics.
+      // The validator rejects MetricType inside OR as ambiguous, but the
+      // SQL builder is also called directly in tests — duplicate the check
+      // so a bypassed validation can't produce SQL referencing a column
+      // (`MetricType`) that doesn't exist on the per-type metric tables.
+      if (containsMetricTypeFilter(f.or)) {
+        throw new kopaiQueryCompiler.KopaiQueryValidationError(
+          "MetricType filter inside an OR branch is not supported. Place MetricType at the top level (AND)."
+        );
+      }
       out.push(f);
     } else if (
       f.column === "MetricType" &&

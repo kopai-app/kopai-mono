@@ -73,7 +73,13 @@ function parseDurationParts(s: string): { value: bigint; unit: DurationUnit } {
       `Invalid duration "${s}". Expected positive integer + unit (s,m,h,d,w).`
     );
   }
-  return { value: BigInt(m[1]), unit: m[2] };
+  const value = BigInt(m[1]);
+  if (value === 0n) {
+    throw new KopaiQueryValidationError(
+      `Invalid duration "${s}". Expected positive integer + unit (s,m,h,d,w).`
+    );
+  }
+  return { value, unit: m[2] };
 }
 
 export function durationToNanos(s: string): bigint {
@@ -549,28 +555,14 @@ export function validateKopaiQuery(q: KopaiQuery): void {
       }
     }
   } else {
-    // raw mode: orderBy dimension column must be one of dimensions
-    // when an explicit dimensions list is provided. With no dimensions
-    // the server returns the full denormalized row, so every structural
-    // column is reachable in the projection (check is vacuous).
+    // raw mode: backends return the full denormalized row regardless of
+    // `dimensions` (which is only a hint), so any structural column is a
+    // valid orderBy key. Only the measure-typed branch is disallowed.
     if (q.orderBy) {
-      const dimKeys = new Set<string>();
-      if (q.dimensions) {
-        for (const d of q.dimensions) {
-          dimKeys.add(columnRefProjectionKey(d));
-        }
-      }
       for (const o of q.orderBy) {
         if (o.type === "measure") {
           throw new KopaiQueryValidationError(
             "orderBy measure is not allowed in raw mode."
-          );
-        }
-        if (q.dimensions === undefined) continue;
-        const key = projectionKeyOrThrow(o.column, "orderBy column");
-        if (!dimKeys.has(key)) {
-          throw new KopaiQueryValidationError(
-            `orderBy dimension "${key}" must appear in dimensions.`
           );
         }
       }

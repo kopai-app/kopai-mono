@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { kopaiQuery } from "@kopai/core";
+import { kopaiQueryCompiler, type kopaiQuery } from "@kopai/core";
 import { buildKopaiSql } from "./query-kopai.js";
 
 // ---------------------------------------------------------------------------
@@ -445,5 +445,115 @@ describe("buildKopaiSql raw mode without dimensions", () => {
     expect(sql).toContain("Timestamp");
     expect(sql).toContain("SpanId");
     expect(sql).toContain("SpanAttributes");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cursor parsing — errors must surface as KopaiQueryValidationError so the
+// API error handler maps them to 400 (Invalid query) instead of 500
+// (Internal server error). Mirrors the SQLite behaviour for parity.
+// ---------------------------------------------------------------------------
+
+describe("cursor parsing (clickhouse)", () => {
+  const baseTimeDim: kopaiQuery.TraceRawQuery["timeDimension"] = {
+    type: "absolute",
+    startTime: "2024-01-01T00:00:00.000Z",
+    endTime: "2024-01-02T00:00:00.000Z",
+  };
+
+  it("throws KopaiQueryValidationError when separator is missing", () => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: baseTimeDim,
+        cursor: "no-separator-here",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  it("throws KopaiQueryValidationError when timestamp is non-numeric", () => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: baseTimeDim,
+        cursor: "not-a-number:abc",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  it("accepts a well-formed cursor with the ':' separator", () => {
+    const { sql, params } = buildKopaiSql({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: baseTimeDim,
+      cursor: "1704067200000000000:span-abc",
+    });
+    expect(sql).toMatch(
+      /Timestamp < \{curTs_\d+:DateTime64\(9\)\} OR \(Timestamp = \{curTs_\d+:DateTime64\(9\)\} AND SpanId < \{curId_\d+:String\}\)/
+    );
+    expect(Object.values(params)).toContain("span-abc");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MetricType placement — must be at top level (AND). Inside an OR the SQL
+// builder cannot pick a per-type table, and would otherwise emit invalid SQL
+// referencing a non-existent column on the chosen table. The compiler-level
+// validator rejects this case as ambiguous; the SQL builder duplicates the
+// check so direct callers (e.g. these tests) hit the same error class.
+// ---------------------------------------------------------------------------
+
+describe("metric type placement (clickhouse)", () => {
+  it("rejects MetricType inside an OR branch with KopaiQueryValidationError", () => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "metrics",
+        mode: "raw",
+        timeDimension: { type: "relative", lookback: "1h" },
+        filters: [
+          {
+            or: [
+              { column: "MetricType", op: "eq", value: "Gauge" },
+              { column: "MetricType", op: "eq", value: "Sum" },
+            ],
+          },
+        ],
+      } as unknown as kopaiQuery.KopaiQuery)
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  it("rejects raw-mode measure-typed orderBy with KopaiQueryValidationError", () => {
+    // Defensive: the compiler-level validator also rejects this, but the
+    // SQL builder must surface KopaiQueryValidationError (not plain Error)
+    // so direct callers get a 400, not 500.
+    expect(() =>
+      buildKopaiSql({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: { type: "relative", lookback: "1h" },
+        orderBy: [{ type: "measure", alias: "n", direction: "desc" }],
+      } as unknown as kopaiQuery.KopaiQuery)
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  it("rejects MetricType nested deep inside an OR branch", () => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "metrics",
+        mode: "raw",
+        timeDimension: { type: "relative", lookback: "1h" },
+        filters: [
+          {
+            or: [
+              {
+                and: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+              },
+            ],
+          },
+        ],
+      } as unknown as kopaiQuery.KopaiQuery)
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
   });
 });

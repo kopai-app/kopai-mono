@@ -144,6 +144,17 @@ describe("compileTimeWindow — compareOffset removed", () => {
     expect(Object.keys(out)).not.toContain("compareStartNs");
     expect(Object.keys(out)).not.toContain("compareEndNs");
   });
+
+  it("7b. zero-duration lookback rejected — would otherwise produce startNs == endNs", () => {
+    // Defends against a query passing validation but reaching the
+    // backend with an empty time window.
+    expect(() =>
+      compileTimeWindow({ type: "relative", lookback: "0s" })
+    ).toThrow(KopaiQueryValidationError);
+    expect(() =>
+      compileTimeWindow({ type: "relative", lookback: "0h" })
+    ).toThrow(KopaiQueryValidationError);
+  });
 });
 
 describe("validateKopaiQuery — raw mode dimensions optional", () => {
@@ -166,7 +177,7 @@ describe("validateKopaiQuery — raw mode dimensions optional", () => {
     expect(() => validateKopaiQuery(q)).not.toThrow();
   });
 
-  it("10. raw query with explicit dimensions rejects orderBy column not in dimensions", () => {
+  it("10. raw query with explicit dimensions accepts orderBy column not in dimensions (projection is always full)", () => {
     const q = asTestQuery({
       signal: "traces",
       mode: "raw",
@@ -174,7 +185,17 @@ describe("validateKopaiQuery — raw mode dimensions optional", () => {
       timeDimension: tdRelative,
       orderBy: [{ type: "dimension", column: "Timestamp", direction: "desc" }],
     });
-    expect(() => validateKopaiQuery(q)).toThrow(/must appear in dimensions/);
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+
+  it("10b. raw mode still rejects orderBy of type 'measure'", () => {
+    const q = asTestQuery({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: tdRelative,
+      orderBy: [{ type: "measure", alias: "c", direction: "desc" }],
+    });
+    expect(() => validateKopaiQuery(q)).toThrow(/measure is not allowed/);
   });
 
   it("11. metric query missing MetricType filter — error mentions new shape, not kind:", () => {
