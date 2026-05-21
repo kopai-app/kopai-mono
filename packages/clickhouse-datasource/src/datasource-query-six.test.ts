@@ -44,6 +44,10 @@ function assertDefined<T>(
   if (value === undefined || value === null) throw new Error(msg);
 }
 
+// Always false at runtime, typed as boolean so the type-only branch
+// remains type-checked without being flagged as unreachable code.
+const NEVER_TRUE: boolean = false;
+
 function requestContext() {
   return {
     database: TEST_DATABASE,
@@ -488,9 +492,7 @@ describe("ClickHouseReadDatasource.queryTracesRaw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId", "SpanId"],
-      filters: [
-        { kind: "string", column: "TraceId", op: "eq", value: "trace-001" },
-      ],
+      filters: [{ column: "TraceId", op: "eq", value: "trace-001" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -503,9 +505,7 @@ describe("ClickHouseReadDatasource.queryTracesRaw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId", "SpanId"],
-      filters: [
-        { kind: "string", column: "TraceId", op: "eq", value: "trace-001" },
-      ],
+      filters: [{ column: "TraceId", op: "eq", value: "trace-001" }],
       timeDimension: relativeWindow(),
       limit: 1,
       requestContext: requestContext(),
@@ -518,9 +518,7 @@ describe("ClickHouseReadDatasource.queryTracesRaw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId", "SpanId"],
-      filters: [
-        { kind: "string", column: "TraceId", op: "eq", value: "trace-001" },
-      ],
+      filters: [{ column: "TraceId", op: "eq", value: "trace-001" }],
       timeDimension: relativeWindow(),
       limit: 1,
       cursor: page1.nextCursor,
@@ -555,7 +553,7 @@ describe("ClickHouseReadDatasource.queryTracesRaw", () => {
   });
 
   it("rejects a LogRawQuery at compile time", () => {
-    if (false as boolean) {
+    if (NEVER_TRUE) {
       const logQ: kopaiQueryNs.LogRawQuery = {
         signal: "logs",
         mode: "raw",
@@ -615,7 +613,7 @@ describe("ClickHouseReadDatasource.queryTracesAggregate", () => {
   });
 
   it("rejects a TraceRawQuery at compile time", () => {
-    if (false as boolean) {
+    if (NEVER_TRUE) {
       const rawQ: kopaiQueryNs.TraceRawQuery = {
         signal: "traces",
         mode: "raw",
@@ -652,9 +650,7 @@ describe("ClickHouseReadDatasource.queryLogsRaw", () => {
       signal: "logs",
       mode: "raw",
       dimensions: ["Timestamp", "SeverityText"],
-      filters: [
-        { kind: "string", column: "SeverityText", op: "eq", value: "ERROR" },
-      ],
+      filters: [{ column: "SeverityText", op: "eq", value: "ERROR" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -673,7 +669,7 @@ describe("ClickHouseReadDatasource.queryLogsRaw", () => {
   });
 
   it("rejects a TraceRawQuery at compile time", () => {
-    if (false as boolean) {
+    if (NEVER_TRUE) {
       const traceQ: kopaiQueryNs.TraceRawQuery = {
         signal: "traces",
         mode: "raw",
@@ -731,7 +727,7 @@ describe("ClickHouseReadDatasource.queryLogsAggregate", () => {
   });
 
   it("rejects a MetricAggregateQuery at compile time", () => {
-    if (false as boolean) {
+    if (NEVER_TRUE) {
       const metricQ: kopaiQueryNs.MetricAggregateQuery = {
         signal: "metrics",
         mode: "aggregate",
@@ -758,9 +754,7 @@ describe("ClickHouseReadDatasource.queryMetricsRaw", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName", "Value"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -791,7 +785,7 @@ describe("ClickHouseReadDatasource.queryMetricsRaw", () => {
   });
 
   it("rejects a LogRawQuery at compile time", () => {
-    if (false as boolean) {
+    if (NEVER_TRUE) {
       const logQ: kopaiQueryNs.LogRawQuery = {
         signal: "logs",
         mode: "raw",
@@ -815,9 +809,7 @@ describe("ClickHouseReadDatasource.queryMetricsAggregate", () => {
       mode: "aggregate",
       dimensions: [{ container: "Attributes", key: "http.method" }],
       measures: [{ op: "SUM", column: "Value", as: "total" }],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Sum" }],
       timeDimension: relativeWindow(),
       output: { type: "summary" },
       requestContext: requestContext(),
@@ -850,7 +842,7 @@ describe("ClickHouseReadDatasource.queryMetricsAggregate", () => {
   });
 
   it("rejects a LogAggregateQuery at compile time", () => {
-    if (false as boolean) {
+    if (NEVER_TRUE) {
       const logQ: kopaiQueryNs.LogAggregateQuery = {
         signal: "logs",
         mode: "aggregate",
@@ -899,9 +891,7 @@ describe("ClickHouseReadDatasource.query() dispatches to the six methods", () =>
       signal: "metrics",
       mode: "aggregate",
       measures: [{ op: "SUM", column: "Value", as: "total" }],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Sum" }],
       timeDimension: relativeWindow(),
       output: { type: "summary" },
     } as const satisfies kopaiQueryNs.MetricAggregateQuery;

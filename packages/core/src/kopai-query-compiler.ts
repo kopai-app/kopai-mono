@@ -41,7 +41,9 @@ export class KopaiQueryValidationError extends Error {
 // Time window resolution
 // ============================================================
 
-const DURATION_UNIT_NS: Record<string, bigint> = {
+type DurationUnit = "s" | "m" | "h" | "d" | "w";
+
+const DURATION_UNIT_NS: Record<DurationUnit, bigint> = {
   s: 1_000_000_000n,
   m: 60n * 1_000_000_000n,
   h: 60n * 60n * 1_000_000_000n,
@@ -49,7 +51,7 @@ const DURATION_UNIT_NS: Record<string, bigint> = {
   w: 7n * 24n * 60n * 60n * 1_000_000_000n,
 };
 
-const DURATION_UNIT_S: Record<string, number> = {
+const DURATION_UNIT_S: Record<DurationUnit, number> = {
   s: 1,
   m: 60,
   h: 3_600,
@@ -57,24 +59,31 @@ const DURATION_UNIT_S: Record<string, number> = {
   w: 604_800,
 };
 
-function parseDurationParts(s: string): { value: bigint; unit: string } {
+function isDurationUnit(s: string): s is DurationUnit {
+  return s === "s" || s === "m" || s === "h" || s === "d" || s === "w";
+}
+
+function parseDurationParts(s: string): { value: bigint; unit: DurationUnit } {
   const m = /^(\d+)([smhdw])$/.exec(s);
-  if (!m) {
+  // Regex captures are typed as `string | undefined`, but a successful
+  // match of /^(\d+)([smhdw])$/ guarantees both groups — narrow via
+  // explicit checks instead of `!`.
+  if (!m || m[1] === undefined || m[2] === undefined || !isDurationUnit(m[2])) {
     throw new KopaiQueryValidationError(
       `Invalid duration "${s}". Expected positive integer + unit (s,m,h,d,w).`
     );
   }
-  return { value: BigInt(m[1]!), unit: m[2]! };
+  return { value: BigInt(m[1]), unit: m[2] };
 }
 
 export function durationToNanos(s: string): bigint {
   const { value, unit } = parseDurationParts(s);
-  return value * DURATION_UNIT_NS[unit]!;
+  return value * DURATION_UNIT_NS[unit];
 }
 
 export function granularityToSeconds(s: string): number {
   const { value, unit } = parseDurationParts(s);
-  return Number(value) * DURATION_UNIT_S[unit]!;
+  return Number(value) * DURATION_UNIT_S[unit];
 }
 
 function isoToNanos(iso: string): bigint {
@@ -89,8 +98,6 @@ function isoToNanos(iso: string): bigint {
 export interface CompiledTimeWindow {
   startNs: bigint;
   endNs: bigint;
-  compareStartNs?: bigint;
-  compareEndNs?: bigint;
 }
 
 export function compileTimeWindow(
@@ -111,13 +118,7 @@ export function compileTimeWindow(
       );
     }
   }
-  const out: CompiledTimeWindow = { startNs, endNs };
-  if (td.compareOffset) {
-    const offsetNs = durationToNanos(td.compareOffset);
-    out.compareStartNs = startNs - offsetNs;
-    out.compareEndNs = endNs - offsetNs;
-  }
-  return out;
+  return { startNs, endNs };
 }
 
 // ============================================================
@@ -156,10 +157,13 @@ export const METRIC_TYPE_TO_TABLE: Record<MetricType, string> = {
 // Runtime-checked narrower so backends never `as MetricType`-cast a
 // raw string into the typed union.
 
-const METRIC_TYPES_SET: ReadonlySet<MetricType> = new Set(METRIC_TYPES);
+// Widened to ReadonlySet<string> so `.has(s)` accepts a plain string —
+// the narrowed return type makes isMetricType a proper type guard
+// without a cast inside the body.
+const METRIC_TYPES_SET: ReadonlySet<string> = new Set<string>(METRIC_TYPES);
 
 export function isMetricType(s: string): s is MetricType {
-  return METRIC_TYPES_SET.has(s as MetricType);
+  return METRIC_TYPES_SET.has(s);
 }
 
 export function assertMetricType(s: string): MetricType {
@@ -190,14 +194,17 @@ const METRIC_STRUCTURAL_SET = new Set<string>();
 // Pull options out of the exported enum schemas. Structural cols are
 // PascalCase; semconv attrs are dotted-lowercase. Discriminate by case
 // of the first character (cheap and unambiguous given the convention).
+// Use a regex test instead of indexing `v[0]` — indexing returns
+// `string | undefined`, which would force a non-null assertion.
+const STARTS_WITH_UPPER = /^[A-Z]/;
 for (const v of TraceColumn.options) {
-  if (v[0]! >= "A" && v[0]! <= "Z") TRACE_STRUCTURAL_SET.add(v);
+  if (STARTS_WITH_UPPER.test(v)) TRACE_STRUCTURAL_SET.add(v);
 }
 for (const v of LogColumn.options) {
-  if (v[0]! >= "A" && v[0]! <= "Z") LOG_STRUCTURAL_SET.add(v);
+  if (STARTS_WITH_UPPER.test(v)) LOG_STRUCTURAL_SET.add(v);
 }
 for (const v of MetricColumn.options) {
-  if (v[0]! >= "A" && v[0]! <= "Z") METRIC_STRUCTURAL_SET.add(v);
+  if (STARTS_WITH_UPPER.test(v)) METRIC_STRUCTURAL_SET.add(v);
 }
 
 // Semconv → storage location.
@@ -315,6 +322,26 @@ export function columnRefProjectionKey(ref: ColumnRefStructural): string {
   return `${ref.container}.${ref.key}`;
 }
 
+// Runtime guard for the structural column-ref shape. `orderBy[i].column`
+// is typed as `unknown` (the underlying zod builder uses an untyped
+// `z.ZodType`), so the validator narrows it with this guard instead of
+// casting.
+function isColumnRefStructural(v: unknown): v is ColumnRefStructural {
+  if (typeof v === "string") return true;
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as { container?: unknown; key?: unknown };
+  return typeof o.container === "string" && typeof o.key === "string";
+}
+
+function projectionKeyOrThrow(v: unknown, context: string): string {
+  if (!isColumnRefStructural(v)) {
+    throw new KopaiQueryValidationError(
+      `${context}: expected a column reference (string or {container, key}), got ${typeof v}.`
+    );
+  }
+  return columnRefProjectionKey(v);
+}
+
 // ============================================================
 // Structural-column helpers (test helper + validator support)
 // ============================================================
@@ -333,14 +360,16 @@ export function allStructuralColumns(signal: Signal): string[] {
 // Query validation
 // ============================================================
 
-function collectFilterColumns(
+export function collectFilterColumns(
   filters: AnyFilterExpr[] | undefined
 ): AnyColumnRef[] {
   const out: AnyColumnRef[] = [];
   if (!filters) return out;
   for (const f of filters) {
-    if (f.kind === "logical") {
-      out.push(...collectFilterColumns(f.filters));
+    if ("and" in f) {
+      out.push(...collectFilterColumns(f.and));
+    } else if ("or" in f) {
+      out.push(...collectFilterColumns(f.or));
     } else {
       out.push(f.column);
     }
@@ -359,7 +388,7 @@ type MetricTypePinResult =
   | { kind: "ambiguous"; reason: string }
   | { kind: "none" };
 
-function findMetricTypePin(
+export function findMetricTypePin(
   filters: AnyFilterExpr[] | undefined,
   inAndContext: boolean
 ): MetricTypePinResult {
@@ -367,17 +396,16 @@ function findMetricTypePin(
   let pinned: string | null = null;
 
   for (const f of filters) {
-    if (f.kind === "logical") {
-      const nested = findMetricTypePin(
-        f.filters,
-        inAndContext && f.op === "and"
-      );
+    if ("and" in f || "or" in f) {
+      const isAnd = "and" in f;
+      const children = "and" in f ? f.and : f.or;
+      const nested = findMetricTypePin(children, inAndContext && isAnd);
       if (nested.kind === "ambiguous") return nested;
       if (nested.kind === "pinned") {
         // A MetricType reference inside an OR can't be relied on to
         // narrow the whole query — flag as ambiguous unless we're still
         // in pure-AND territory.
-        if (!inAndContext || f.op !== "and") {
+        if (!inAndContext || !isAnd) {
           return {
             kind: "ambiguous",
             reason:
@@ -404,13 +432,7 @@ function findMetricTypePin(
           "MetricType filter inside an OR branch cannot pin the metric table. Place MetricType at the top level (AND).",
       };
     }
-    if (f.kind === "string") {
-      if (f.op !== "eq") {
-        return {
-          kind: "ambiguous",
-          reason: `MetricType filter must use op 'eq' (got '${f.op}').`,
-        };
-      }
+    if (f.op === "eq" && typeof f.value === "string") {
       if (pinned !== null && pinned !== f.value) {
         return {
           kind: "ambiguous",
@@ -418,13 +440,7 @@ function findMetricTypePin(
         };
       }
       pinned = f.value;
-    } else if (f.kind === "stringIn") {
-      if (f.op !== "in") {
-        return {
-          kind: "ambiguous",
-          reason: `MetricType filter must use op 'in' (got '${f.op}').`,
-        };
-      }
+    } else if (f.op === "in") {
       if (f.values.length !== 1) {
         return {
           kind: "ambiguous",
@@ -434,6 +450,12 @@ function findMetricTypePin(
       const v = f.values[0];
       if (v === undefined) {
         return { kind: "ambiguous", reason: "Empty MetricType values." };
+      }
+      if (typeof v !== "string") {
+        return {
+          kind: "ambiguous",
+          reason: `MetricType filter values must be strings (got ${typeof v}).`,
+        };
       }
       if (pinned !== null && pinned !== v) {
         return {
@@ -445,7 +467,7 @@ function findMetricTypePin(
     } else {
       return {
         kind: "ambiguous",
-        reason: `MetricType filter must be a string equality (got kind '${f.kind}').`,
+        reason: `MetricType filter must use op 'eq' (string value) or 'in' (single string value); got op '${f.op}'.`,
       };
     }
   }
@@ -477,13 +499,6 @@ export function extractMetricType(q: KopaiQuery): MetricType {
 }
 
 export function validateKopaiQuery(q: KopaiQuery): void {
-  // compareOffset is out of scope for v1.
-  if (q.timeDimension.compareOffset !== undefined) {
-    throw new KopaiQueryValidationError(
-      "timeDimension.compareOffset is not yet supported. Run two separate queries instead."
-    );
-  }
-
   // Metric queries require a MetricType filter — both backends store
   // each metric type in a separate table, so the compiler needs an
   // unambiguous target.
@@ -494,7 +509,7 @@ export function validateKopaiQuery(q: KopaiQuery): void {
     }
     if (pin.kind === "none") {
       throw new KopaiQueryValidationError(
-        "Metric queries require a MetricType filter at the top level, e.g. {kind:'string', column:'MetricType', op:'eq', value:'Gauge'}."
+        "Metric queries require a MetricType filter at the top level, e.g. {column:'MetricType', op:'eq', value:'Gauge'}."
       );
     }
     // Narrows the string into the typed union — throws a clear error if
@@ -540,7 +555,7 @@ export function validateKopaiQuery(q: KopaiQuery): void {
             );
           }
         } else {
-          const key = columnRefProjectionKey(o.column as ColumnRefStructural);
+          const key = projectionKeyOrThrow(o.column, "orderBy column");
           if (!dimKeys.has(key)) {
             throw new KopaiQueryValidationError(
               `orderBy dimension "${key}" must appear in dimensions.`
@@ -550,11 +565,16 @@ export function validateKopaiQuery(q: KopaiQuery): void {
       }
     }
   } else {
-    // raw mode: orderBy dimension column must be one of dimensions.
+    // raw mode: orderBy dimension column must be one of dimensions
+    // when an explicit dimensions list is provided. With no dimensions
+    // the server returns the full denormalized row, so every structural
+    // column is reachable in the projection (check is vacuous).
     if (q.orderBy) {
       const dimKeys = new Set<string>();
-      for (const d of q.dimensions) {
-        dimKeys.add(columnRefProjectionKey(d));
+      if (q.dimensions) {
+        for (const d of q.dimensions) {
+          dimKeys.add(columnRefProjectionKey(d));
+        }
       }
       for (const o of q.orderBy) {
         if (o.type === "measure") {
@@ -562,7 +582,8 @@ export function validateKopaiQuery(q: KopaiQuery): void {
             "orderBy measure is not allowed in raw mode."
           );
         }
-        const key = columnRefProjectionKey(o.column as ColumnRefStructural);
+        if (q.dimensions === undefined) continue;
+        const key = projectionKeyOrThrow(o.column, "orderBy column");
         if (!dimKeys.has(key)) {
           throw new KopaiQueryValidationError(
             `orderBy dimension "${key}" must appear in dimensions.`

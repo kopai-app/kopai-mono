@@ -695,131 +695,86 @@ const MetricMeasureExpr = z
 // ============================================================
 // FilterExpr (per signal, recursive)
 // ============================================================
-// Top-level discriminator: `kind`. Variants:
-//   string      — eq/neq/contains/notContains/startsWith/endsWith
-//   stringIn    — in/notIn against an array of strings
-//   number      — eq/neq/gt/gte/lt/lte
-//   numberIn    — in/notIn against an array of numbers
-//   boolean     — eq/neq
-//   null        — isNull/isNotNull (no value)
-//   logical     — and/or wrapping nested filters
+// Discriminator: `op` for leaf filters; `and`/`or` keys for logicals.
+// Leaf variants:
+//   eq/neq                                       — string|number|boolean value
+//   contains/notContains/startsWith/endsWith     — string value
+//   gt/gte/lt/lte                                — number value
+//   in/notIn                                     — values: (string|number)[]
+//   isNull/isNotNull                             — no value
+// Logical variants:
+//   { and: FilterExpr[] }                        — all children must match
+//   { or:  FilterExpr[] }                        — any child matches
 //
-// z.union (not z.discriminatedUnion) is used here because Zod v4 has
-// limitations around recursive discriminated unions. The `kind`
-// literal still serves as a clear discriminator in the rendered JSON
-// Schema for LLM structured-output.
+// Leaves use z.discriminatedUnion("op", …) so a mismatched value type
+// produces a path-precise Zod issue at `filters[N].value` rather than
+// a generic union-mismatch. The outer z.union mixes the discriminated
+// leaf set with the and/or shapes (recursive via z.lazy).
 
 type AnyColumnRef = z.infer<
   typeof TraceColumnRef | typeof LogColumnRef | typeof MetricColumnRef
 >;
 
 export type FilterExpr<C = AnyColumnRef> =
+  | { column: C; op: "eq" | "neq"; value: string | number | boolean }
   | {
-      kind: "string";
       column: C;
-      op: "eq" | "neq" | "contains" | "notContains" | "startsWith" | "endsWith";
+      op: "contains" | "notContains" | "startsWith" | "endsWith";
       value: string;
     }
-  | { kind: "stringIn"; column: C; op: "in" | "notIn"; values: string[] }
-  | {
-      kind: "number";
-      column: C;
-      op: "eq" | "neq" | "gt" | "gte" | "lt" | "lte";
-      value: number;
-    }
-  | { kind: "numberIn"; column: C; op: "in" | "notIn"; values: number[] }
-  | { kind: "boolean"; column: C; op: "eq" | "neq"; value: boolean }
-  | { kind: "null"; column: C; op: "isNull" | "isNotNull" }
-  | { kind: "logical"; op: "and" | "or"; filters: FilterExpr<C>[] };
+  | { column: C; op: "gt" | "gte" | "lt" | "lte"; value: number }
+  | { column: C; op: "in" | "notIn"; values: (string | number)[] }
+  | { column: C; op: "isNull" | "isNotNull" }
+  | { and: FilterExpr<C>[] }
+  | { or: FilterExpr<C>[] };
 
 const buildFilterExpr = <C extends z.ZodType>(
   columnRef: C
 ): z.ZodType<FilterExpr<z.infer<C>>> => {
-  const StringFilter = z
-    .object({
-      kind: z.literal("string"),
-      column: columnRef,
-      op: z
-        .enum([
-          "eq",
-          "neq",
-          "contains",
-          "notContains",
-          "startsWith",
-          "endsWith",
-        ])
-        .describe(
-          "String comparison. contains/startsWith/endsWith are substring matches."
-        ),
-      value: z.string(),
-    })
-    .describe("Filter where the column is a string.");
+  const Leaf = z
+    .discriminatedUnion("op", [
+      z.object({
+        column: columnRef,
+        op: z.enum(["eq", "neq"]),
+        value: z.union([z.string(), z.number(), z.boolean()]),
+      }),
+      z.object({
+        column: columnRef,
+        op: z.enum(["contains", "notContains", "startsWith", "endsWith"]),
+        value: z.string(),
+      }),
+      z.object({
+        column: columnRef,
+        op: z.enum(["gt", "gte", "lt", "lte"]),
+        value: z.number(),
+      }),
+      z.object({
+        column: columnRef,
+        op: z.enum(["in", "notIn"]),
+        values: z.array(z.union([z.string(), z.number()])).min(1),
+      }),
+      z.object({
+        column: columnRef,
+        op: z.enum(["isNull", "isNotNull"]),
+      }),
+    ])
+    .describe(
+      "Leaf filter on a column. Discriminated on `op`: eq/neq accept string|number|boolean; contains/notContains/startsWith/endsWith require a string; gt/gte/lt/lte require a number; in/notIn take a non-empty `values` array of strings/numbers; isNull/isNotNull take no value."
+    );
 
-  const StringInFilter = z
-    .object({
-      kind: z.literal("stringIn"),
-      column: columnRef,
-      op: z.enum(["in", "notIn"]),
-      values: z.array(z.string()).min(1),
-    })
-    .describe("Filter where a string column is (or is not) in a set.");
-
-  const NumberFilter = z
-    .object({
-      kind: z.literal("number"),
-      column: columnRef,
-      op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte"]),
-      value: z.number(),
-    })
-    .describe("Filter where the column is numeric.");
-
-  const NumberInFilter = z
-    .object({
-      kind: z.literal("numberIn"),
-      column: columnRef,
-      op: z.enum(["in", "notIn"]),
-      values: z.array(z.number()).min(1),
-    })
-    .describe("Filter where a numeric column is (or is not) in a set.");
-
-  const BoolFilter = z
-    .object({
-      kind: z.literal("boolean"),
-      column: columnRef,
-      op: z.enum(["eq", "neq"]),
-      value: z.boolean(),
-    })
-    .describe("Filter where the column is boolean.");
-
-  const NullFilter = z
-    .object({
-      kind: z.literal("null"),
-      column: columnRef,
-      op: z.enum(["isNull", "isNotNull"]),
-    })
-    .describe("Null-presence check. No value field.");
-
+  // `z.lazy(...)` returns `ZodLazy<...>` whose inferred type does not
+  // line up with the recursive `FilterExpr<...>` Zod cannot reconstruct
+  // through a self-reference — the cast is required interop and the
+  // declared annotation above keeps the public type honest.
   const Expr: z.ZodType<FilterExpr<z.infer<C>>> = z.lazy(() =>
     z.union([
-      StringFilter,
-      StringInFilter,
-      NumberFilter,
-      NumberInFilter,
-      BoolFilter,
-      NullFilter,
+      Leaf,
       z
-        .object({
-          kind: z.literal("logical"),
-          op: z
-            .enum(["and", "or"])
-            .describe(
-              "Combination operator. and = all children must match; or = any child matches."
-            ),
-          filters: z.array(Expr).min(1),
-        })
-        .describe(
-          "Logical combination of nested filters. Use to express boolean trees."
-        ),
+        .object({ and: z.array(Expr).min(1) })
+        .describe("All children must match (AND)."),
+      z
+        .object({ or: z.array(Expr).min(1) })
+        .describe("Any child matches (OR)."),
     ])
   ) as z.ZodType<FilterExpr<z.infer<C>>>;
 
@@ -887,19 +842,12 @@ const MetricOrderExpr = buildOrderExpr(MetricColumnRef);
 // ============================================================
 // TimeDimension
 // ============================================================
-// `compareOffset` shifts the same lookback window backward in time so
-// the consumer can render period-over-period comparisons. Example:
-// lookback="2h", compareOffset="7d" → compare the last 2h vs the 2h
-// that ended 7d ago.
 
 const RelativeTimeDimension = z
   .object({
     type: z.literal("relative"),
     lookback: DurationString.describe(
       'Window length ending now. Example: "2h" = the last 2 hours.'
-    ),
-    compareOffset: DurationString.optional().describe(
-      'Optional period-over-period offset. Same window length, shifted back by this duration. Example: "7d" = compare last 2h vs the 2h that ended 7d ago.'
     ),
   })
   .describe("Relative time window ending at query time.");
@@ -909,9 +857,6 @@ const AbsoluteTimeDimension = z
     type: z.literal("absolute"),
     startTime: ISODateString.describe("Window start (inclusive)."),
     endTime: ISODateString.describe("Window end (exclusive)."),
-    compareOffset: DurationString.optional().describe(
-      "Optional period-over-period offset. Same window length, shifted back by this duration."
-    ),
   })
   .describe("Absolute time window with fixed ISO datetimes.");
 
@@ -1024,9 +969,9 @@ const TraceRawQuery = z
     mode: z.literal("raw"),
     dimensions: z
       .array(TraceColumnRef)
-      .min(1)
+      .optional()
       .describe(
-        "Columns to project in each returned row. Result rows are the denormalized OTel trace shape filtered to these columns."
+        "Optional projection. Omit to return the full denormalized OTel row (structural columns + attribute maps). When provided, the server may narrow the SELECT — but result rows still match the denormalized OTel shape."
       ),
     filters: z.array(TraceFilterExpr).optional(),
     timeDimension: TimeDimension,
@@ -1057,7 +1002,12 @@ const LogRawQuery = z
   .object({
     signal: z.literal("logs"),
     mode: z.literal("raw"),
-    dimensions: z.array(LogColumnRef).min(1),
+    dimensions: z
+      .array(LogColumnRef)
+      .optional()
+      .describe(
+        "Optional projection. Omit to return the full denormalized OTel row (structural columns + attribute maps). When provided, the server may narrow the SELECT — but result rows still match the denormalized OTel shape."
+      ),
     filters: z.array(LogFilterExpr).optional(),
     timeDimension: TimeDimension,
     orderBy: z.array(LogOrderExpr).optional(),
@@ -1087,7 +1037,12 @@ const MetricRawQuery = z
   .object({
     signal: z.literal("metrics"),
     mode: z.literal("raw"),
-    dimensions: z.array(MetricColumnRef).min(1),
+    dimensions: z
+      .array(MetricColumnRef)
+      .optional()
+      .describe(
+        "Optional projection. Omit to return the full denormalized OTel row (structural columns + attribute maps). When provided, the server may narrow the SELECT — but result rows still match the denormalized OTel shape."
+      ),
     filters: z.array(MetricFilterExpr).optional(),
     timeDimension: TimeDimension,
     orderBy: z.array(MetricOrderExpr).optional(),

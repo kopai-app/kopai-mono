@@ -32,6 +32,22 @@ function assertDefined<T>(
   if (value === undefined || value === null) throw new Error(msg);
 }
 
+function firstRow<T>(arr: T[], msg = "Expected at least one row"): T {
+  const first = arr[0];
+  assertDefined(first, msg);
+  return first;
+}
+
+function findRow<T>(
+  arr: T[],
+  pred: (row: T) => boolean,
+  msg = "No matching row"
+): T {
+  const found = arr.find(pred);
+  assertDefined(found, msg);
+  return found;
+}
+
 function requestContext() {
   return {
     database: TEST_DATABASE,
@@ -605,7 +621,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.ServiceName).toBe("order-service");
+    expect(firstRow(result.data).ServiceName).toBe("order-service");
   });
 
   it("filters by SpanName", async () => {
@@ -620,7 +636,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.SpanId).toBe("span-002");
+    expect(firstRow(result.data).SpanId).toBe("span-002");
   });
 
   it("filters by span attribute via container", async () => {
@@ -640,7 +656,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.SpanName).toBe("POST /api/orders");
+    expect(firstRow(result.data).SpanName).toBe("POST /api/orders");
   });
 
   it("returns timestamps as nanosecond strings", async () => {
@@ -655,7 +671,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.Timestamp).toBe("1704067201000000000");
+    expect(firstRow(result.data).Timestamp).toBe("1704067201000000000");
   });
 
   it("supports cursor pagination", async () => {
@@ -671,7 +687,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       requestContext: requestContext(),
     });
     expect(page1.data.length).toBe(1);
-    expect(page1.nextCursor).not.toBeNull();
+    assertDefined(page1.nextCursor);
 
     const page2 = await ds.query({
       signal: "traces",
@@ -682,12 +698,12 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       ],
       timeDimension: relativeWindow(),
       limit: 1,
-      cursor: page1.nextCursor!,
+      cursor: page1.nextCursor,
       requestContext: requestContext(),
     });
     expect(page2.data.length).toBe(1);
     expect(page2.nextCursor).toBeNull();
-    expect(page1.data[0]!.SpanId).not.toBe(page2.data[0]!.SpanId);
+    expect(firstRow(page1.data).SpanId).not.toBe(firstRow(page2.data).SpanId);
   });
 
   it("returns empty result for no matches", async () => {
@@ -873,7 +889,7 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.Body).toBe("Slow query detected");
+    expect(firstRow(result.data).Body).toBe("Slow query detected");
   });
 
   it("filters by Body contains (ILIKE)", async () => {
@@ -888,7 +904,7 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.Body).toBe("Database connection failed");
+    expect(firstRow(result.data).Body).toBe("Database connection failed");
   });
 
   it("filters by SeverityNumber >= 13", async () => {
@@ -923,7 +939,7 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.Body).toBe("Database connection failed");
+    expect(firstRow(result.data).Body).toBe("Database connection failed");
   });
 
   // Parity with old `searchLogs` capabilities that lacked tests:
@@ -1082,7 +1098,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(3);
-    expect(result.data[0]!.MetricType).toBe("Gauge");
+    expect(firstRow(result.data).MetricType).toBe("Gauge");
   });
 
   it("queries Sum metrics", async () => {
@@ -1097,7 +1113,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    const m = result.data[0]!;
+    const m = firstRow(result.data);
     expect(m.MetricType).toBe("Sum");
     if (m.MetricType === "Sum") {
       expect(m.Value).toBe(42);
@@ -1117,7 +1133,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    const m = result.data[0]!;
+    const m = firstRow(result.data);
     expect(m.MetricType).toBe("Histogram");
     if (m.MetricType === "Histogram") {
       expect(m.Count).toBe(10);
@@ -1142,7 +1158,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.MetricType).toBe("ExponentialHistogram");
+    expect(firstRow(result.data).MetricType).toBe("ExponentialHistogram");
   });
 
   it("queries Summary metrics", async () => {
@@ -1157,7 +1173,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    const m = result.data[0]!;
+    const m = firstRow(result.data);
     expect(m.MetricType).toBe("Summary");
     if (m.MetricType === "Summary") {
       expect(m.Count).toBe(100);
@@ -1420,7 +1436,7 @@ describe("ClickHouseReadDatasource.query — traces aggregate", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(Number(result.data[0]!.rate)).toBeGreaterThan(0);
+    expect(Number(firstRow(result.data).rate)).toBeGreaterThan(0);
   });
 
   it("computes AVG/MAX/MIN duration", async () => {
@@ -1437,7 +1453,10 @@ describe("ClickHouseReadDatasource.query — traces aggregate", () => {
       output: { type: "summary" },
       requestContext: requestContext(),
     });
-    const user = result.data.find((r) => r["service.name"] === "user-service")!;
+    const user = findRow(
+      result.data,
+      (r) => r["service.name"] === "user-service"
+    );
     expect(Number(user.max_d)).toBe(5000000);
     expect(Number(user.min_d)).toBe(2000000);
     expect(Number(user.avg_d)).toBe(3500000);
@@ -1462,8 +1481,8 @@ describe("ClickHouseReadDatasource.query — traces aggregate", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!["service.name"]).toBe("order-service");
-    expect(Number(result.data[0]!.n)).toBe(1);
+    expect(firstRow(result.data)["service.name"]).toBe("order-service");
+    expect(Number(firstRow(result.data).n)).toBe(1);
   });
 
   it("lists distinct ServiceName values — equivalent to old SDK getServices()", async () => {
@@ -1546,7 +1565,10 @@ describe("ClickHouseReadDatasource.query — logs aggregate", () => {
       output: { type: "summary" },
       requestContext: requestContext(),
     });
-    const user = result.data.find((r) => r["service.name"] === "user-service")!;
+    const user = findRow(
+      result.data,
+      (r) => r["service.name"] === "user-service"
+    );
     expect(Number(user.avg_sev)).toBe(13); // avg of 9 and 17
   });
 });
@@ -1566,8 +1588,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!["Attributes.http.method"]).toBe("GET");
-    expect(Number(result.data[0]!.total)).toBe(42);
+    expect(firstRow(result.data)["Attributes.http.method"]).toBe("GET");
+    expect(Number(firstRow(result.data).total)).toBe(42);
   });
 
   it("avg/max/min Gauge value across attribute groups", async () => {
@@ -1593,8 +1615,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(Number(result.data[0]!.max_v)).toBeCloseTo(0.82, 5);
-    expect(Number(result.data[0]!.min_v)).toBeCloseTo(0.6, 5);
+    expect(Number(firstRow(result.data).max_v)).toBeCloseTo(0.82, 5);
+    expect(Number(firstRow(result.data).min_v)).toBeCloseTo(0.6, 5);
   });
 
   it("counts with no group by — single-row result", async () => {
@@ -1610,7 +1632,7 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(Number(result.data[0]!.n)).toBe(3);
+    expect(Number(firstRow(result.data).n)).toBe(3);
   });
 
   it("HAVING filters groups by aggregated value", async () => {
@@ -1631,8 +1653,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       requestContext: requestContext(),
     });
     expect(result.data.length).toBe(1);
-    expect(result.data[0]!.MetricName).toBe("system.cpu.utilization");
-    expect(Number(result.data[0]!.cnt)).toBe(3);
+    expect(firstRow(result.data).MetricName).toBe("system.cpu.utilization");
+    expect(Number(firstRow(result.data).cnt)).toBe(3);
   });
 
   it("orderBy by measure alias sorts rows by the aggregated value", async () => {
@@ -1686,7 +1708,7 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
     });
     expect(result.data.length).toBe(1);
     // HLL is exact at N=3 in practice for ClickHouse `uniq`.
-    expect(Number(result.data[0]!.n_cpus)).toBe(3);
+    expect(Number(firstRow(result.data).n_cpus)).toBe(3);
   });
 
   it("percentile measures (P50/P95/P999) return quantile values", async () => {
@@ -1711,7 +1733,7 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       output: { type: "summary" },
       requestContext: requestContext(),
     });
-    const row = result.data[0]!;
+    const row = firstRow(result.data);
     // Values [0.6, 0.75, 0.82]. P50 should land on 0.75, P95+ near max.
     expect(Number(row.p50)).toBeCloseTo(0.75, 1);
     expect(Number(row.p95)).toBeGreaterThanOrEqual(0.75);
@@ -1747,7 +1769,7 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       output: { type: "summary" },
       requestContext: requestContext(),
     });
-    const row = result.data[0]!;
+    const row = firstRow(result.data);
     // Values: 0.6, 0.75, 0.82 over 10s window.
     // avg=0.7233, sum=2.17, max=0.82 → /10
     expect(Number(row.ravg)).toBeCloseTo(0.0723, 3);
@@ -1804,7 +1826,7 @@ describe("ClickHouseReadDatasource.query — trace THROUGHPUT", () => {
       requestContext: requestContext(),
     });
     // 3 spans in 10s window → 0.3 spans/sec.
-    expect(Number(result.data[0]!.tps)).toBeCloseTo(0.3, 3);
+    expect(Number(firstRow(result.data).tps)).toBeCloseTo(0.3, 3);
   });
 });
 
@@ -1830,16 +1852,9 @@ describe("ClickHouseReadDatasource.query — validation", () => {
         measures: [{ op: "COUNT", as: "cnt" }],
         filters: [
           {
-            kind: "logical",
-            op: "or",
-            filters: [
-              {
-                kind: "string",
-                column: "MetricType",
-                op: "eq",
-                value: "Gauge",
-              },
-              { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
+            or: [
+              { column: "MetricType", op: "eq", value: "Gauge" },
+              { column: "MetricType", op: "eq", value: "Sum" },
             ],
           },
         ],
@@ -1865,13 +1880,11 @@ describe("ClickHouseReadDatasource.query — trace summary (aggregate scalars)",
       output: { type: "summary" },
       requestContext: requestContext(),
     });
-    const t1 = result.data.find((r) => r.TraceId === "trace-001");
-    expect(t1).toBeDefined();
-    expect(Number(t1!.spanCount)).toBe(2);
-    expect(Number(t1!.maxDuration)).toBe(5000000);
+    const t1 = findRow(result.data, (r) => r.TraceId === "trace-001");
+    expect(Number(t1.spanCount)).toBe(2);
+    expect(Number(t1.maxDuration)).toBe(5000000);
 
-    const t2 = result.data.find((r) => r.TraceId === "trace-002");
-    expect(t2).toBeDefined();
-    expect(Number(t2!.spanCount)).toBe(1);
+    const t2 = findRow(result.data, (r) => r.TraceId === "trace-002");
+    expect(Number(t2.spanCount)).toBe(1);
   });
 });

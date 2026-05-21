@@ -23,37 +23,6 @@ type ColumnRef = kopaiQueryCompiler.ColumnRefStructural;
 
 type SqlParam = string | number | bigint | null;
 
-// Structural shapes used by the SQL builders. All narrow per-signal
-// variants from @kopai/core assign here without `as unknown as` —
-// validator already enforces runtime correctness so we don't need to
-// preserve signal narrowness inside the SQL layer.
-type OrderItemShape =
-  | { type: "dimension"; column: ColumnRef; direction: "asc" | "desc" }
-  | { type: "measure"; alias: string; direction: "asc" | "desc" };
-type MeasureExprShape =
-  | { op: "COUNT"; as: string }
-  | { op: "ERROR_RATE"; as: string }
-  | { op: "THROUGHPUT"; as: string }
-  | { op: "COUNT_DISTINCT"; column: ColumnRef; as: string }
-  | {
-      op:
-        | "SUM"
-        | "AVG"
-        | "MIN"
-        | "MAX"
-        | "P50"
-        | "P75"
-        | "P90"
-        | "P95"
-        | "P99"
-        | "P999"
-        | "RATE_AVG"
-        | "RATE_SUM"
-        | "RATE_MAX";
-      column: ColumnRef;
-      as: string;
-    };
-
 const TRACE_FULL_COLUMNS = [
   "Timestamp",
   "TraceId",
@@ -185,6 +154,29 @@ function escapeJsonPath(key: string): string {
   return `$."${key.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
+// Type guard for ColumnRef. The per-signal column refs (TraceColumnRef,
+// LogColumnRef, MetricColumnRef) all share the structural shape
+// `string | { container: string; key: string }`. When iterating over
+// `q.orderBy[i].column` across the signal union, TS resolves the
+// property type to `unknown` — this guard re-narrows it without an
+// `as` cast. Validator has already verified the runtime shape.
+function assertColumnRef(v: unknown): asserts v is ColumnRef {
+  if (typeof v === "string") return;
+  if (
+    typeof v === "object" &&
+    v !== null &&
+    "container" in v &&
+    "key" in v &&
+    typeof v.container === "string" &&
+    typeof v.key === "string"
+  ) {
+    return;
+  }
+  throw new kopaiQueryCompiler.KopaiQueryValidationError(
+    "Internal: orderBy.column is not a valid ColumnRef shape."
+  );
+}
+
 function quoteIdent(col: string): string {
   return `"${col}"`;
 }
@@ -211,10 +203,12 @@ function columnSqlExpr(signal: Signal, ref: ColumnRef): SqlFragment {
 }
 
 function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
-  if (f.kind === "logical") {
-    if (f.filters.length === 0) return { sql: "1=1", params: [] };
-    const parts = f.filters.map((c) => buildFilter(signal, c));
-    const joiner = f.op === "and" ? " AND " : " OR ";
+  // Logical: key-based discrimination on `and`/`or`.
+  if ("and" in f || "or" in f) {
+    const children = "and" in f ? f.and : f.or;
+    if (children.length === 0) return { sql: "1=1", params: [] };
+    const parts = children.map((c) => buildFilter(signal, c));
+    const joiner = "and" in f ? " AND " : " OR ";
     return {
       sql: "(" + parts.map((p) => p.sql).join(joiner) + ")",
       params: parts.flatMap((p) => p.params),
@@ -229,77 +223,67 @@ function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
 
   const col = columnSqlExpr(signal, f.column);
 
-  if (f.kind === "null") {
-    return {
-      sql: `${col.sql} ${f.op === "isNull" ? "IS NULL" : "IS NOT NULL"}`,
-      params: col.params,
-    };
-  }
+  switch (f.op) {
+    case "isNull":
+      return { sql: `${col.sql} IS NULL`, params: col.params };
+    case "isNotNull":
+      return { sql: `${col.sql} IS NOT NULL`, params: col.params };
 
-  if (f.kind === "string") {
-    switch (f.op) {
-      case "eq":
-        return { sql: `${col.sql} = ?`, params: [...col.params, f.value] };
-      case "neq":
-        return { sql: `${col.sql} <> ?`, params: [...col.params, f.value] };
-      // TODO: escape `%`, `_`, `\` in f.value before interpolating
-      // below — a needle "50%" currently matches "5" + anything. Fix:
-      // `... LIKE ? ESCAPE '\\'`. Same gap exists in startsWith/endsWith.
-      case "contains":
-        // LIKE (not INSTR) matches the ClickHouse backend's ILIKE:
-        // SQLite's default LIKE is case-insensitive for ASCII.
-        return {
-          sql: `${col.sql} LIKE ?`,
-          params: [...col.params, `%${f.value}%`],
-        };
-      case "notContains":
-        return {
-          sql: `${col.sql} NOT LIKE ?`,
-          params: [...col.params, `%${f.value}%`],
-        };
-      case "startsWith":
-        return {
-          sql: `${col.sql} LIKE ?`,
-          params: [...col.params, `${f.value}%`],
-        };
-      case "endsWith":
-        return {
-          sql: `${col.sql} LIKE ?`,
-          params: [...col.params, `%${f.value}`],
-        };
+    case "eq":
+    case "neq": {
+      // Polymorphic value — typeof picks the SQL coercion. Booleans
+      // serialize to 0/1 (matches SQLite storage); strings/numbers
+      // bind through directly.
+      const opSql = f.op === "eq" ? "=" : "<>";
+      const param = typeof f.value === "boolean" ? (f.value ? 1 : 0) : f.value;
+      return { sql: `${col.sql} ${opSql} ?`, params: [...col.params, param] };
+    }
+
+    // TODO: escape `%`, `_`, `\` in f.value before interpolating
+    // below — a needle "50%" currently matches "5" + anything. Fix:
+    // `... LIKE ? ESCAPE '\\'`. Same gap exists in startsWith/endsWith.
+    case "contains":
+      // LIKE (not INSTR) matches the ClickHouse backend's ILIKE:
+      // SQLite's default LIKE is case-insensitive for ASCII.
+      return {
+        sql: `${col.sql} LIKE ?`,
+        params: [...col.params, `%${f.value}%`],
+      };
+    case "notContains":
+      return {
+        sql: `${col.sql} NOT LIKE ?`,
+        params: [...col.params, `%${f.value}%`],
+      };
+    case "startsWith":
+      return {
+        sql: `${col.sql} LIKE ?`,
+        params: [...col.params, `${f.value}%`],
+      };
+    case "endsWith":
+      return {
+        sql: `${col.sql} LIKE ?`,
+        params: [...col.params, `%${f.value}`],
+      };
+
+    case "gt":
+    case "gte":
+    case "lt":
+    case "lte":
+      return {
+        sql: `${col.sql} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[f.op]} ?`,
+        params: [...col.params, f.value],
+      };
+
+    case "in":
+    case "notIn": {
+      const placeholders = f.values.map(() => "?").join(", ");
+      const opSql = f.op === "in" ? "IN" : "NOT IN";
+      return {
+        sql: `${col.sql} ${opSql} (${placeholders})`,
+        params: [...col.params, ...f.values],
+      };
     }
   }
-
-  if (f.kind === "stringIn") {
-    const placeholders = f.values.map(() => "?").join(", ");
-    const opSql = f.op === "in" ? "IN" : "NOT IN";
-    return {
-      sql: `${col.sql} ${opSql} (${placeholders})`,
-      params: [...col.params, ...f.values],
-    };
-  }
-
-  if (f.kind === "number") {
-    return {
-      sql: `${col.sql} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[f.op]} ?`,
-      params: [...col.params, f.value],
-    };
-  }
-
-  if (f.kind === "numberIn") {
-    const placeholders = f.values.map(() => "?").join(", ");
-    const opSql = f.op === "in" ? "IN" : "NOT IN";
-    return {
-      sql: `${col.sql} ${opSql} (${placeholders})`,
-      params: [...col.params, ...f.values],
-    };
-  }
-
-  // boolean
-  return {
-    sql: `${col.sql} ${f.op === "eq" ? "=" : "<>"} ?`,
-    params: [...col.params, f.value ? 1 : 0],
-  };
 }
 
 // Wraps core's extractMetricType so the rest of this file keeps using
@@ -434,7 +418,7 @@ function runRawCore(
   const wheres: SqlFragment[] = [buildTimeWhere(signal, win)];
   for (const f of filters) wheres.push(buildFilter(signal, f));
 
-  const order = q.orderBy as OrderItemShape[] | undefined;
+  const order = q.orderBy;
   const direction: "asc" | "desc" =
     order?.[0]?.direction ?? defaultRawDirection();
 
@@ -451,6 +435,7 @@ function runRawCore(
           "orderBy measure is not allowed in raw mode."
         );
       }
+      assertColumnRef(o.column);
       const colExpr = columnSqlExpr(signal, o.column);
       orderParams.push(...colExpr.params);
       orderParts.push(`${colExpr.sql} ${o.direction.toUpperCase()}`);
@@ -481,7 +466,7 @@ function runRawCore(
 
   const stmt = conn.prepare(sql);
   stmt.setReadBigInts(true);
-  const rawRows = stmt.all(...params) as Record<string, unknown>[];
+  const rawRows = stmt.all(...params);
 
   const hasMore = rawRows.length > limit;
   const pageRows = hasMore ? rawRows.slice(0, limit) : rawRows;
@@ -578,15 +563,15 @@ export function runAggregate(
   const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
   const windowSeconds = Number((win.endNs - win.startNs) / 1_000_000_000n) || 1;
 
-  const isTimeSeries = q.output.type === "timeSeries";
   const granularitySeconds =
     q.output.type === "timeSeries"
       ? kopaiQueryCompiler.granularityToSeconds(q.output.granularity)
       : null;
+  const isTimeSeries = granularitySeconds !== null;
   const bucketWidthSeconds = granularitySeconds ?? windowSeconds;
 
   // Dimensions + GROUP BY
-  const dimensions = (q.dimensions ?? []) as ColumnRef[];
+  const dimensions = q.dimensions ?? [];
   const dimAliases: { alias: string; key: string }[] = [];
   const dimSelectParts: string[] = [];
   const dimSelectParams: SqlParam[] = [];
@@ -594,7 +579,7 @@ export function runAggregate(
   const groupByParams: SqlParam[] = [];
 
   if (isTimeSeries) {
-    const bucketNs = BigInt(granularitySeconds!) * 1_000_000_000n;
+    const bucketNs = BigInt(granularitySeconds) * 1_000_000_000n;
     dimSelectParts.push(`(${timeCol} / ?) * ? AS "bucket_start_ns"`);
     dimSelectParams.push(bucketNs, bucketNs);
     groupByExprs.push(`(${timeCol} / ?) * ?`);
@@ -613,7 +598,7 @@ export function runAggregate(
   }
 
   // Measures
-  const measures = q.measures as MeasureExprShape[];
+  const measures = q.measures;
   const measureSelectParts: string[] = [];
   const measureSelectParams: SqlParam[] = [];
   const measureAliases: string[] = [];
@@ -695,7 +680,8 @@ export function runAggregate(
       if (o.type === "measure") {
         parts.push(`${quoteAlias(o.alias)} ${o.direction.toUpperCase()}`);
       } else {
-        const expr = columnSqlExpr(signal, o.column as ColumnRef);
+        assertColumnRef(o.column);
+        const expr = columnSqlExpr(signal, o.column);
         orderParams.push(...expr.params);
         parts.push(`${expr.sql} ${o.direction.toUpperCase()}`);
       }
@@ -738,7 +724,7 @@ export function runAggregate(
 
   const stmt = conn.prepare(sql);
   stmt.setReadBigInts(true);
-  const rawRows = stmt.all(...params) as Record<string, unknown>[];
+  const rawRows = stmt.all(...params);
 
   const data: kopaiQueryNs.KopaiAggregateRow[] = rawRows.map((row) => {
     const out: kopaiQueryNs.KopaiAggregateRow = {};

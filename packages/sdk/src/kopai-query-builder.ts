@@ -91,9 +91,9 @@ type AggFlags = {
 type AggInit = { measures: false; timeDimension: false; output: false };
 export type AggReady = { measures: true; timeDimension: true; output: true };
 
-type RawFlags = { dimensions: boolean; timeDimension: boolean };
-type RawInit = { dimensions: false; timeDimension: false };
-export type RawReady = { dimensions: true; timeDimension: true };
+type RawFlags = { timeDimension: boolean };
+type RawInit = { timeDimension: false };
+export type RawReady = { timeDimension: true };
 
 // ============================================================
 // Build-time error
@@ -152,8 +152,23 @@ function inferContainer(key: string, signal: Signal): string {
 
 type ColumnRef = string | { container: string; key: string };
 
+function isAttrRef(
+  input: unknown
+): input is { container: string; key: string } {
+  if (typeof input !== "object" || input === null) return false;
+  if (!("container" in input) || !("key" in input)) return false;
+  return typeof input.container === "string" && typeof input.key === "string";
+}
+
 function resolveColumn(input: unknown, signal: Signal): ColumnRef {
-  if (typeof input === "object" && input !== null) return input as ColumnRef;
+  if (typeof input === "object" && input !== null) {
+    if (!isAttrRef(input)) {
+      throw new TypeError(
+        `Column object must have { container: string, key: string }`
+      );
+    }
+    return input;
+  }
   if (typeof input !== "string") {
     throw new TypeError(`Column must be a string or attr-ref object`);
   }
@@ -165,45 +180,20 @@ function resolveColumn(input: unknown, signal: Signal): ColumnRef {
 // Filter DSL
 // ============================================================
 
-interface AttrRefTerminal<S extends Signal> {
-  eq(value: string): FilterExprFor<S> & { kind: "string" };
-  eq(value: number): FilterExprFor<S> & { kind: "number" };
-  eq(value: boolean): FilterExprFor<S> & { kind: "boolean" };
-  neq(value: string): FilterExprFor<S> & { kind: "string" };
-  neq(value: number): FilterExprFor<S> & { kind: "number" };
-  neq(value: boolean): FilterExprFor<S> & { kind: "boolean" };
-  contains(value: string): FilterExprFor<S>;
-  notContains(value: string): FilterExprFor<S>;
-  startsWith(value: string): FilterExprFor<S>;
-  endsWith(value: string): FilterExprFor<S>;
-  in(values: string[]): FilterExprFor<S>;
-  in(values: number[]): FilterExprFor<S>;
-  notIn(values: string[] | number[]): FilterExprFor<S>;
-  gt(value: number): FilterExprFor<S>;
-  gte(value: number): FilterExprFor<S>;
-  lt(value: number): FilterExprFor<S>;
-  lte(value: number): FilterExprFor<S>;
-  isNull(): FilterExprFor<S>;
-  isNotNull(): FilterExprFor<S>;
-}
-
 /** DSL for building per-signal filter expressions. */
 export interface FilterBuilder<S extends Signal> {
   /** AND-combines children. */
   and(...children: FilterExprFor<S>[]): FilterExprFor<S>;
   /** OR-combines children. */
   or(...children: FilterExprFor<S>[]): FilterExprFor<S>;
-  /** Equality filter; kind picked from value type. */
-  eq(col: ColumnArg<S>, value: string): FilterExprFor<S> & { kind: "string" };
-  eq(col: ColumnArg<S>, value: number): FilterExprFor<S> & { kind: "number" };
-  eq(col: ColumnArg<S>, value: boolean): FilterExprFor<S> & { kind: "boolean" };
-  /** Inequality filter; kind picked from value type. */
-  neq(col: ColumnArg<S>, value: string): FilterExprFor<S> & { kind: "string" };
-  neq(col: ColumnArg<S>, value: number): FilterExprFor<S> & { kind: "number" };
-  neq(
-    col: ColumnArg<S>,
-    value: boolean
-  ): FilterExprFor<S> & { kind: "boolean" };
+  /** Equality filter. */
+  eq(col: ColumnArg<S>, value: string): FilterExprFor<S>;
+  eq(col: ColumnArg<S>, value: number): FilterExprFor<S>;
+  eq(col: ColumnArg<S>, value: boolean): FilterExprFor<S>;
+  /** Inequality filter. */
+  neq(col: ColumnArg<S>, value: string): FilterExprFor<S>;
+  neq(col: ColumnArg<S>, value: number): FilterExprFor<S>;
+  neq(col: ColumnArg<S>, value: boolean): FilterExprFor<S>;
   contains(col: ColumnArg<S>, value: string): FilterExprFor<S>;
   notContains(col: ColumnArg<S>, value: string): FilterExprFor<S>;
   startsWith(col: ColumnArg<S>, value: string): FilterExprFor<S>;
@@ -217,107 +207,37 @@ export interface FilterBuilder<S extends Signal> {
   lte(col: ColumnArg<S>, value: number): FilterExprFor<S>;
   isNull(col: ColumnArg<S>): FilterExprFor<S>;
   isNotNull(col: ColumnArg<S>): FilterExprFor<S>;
-  /** Explicit attribute-map reference for non-semconv keys. */
-  attr(container: ContainerFor<S>, key: string): AttrRefTerminal<S>;
 }
 
 function makeFilterBuilder<S extends Signal>(signal: S): FilterBuilder<S> {
   const col = (c: ColumnArg<S>) => resolveColumn(c, signal);
 
   const stringOp = (op: string) => (c: ColumnArg<S>, value: string) =>
-    ({
-      kind: "string",
-      column: col(c),
-      op,
-      value,
-    }) as unknown as FilterExprFor<S>;
+    ({ column: col(c), op, value }) as unknown as FilterExprFor<S>;
   const numberOp = (op: string) => (c: ColumnArg<S>, value: number) =>
-    ({
-      kind: "number",
-      column: col(c),
-      op,
-      value,
-    }) as unknown as FilterExprFor<S>;
+    ({ column: col(c), op, value }) as unknown as FilterExprFor<S>;
 
   const inOp =
     (op: "in" | "notIn") =>
-    (c: ColumnArg<S>, values: string[] | number[]): FilterExprFor<S> => {
-      const isNumber = values.length > 0 && typeof values[0] === "number";
-      return {
-        kind: isNumber ? "numberIn" : "stringIn",
-        column: col(c),
-        op,
-        values,
-      } as unknown as FilterExprFor<S>;
-    };
+    (c: ColumnArg<S>, values: string[] | number[]): FilterExprFor<S> =>
+      ({ column: col(c), op, values }) as unknown as FilterExprFor<S>;
 
-  const eq = (c: ColumnArg<S>, value: string | number | boolean) => {
-    const kind =
-      typeof value === "number"
-        ? "number"
-        : typeof value === "boolean"
-          ? "boolean"
-          : "string";
-    return {
-      kind,
-      column: col(c),
-      op: "eq",
-      value,
-    } as unknown as FilterExprFor<S>;
-  };
-  const neq = (c: ColumnArg<S>, value: string | number | boolean) => {
-    const kind =
-      typeof value === "number"
-        ? "number"
-        : typeof value === "boolean"
-          ? "boolean"
-          : "string";
-    return {
-      kind,
-      column: col(c),
-      op: "neq",
-      value,
-    } as unknown as FilterExprFor<S>;
-  };
+  const eq = (c: ColumnArg<S>, value: string | number | boolean) =>
+    ({ column: col(c), op: "eq", value }) as unknown as FilterExprFor<S>;
+  const neq = (c: ColumnArg<S>, value: string | number | boolean) =>
+    ({ column: col(c), op: "neq", value }) as unknown as FilterExprFor<S>;
 
   const nullOp = (op: "isNull" | "isNotNull") => (c: ColumnArg<S>) =>
-    ({ kind: "null", column: col(c), op }) as unknown as FilterExprFor<S>;
+    ({ column: col(c), op }) as unknown as FilterExprFor<S>;
 
-  const logical =
-    (op: "and" | "or") =>
-    (...children: FilterExprFor<S>[]) =>
-      ({
-        kind: "logical",
-        op,
-        filters: children,
-      }) as unknown as FilterExprFor<S>;
-
-  const attr = (
-    container: ContainerFor<S>,
-    key: string
-  ): AttrRefTerminal<S> => {
-    const ref = { container, key } as ColumnArg<S>;
-    return {
-      eq: (v: string | number | boolean) => eq(ref, v),
-      neq: (v: string | number | boolean) => neq(ref, v),
-      contains: (v: string) => stringOp("contains")(ref, v),
-      notContains: (v: string) => stringOp("notContains")(ref, v),
-      startsWith: (v: string) => stringOp("startsWith")(ref, v),
-      endsWith: (v: string) => stringOp("endsWith")(ref, v),
-      in: (v: string[] | number[]) => inOp("in")(ref, v),
-      notIn: (v: string[] | number[]) => inOp("notIn")(ref, v),
-      gt: (v: number) => numberOp("gt")(ref, v),
-      gte: (v: number) => numberOp("gte")(ref, v),
-      lt: (v: number) => numberOp("lt")(ref, v),
-      lte: (v: number) => numberOp("lte")(ref, v),
-      isNull: () => nullOp("isNull")(ref),
-      isNotNull: () => nullOp("isNotNull")(ref),
-    } as AttrRefTerminal<S>;
-  };
+  const and = (...children: FilterExprFor<S>[]) =>
+    ({ and: children }) as unknown as FilterExprFor<S>;
+  const or = (...children: FilterExprFor<S>[]) =>
+    ({ or: children }) as unknown as FilterExprFor<S>;
 
   return {
-    and: logical("and"),
-    or: logical("or"),
+    and,
+    or,
     eq: eq as FilterBuilder<S>["eq"],
     neq: neq as FilterBuilder<S>["neq"],
     contains: stringOp("contains"),
@@ -332,7 +252,6 @@ function makeFilterBuilder<S extends Signal>(signal: S): FilterBuilder<S> {
     lte: numberOp("lte"),
     isNull: nullOp("isNull"),
     isNotNull: nullOp("isNotNull"),
-    attr,
   };
 }
 
@@ -443,13 +362,8 @@ function makeMeasureBuilder<S extends Signal>(signal: S): MeasureBuilderFor<S> {
 // ============================================================
 
 type TimeDim =
-  | { type: "relative"; lookback: string; compareOffset?: string }
-  | {
-      type: "absolute";
-      startTime: string;
-      endTime: string;
-      compareOffset?: string;
-    };
+  | { type: "relative"; lookback: string }
+  | { type: "absolute"; startTime: string; endTime: string };
 
 type Output = { type: "summary" } | { type: "timeSeries"; granularity: string };
 
@@ -472,15 +386,16 @@ interface State {
 }
 
 function initialState(signal: Signal, mode: "aggregate" | "raw"): State {
-  return Object.freeze({
+  const state: State = {
     signal,
     mode,
-    measures: Object.freeze([]),
-    dimensions: Object.freeze([]),
-    filters: Object.freeze([]),
-    havings: Object.freeze([]),
-    orderBy: Object.freeze([]),
-  }) as unknown as State;
+    measures: [],
+    dimensions: [],
+    filters: [],
+    havings: [],
+    orderBy: [],
+  };
+  return Object.freeze(state);
 }
 
 function pruneState(s: State): Record<string, unknown> {
@@ -515,7 +430,7 @@ const SCHEMA_MAP = {
   },
 } as const;
 
-function validateAndReturn(state: State): unknown {
+function validateAndReturn<T>(state: State): T {
   const schema = SCHEMA_MAP[state.signal][state.mode];
   const result = schema.safeParse(pruneState(state));
   if (!result.success) {
@@ -526,7 +441,10 @@ function validateAndReturn(state: State): unknown {
       }))
     );
   }
-  return result.data;
+  // WHY: SCHEMA_MAP returns a union of schemas; TS cannot prove the inferred
+  // output narrows to the caller's T (AggregateQueryFor<S> / RawQueryFor<S>).
+  // The (signal, mode) -> schema mapping is the source of truth.
+  return result.data as T;
 }
 
 // ============================================================
@@ -616,12 +534,8 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
   }
 
   /** Relative time window ending now. */
-  timeRelative(
-    lookback: string,
-    compareOffset?: string
-  ): AggBuilder<S, WithFlag<F, "timeDimension">> {
+  timeRelative(lookback: string): AggBuilder<S, WithFlag<F, "timeDimension">> {
     const td: TimeDim = { type: "relative", lookback };
-    if (compareOffset !== undefined) td.compareOffset = compareOffset;
     return this.clone((s) => ({
       ...s,
       timeDimension: td,
@@ -631,11 +545,9 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
   /** Absolute ISO-bounded time window. */
   timeAbsolute(
     startTime: string,
-    endTime: string,
-    compareOffset?: string
+    endTime: string
   ): AggBuilder<S, WithFlag<F, "timeDimension">> {
     const td: TimeDim = { type: "absolute", startTime, endTime };
-    if (compareOffset !== undefined) td.compareOffset = compareOffset;
     return this.clone((s) => ({
       ...s,
       timeDimension: td,
@@ -668,9 +580,7 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
 
   /** Finalizes the query. Available only when all required fields are set. */
   build(this: AggBuilder<S, AggReady>): AggregateQueryFor<S> {
-    return validateAndReturn(
-      (this as unknown as { _state: State })._state
-    ) as AggregateQueryFor<S>;
+    return validateAndReturn<AggregateQueryFor<S>>(this._state);
   }
 }
 
@@ -694,13 +604,13 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
     return new RawBuilder<S, RawFlags>(this._signal, next);
   }
 
-  /** Adds a column to project. Repeatable. */
-  dimension(col: ColumnArg<S>): RawBuilder<S, WithFlag<F, "dimensions">> {
+  /** Adds a column to project. Repeatable. Omit entirely to receive the full denormalized row. */
+  dimension(col: ColumnArg<S>): RawBuilder<S, F> {
     const ref = resolveColumn(col, this._signal);
     return this.clone((s) => ({
       ...s,
       dimensions: Object.freeze([...s.dimensions, ref]),
-    })) as unknown as RawBuilder<S, WithFlag<F, "dimensions">>;
+    })) as unknown as RawBuilder<S, F>;
   }
 
   /** Adds a filter (top-level AND with other where calls). */
@@ -728,12 +638,8 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
   }
 
   /** Relative time window ending now. */
-  timeRelative(
-    lookback: string,
-    compareOffset?: string
-  ): RawBuilder<S, WithFlag<F, "timeDimension">> {
+  timeRelative(lookback: string): RawBuilder<S, WithFlag<F, "timeDimension">> {
     const td: TimeDim = { type: "relative", lookback };
-    if (compareOffset !== undefined) td.compareOffset = compareOffset;
     return this.clone((s) => ({
       ...s,
       timeDimension: td,
@@ -743,11 +649,9 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
   /** Absolute ISO-bounded time window. */
   timeAbsolute(
     startTime: string,
-    endTime: string,
-    compareOffset?: string
+    endTime: string
   ): RawBuilder<S, WithFlag<F, "timeDimension">> {
     const td: TimeDim = { type: "absolute", startTime, endTime };
-    if (compareOffset !== undefined) td.compareOffset = compareOffset;
     return this.clone((s) => ({
       ...s,
       timeDimension: td,
@@ -772,9 +676,7 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
 
   /** Finalizes the query. Available only when all required fields are set. */
   build(this: RawBuilder<S, RawReady>): RawQueryFor<S> {
-    return validateAndReturn(
-      (this as unknown as { _state: State })._state
-    ) as RawQueryFor<S>;
+    return validateAndReturn<RawQueryFor<S>>(this._state);
   }
 }
 

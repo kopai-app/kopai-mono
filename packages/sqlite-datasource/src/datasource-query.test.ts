@@ -19,6 +19,22 @@ function assertDefined<T>(
   if (value === undefined || value === null) throw new Error(msg);
 }
 
+// Typed wrappers around kopaiQueryCompiler.allStructuralColumns. The
+// core helper returns `string[]` because it spreads three different
+// structural-name sets; here we re-type the result to the exact per-
+// signal column literal union via a generic helper. The validator
+// enforces the literal-set invariant at runtime, so the
+// `<unknown[]>` round-trip avoids an `as`-to-narrow cast.
+function structuralDimensions<S extends "traces">(
+  signal: S
+): NonNullable<kopaiQueryNs.TraceRawQuery["dimensions"]>;
+function structuralDimensions<S extends "logs">(
+  signal: S
+): NonNullable<kopaiQueryNs.LogRawQuery["dimensions"]>;
+function structuralDimensions(signal: "traces" | "logs"): unknown[] {
+  return kopaiQueryCompiler.allStructuralColumns(signal);
+}
+
 // Time window wide enough to cover the synthetic 1970-era timestamps used
 // in tests + present-day timestamps. Upper bound kept inside SQLite's i64
 // nanosecond range (max ≈ 9.22e18). 2200-01-01 ≈ 7.26e18 ns.
@@ -66,9 +82,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
       const result = await readDs.query({
         signal: "traces",
         mode: "raw",
-        dimensions: kopaiQueryCompiler.allStructuralColumns(
-          "traces"
-        ) as kopaiQueryNs.TraceRawQuery["dimensions"],
+        dimensions: structuralDimensions("traces"),
         timeDimension: WIDE_WINDOW,
       });
 
@@ -100,9 +114,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "traces",
         mode: "raw",
         dimensions: ["TraceId", "SpanId"],
-        filters: [
-          { kind: "string", column: "TraceId", op: "eq", value: "target" },
-        ],
+        filters: [{ column: "TraceId", op: "eq", value: "target" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -132,14 +144,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "traces",
         mode: "raw",
         dimensions: ["TraceId", "SpanId"],
-        filters: [
-          {
-            kind: "string",
-            column: "service.name",
-            op: "eq",
-            value: "target",
-          },
-        ],
+        filters: [{ column: "service.name", op: "eq", value: "target" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -177,18 +182,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["TraceId", "SpanId", "SpanName", "Timestamp"],
         filters: [
-          {
-            kind: "string",
-            column: "SpanName",
-            op: "eq",
-            value: "GET /api",
-          },
-          {
-            kind: "number",
-            column: "Timestamp",
-            op: "lte",
-            value: 1500000000000000,
-          },
+          { column: "SpanName", op: "eq", value: "GET /api" },
+          { column: "Timestamp", op: "lte", value: 1500000000000000 },
         ],
         timeDimension: WIDE_WINDOW,
       });
@@ -221,7 +216,6 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         dimensions: ["TraceId", "SpanId"],
         filters: [
           {
-            kind: "string",
             column: { container: "SpanAttributes", key: "custom" },
             op: "eq",
             value: "yes",
@@ -300,6 +294,38 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
       expect(row.ResourceAttributes).toMatchObject({ env: "prod" });
     });
 
+    it("raw mode without dimensions returns full denormalized OtelTracesRow", async () => {
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s1",
+        spanName: "GET /api",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+        spanAttributes: { foo: "bar" },
+        resourceAttributes: { env: "prod" },
+      });
+
+      // No `dimensions` field — Phase A made it optional on raw queries.
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: WIDE_WINDOW,
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row = result.data[0];
+      assertDefined(row);
+      // Structural columns
+      expect(row.TraceId).toBe("t1");
+      expect(row.SpanId).toBe("s1");
+      expect(row.SpanName).toBe("GET /api");
+      expect(row.Timestamp).toBeDefined();
+      expect(row.Duration).toBeDefined();
+      // Attribute maps survive the full-denormalized projection.
+      expect(row.SpanAttributes).toEqual({ foo: "bar" });
+      expect(row.ResourceAttributes).toMatchObject({ env: "prod" });
+    });
+
     // Parity with old `searchTraces` filters: ParentSpanId, StatusCode,
     // SpanKind, Duration range. None were covered before this commit.
 
@@ -322,9 +348,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "traces",
         mode: "raw",
         dimensions: ["TraceId", "SpanId", "ParentSpanId"],
-        filters: [
-          { kind: "string", column: "ParentSpanId", op: "eq", value: "root" },
-        ],
+        filters: [{ column: "ParentSpanId", op: "eq", value: "root" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -354,12 +378,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["SpanId", "StatusCode"],
         filters: [
-          {
-            kind: "string",
-            column: "StatusCode",
-            op: "eq",
-            value: "STATUS_CODE_ERROR",
-          },
+          { column: "StatusCode", op: "eq", value: "STATUS_CODE_ERROR" },
         ],
         timeDimension: WIDE_WINDOW,
       });
@@ -390,14 +409,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "traces",
         mode: "raw",
         dimensions: ["SpanId", "SpanKind"],
-        filters: [
-          {
-            kind: "string",
-            column: "SpanKind",
-            op: "eq",
-            value: "SPAN_KIND_SERVER",
-          },
-        ],
+        filters: [{ column: "SpanKind", op: "eq", value: "SPAN_KIND_SERVER" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -436,18 +448,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["SpanId", "Duration"],
         filters: [
-          {
-            kind: "number",
-            column: "Duration",
-            op: "gte",
-            value: 2_000_000_000,
-          },
-          {
-            kind: "number",
-            column: "Duration",
-            op: "lte",
-            value: 10_000_000_000,
-          },
+          { column: "Duration", op: "gte", value: 2_000_000_000 },
+          { column: "Duration", op: "lte", value: 10_000_000_000 },
         ],
         timeDimension: WIDE_WINDOW,
       });
@@ -482,7 +484,6 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         dimensions: ["TraceId", "SpanId"],
         filters: [
           {
-            kind: "string",
             column: {
               container: "ResourceAttributes",
               key: "service.version",
@@ -561,9 +562,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
       const result = await readDs.query({
         signal: "logs",
         mode: "raw",
-        dimensions: kopaiQueryCompiler.allStructuralColumns(
-          "logs"
-        ) as kopaiQueryNs.LogRawQuery["dimensions"],
+        dimensions: structuralDimensions("logs"),
         timeDimension: WIDE_WINDOW,
       });
 
@@ -587,9 +586,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "logs",
         mode: "raw",
         dimensions: ["TraceId", "Timestamp"],
-        filters: [
-          { kind: "string", column: "TraceId", op: "eq", value: "target" },
-        ],
+        filters: [{ column: "TraceId", op: "eq", value: "target" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -609,8 +606,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["Timestamp", "SeverityNumber"],
         filters: [
-          { kind: "number", column: "SeverityNumber", op: "gte", value: 8 },
-          { kind: "number", column: "SeverityNumber", op: "lte", value: 12 },
+          { column: "SeverityNumber", op: "gte", value: 8 },
+          { column: "SeverityNumber", op: "lte", value: 12 },
         ],
         timeDimension: WIDE_WINDOW,
       });
@@ -637,7 +634,6 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         dimensions: ["Timestamp"],
         filters: [
           {
-            kind: "string",
             column: { container: "LogAttributes", key: "request.id" },
             op: "eq",
             value: "abc123",
@@ -666,14 +662,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "logs",
         mode: "raw",
         dimensions: ["Timestamp", "Body"],
-        filters: [
-          {
-            kind: "string",
-            column: "Body",
-            op: "contains",
-            value: "logged in",
-          },
-        ],
+        filters: [{ column: "Body", op: "contains", value: "logged in" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -755,14 +744,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "logs",
         mode: "raw",
         dimensions: ["Timestamp", "SeverityText"],
-        filters: [
-          {
-            kind: "string",
-            column: "SeverityText",
-            op: "eq",
-            value: "ERROR",
-          },
-        ],
+        filters: [{ column: "SeverityText", op: "eq", value: "ERROR" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -788,7 +770,6 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         dimensions: ["Timestamp"],
         filters: [
           {
-            kind: "string",
             column: { container: "ResourceAttributes", key: "deployment.env" },
             op: "eq",
             value: "prod",
@@ -811,9 +792,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "logs",
         mode: "raw",
         dimensions: ["Timestamp", "ScopeName"],
-        filters: [
-          { kind: "string", column: "ScopeName", op: "eq", value: "scope-b" },
-        ],
+        filters: [{ column: "ScopeName", op: "eq", value: "scope-b" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -843,9 +822,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "logs",
         mode: "raw",
         dimensions: ["Timestamp", "Body"],
-        filters: [
-          { kind: "string", column: "Body", op: "contains", value: "database" },
-        ],
+        filters: [{ column: "Body", op: "contains", value: "database" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -911,9 +888,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "metrics",
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Value"],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -937,9 +912,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "metrics",
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Value"],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Sum" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -967,14 +940,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "metrics",
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Count"],
-        filters: [
-          {
-            kind: "string",
-            column: "MetricType",
-            op: "eq",
-            value: "Histogram",
-          },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Histogram" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -1004,12 +970,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Scale"],
         filters: [
-          {
-            kind: "string",
-            column: "MetricType",
-            op: "eq",
-            value: "ExponentialHistogram",
-          },
+          { column: "MetricType", op: "eq", value: "ExponentialHistogram" },
         ],
         timeDimension: WIDE_WINDOW,
       });
@@ -1037,14 +998,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "metrics",
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Count"],
-        filters: [
-          {
-            kind: "string",
-            column: "MetricType",
-            op: "eq",
-            value: "Summary",
-          },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Summary" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -1075,9 +1029,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "metrics",
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Value"],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: WIDE_WINDOW,
         limit: 2,
       });
@@ -1089,9 +1041,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "metrics",
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Value"],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: WIDE_WINDOW,
         limit: 2,
         cursor: page1.nextCursor,
@@ -1128,9 +1078,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "metrics",
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "TimeUnix", "Value"],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: WIDE_WINDOW,
         orderBy: [{ type: "dimension", column: "TimeUnix", direction: "asc" }],
       });
@@ -1160,13 +1108,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Value"],
         filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-          {
-            kind: "string",
-            column: "MetricName",
-            op: "eq",
-            value: "memory.usage",
-          },
+          { column: "MetricType", op: "eq", value: "Gauge" },
+          { column: "MetricName", op: "eq", value: "memory.usage" },
         ],
         timeDimension: WIDE_WINDOW,
       });
@@ -1196,9 +1139,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Value"],
         filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+          { column: "MetricType", op: "eq", value: "Gauge" },
           {
-            kind: "string",
             column: { container: "Attributes", key: "cpu" },
             op: "eq",
             value: "1",
@@ -1233,8 +1175,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Value"],
         filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-          { kind: "string", column: "service.name", op: "eq", value: "beta" },
+          { column: "MetricType", op: "eq", value: "Gauge" },
+          { column: "service.name", op: "eq", value: "beta" },
         ],
         timeDimension: WIDE_WINDOW,
       });
@@ -1264,9 +1206,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         mode: "raw",
         dimensions: ["MetricName", "MetricType", "Value"],
         filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+          { column: "MetricType", op: "eq", value: "Gauge" },
           {
-            kind: "string",
             column: { container: "ResourceAttributes", key: "region" },
             op: "eq",
             value: "eu-west",
@@ -1325,13 +1266,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         measures: [{ op: "SUM", column: "Value", as: "total" }],
         dimensions: [{ container: "Attributes", key: "signal" }],
         filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
-          {
-            kind: "string",
-            column: "MetricName",
-            op: "eq",
-            value: "ingestion.bytes",
-          },
+          { column: "MetricType", op: "eq", value: "Sum" },
+          { column: "MetricName", op: "eq", value: "ingestion.bytes" },
         ],
         timeDimension: WIDE_WINDOW,
         output: { type: "summary" },
@@ -1370,9 +1306,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
           { op: "MAX", column: "Value", as: "max_v" },
           { op: "COUNT", as: "cnt" },
         ],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: WIDE_WINDOW,
         output: { type: "summary" },
       });
@@ -1416,9 +1350,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
             as: "distinct_hosts",
           },
         ],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: WIDE_WINDOW,
         output: { type: "summary" },
       });
@@ -1451,13 +1383,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
           { container: "Attributes", key: "tenant.id" },
         ],
         filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
-          {
-            kind: "string",
-            column: "MetricName",
-            op: "eq",
-            value: "ingestion.bytes",
-          },
+          { column: "MetricType", op: "eq", value: "Sum" },
+          { column: "MetricName", op: "eq", value: "ingestion.bytes" },
         ],
         timeDimension: WIDE_WINDOW,
         output: { type: "summary" },
@@ -1496,13 +1423,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         measures: [{ op: "SUM", column: "Value", as: "total" }],
         dimensions: [{ container: "Attributes", key: "host" }],
         filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
-          {
-            kind: "string",
-            column: "MetricName",
-            op: "eq",
-            value: "ingestion.bytes",
-          },
+          { column: "MetricType", op: "eq", value: "Sum" },
+          { column: "MetricName", op: "eq", value: "ingestion.bytes" },
         ],
         havings: [{ measure: "total", op: "gt", value: 40 }],
         timeDimension: WIDE_WINDOW,
@@ -1543,9 +1465,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
           { op: "RATE_SUM", column: "Value", as: "rsum" },
           { op: "RATE_MAX", column: "Value", as: "rmax" },
         ],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: window,
         output: { type: "summary" },
       });
@@ -1585,9 +1505,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "metrics",
         mode: "aggregate",
         measures: [{ op: "AVG", column: "Value", as: "avg_v" }],
-        filters: [
-          { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: {
           type: "absolute",
           startTime: "2024-01-01T00:00:00.000Z",
@@ -1624,9 +1542,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
           signal: "metrics",
           mode: "aggregate",
           measures: [{ op: "P95", column: "Value", as: "p95" }],
-          filters: [
-            { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-          ],
+          filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
           timeDimension: WIDE_WINDOW,
           output: { type: "summary" },
         })
@@ -1672,21 +1588,9 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
           measures: [{ op: "COUNT", as: "cnt" }],
           filters: [
             {
-              kind: "logical",
-              op: "or",
-              filters: [
-                {
-                  kind: "string",
-                  column: "MetricType",
-                  op: "eq",
-                  value: "Gauge",
-                },
-                {
-                  kind: "string",
-                  column: "MetricType",
-                  op: "eq",
-                  value: "Sum",
-                },
+              or: [
+                { column: "MetricType", op: "eq", value: "Gauge" },
+                { column: "MetricType", op: "eq", value: "Sum" },
               ],
             },
           ],
@@ -1792,8 +1696,8 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
       const rate = row.rate;
       // 2 spans / ~32e9 seconds (1970 to 3000) — very small but positive.
       assertDefined(rate);
-      expect(typeof rate).toBe("number");
-      expect(rate as number).toBeGreaterThan(0);
+      if (typeof rate !== "number") throw new Error("rate must be number");
+      expect(rate).toBeGreaterThan(0);
     });
 
     it("lists distinct ServiceName values — equivalent to old SDK getServices()", async () => {
@@ -1872,14 +1776,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "traces",
         mode: "aggregate",
         dimensions: ["SpanName"],
-        filters: [
-          {
-            kind: "string",
-            column: "service.name",
-            op: "eq",
-            value: "alpha",
-          },
-        ],
+        filters: [{ column: "service.name", op: "eq", value: "alpha" }],
         measures: [{ op: "COUNT", as: "n" }],
         timeDimension: WIDE_WINDOW,
         output: { type: "summary" },

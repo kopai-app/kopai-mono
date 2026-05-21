@@ -20,12 +20,11 @@ type AnyFilterExpr = kopaiQueryCompiler.AnyFilterExpr;
 // containers exist) affects the SQL shape — the validator already
 // guarantees runtime correctness.
 type ColumnRefStructural = kopaiQueryCompiler.ColumnRefStructural;
-type OrderItemShape =
-  | {
-      type: "dimension";
-      column: ColumnRefStructural;
-      direction: "asc" | "desc";
-    }
+// `column` is `unknown` in the orderBy declaration because the underlying
+// Zod schema uses an untyped `z.ZodType` for the column ref. We narrow it
+// at runtime with `toColumnRef` before using it.
+type OrderItemRaw =
+  | { type: "dimension"; column: unknown; direction: "asc" | "desc" }
   | { type: "measure"; alias: string; direction: "asc" | "desc" };
 type MeasureExprShape =
   | { op: "COUNT"; as: string }
@@ -33,6 +32,23 @@ type MeasureExprShape =
   | { op: "THROUGHPUT"; as: string }
   | { op: "COUNT_DISTINCT"; column: ColumnRefStructural; as: string }
   | { op: NumericOpName; column: ColumnRefStructural; as: string };
+
+function isStringRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function toColumnRef(value: unknown): ColumnRefStructural {
+  if (typeof value === "string") return value;
+  if (isStringRecord(value)) {
+    const { container, key } = value;
+    if (typeof container === "string" && typeof key === "string") {
+      return { container, key };
+    }
+  }
+  throw new Error(
+    `Invalid column ref shape: ${JSON.stringify(value)} — expected string or { container, key }`
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Per-signal column references that exist as top-level columns in ClickHouse.
@@ -203,68 +219,78 @@ function compileFilter(
   f: AnyFilterExpr,
   ctx: ParamCtx
 ): string {
-  if (f.kind === "logical") {
-    if (f.filters.length === 0) return "1=1";
-    const inner = f.filters
+  if ("and" in f || "or" in f) {
+    const children = "and" in f ? f.and : f.or;
+    const joiner = "and" in f ? " AND " : " OR ";
+    if (children.length === 0) return "1=1";
+    const inner = children
       .map((sub) => compileFilter(signal, sub, ctx))
-      .join(f.op === "and" ? " AND " : " OR ");
+      .join(joiner);
     return `(${inner})`;
   }
   const col = resolveRefSql(signal, f.column);
-  switch (f.kind) {
-    case "string": {
-      const p = nextParam(ctx, f.value, "s");
-      switch (f.op) {
-        case "eq":
-          return `${col.sql} = {${p}:String}`;
-        case "neq":
-          return `${col.sql} != {${p}:String}`;
-        case "contains":
-          ctx.params[p] = `%${escapeLikePattern(f.value)}%`;
-          return `${col.sql} ILIKE {${p}:String}`;
-        case "notContains":
-          ctx.params[p] = `%${escapeLikePattern(f.value)}%`;
-          return `${col.sql} NOT ILIKE {${p}:String}`;
-        case "startsWith":
-          ctx.params[p] = `${escapeLikePattern(f.value)}%`;
-          return `${col.sql} ILIKE {${p}:String}`;
-        case "endsWith":
-          ctx.params[p] = `%${escapeLikePattern(f.value)}`;
-          return `${col.sql} ILIKE {${p}:String}`;
-        default:
-          throw new Error("Unknown string op");
+  switch (f.op) {
+    case "eq":
+    case "neq": {
+      if (typeof f.value === "boolean") {
+        const v = f.value ? "true" : "false";
+        const p = nextParam(ctx, v, "b");
+        const eq = f.op === "eq" ? "=" : "!=";
+        return `${col.sql} ${eq} {${p}:String}`;
       }
+      if (typeof f.value === "number") {
+        const numCol = numericCast(col);
+        const p = nextParam(ctx, f.value, "n");
+        return `${numCol} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[f.op]} {${p}:Float64}`;
+      }
+      const p = nextParam(ctx, f.value, "s");
+      return f.op === "eq"
+        ? `${col.sql} = {${p}:String}`
+        : `${col.sql} != {${p}:String}`;
     }
-    case "stringIn": {
-      const p = nextParam(ctx, f.values, "sin");
-      const not = f.op === "notIn" ? "NOT " : "";
-      return `${col.sql} ${not}IN {${p}:Array(String)}`;
+    case "contains": {
+      const p = nextParam(ctx, `%${escapeLikePattern(f.value)}%`, "s");
+      return `${col.sql} ILIKE {${p}:String}`;
     }
-    case "number": {
+    case "notContains": {
+      const p = nextParam(ctx, `%${escapeLikePattern(f.value)}%`, "s");
+      return `${col.sql} NOT ILIKE {${p}:String}`;
+    }
+    case "startsWith": {
+      const p = nextParam(ctx, `${escapeLikePattern(f.value)}%`, "s");
+      return `${col.sql} ILIKE {${p}:String}`;
+    }
+    case "endsWith": {
+      const p = nextParam(ctx, `%${escapeLikePattern(f.value)}`, "s");
+      return `${col.sql} ILIKE {${p}:String}`;
+    }
+    case "gt":
+    case "gte":
+    case "lt":
+    case "lte": {
       const numCol = numericCast(col);
       const p = nextParam(ctx, f.value, "n");
       return `${numCol} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[f.op]} {${p}:Float64}`;
     }
-    case "numberIn": {
-      const numCol = numericCast(col);
-      const p = nextParam(ctx, f.values, "nin");
+    case "in":
+    case "notIn": {
       const not = f.op === "notIn" ? "NOT " : "";
-      return `${numCol} ${not}IN {${p}:Array(Float64)}`;
-    }
-    case "boolean": {
-      // booleans in OTel attribute maps are stored as String "true"/"false".
-      const v = f.value ? "true" : "false";
-      const p = nextParam(ctx, v, "b");
-      const eq = f.op === "eq" ? "=" : "!=";
-      return `${col.sql} ${eq} {${p}:String}`;
-    }
-    case "null": {
-      if (col.isString) {
-        // Map[] returns empty string when key missing.
-        return f.op === "isNull" ? `empty(${col.sql})` : `notEmpty(${col.sql})`;
+      // Pick element type from the first value — Zod guarantees array
+      // contents are uniform string|number (the LLM can mix, but we trust
+      // upstream validation). If empty, default to String.
+      const first = f.values[0];
+      if (typeof first === "number") {
+        const numCol = numericCast(col);
+        const p = nextParam(ctx, f.values, "nin");
+        return `${numCol} ${not}IN {${p}:Array(Float64)}`;
       }
-      // Top-level columns: most are non-nullable Strings in CH otel schema.
-      // Use empty()/notEmpty() to mean "absent" consistently.
+      const p = nextParam(ctx, f.values, "sin");
+      return `${col.sql} ${not}IN {${p}:Array(String)}`;
+    }
+    case "isNull":
+    case "isNotNull": {
+      // Map[] returns empty string when key missing; top-level CH otel cols
+      // are non-nullable Strings — empty()/notEmpty() works for both.
       return f.op === "isNull" ? `empty(${col.sql})` : `notEmpty(${col.sql})`;
     }
   }
@@ -303,7 +329,7 @@ function compileTimeRange(
 
 function compileOrderByRaw(
   signal: Signal,
-  orderBy: OrderItemShape[] | undefined,
+  orderBy: OrderItemRaw[] | undefined,
   defaultCol: string
 ): { sql: string; sortKeySqls: string[] } {
   if (!orderBy || orderBy.length === 0) {
@@ -318,7 +344,7 @@ function compileOrderByRaw(
     if (o.type === "measure") {
       throw new Error("Raw mode does not allow measure-typed orderBy");
     }
-    const r = resolveRefSql(signal, o.column);
+    const r = resolveRefSql(signal, toColumnRef(o.column));
     sortKeySqls.push(r.sql);
     parts.push(`${r.sql} ${o.direction.toUpperCase()}`);
   }
@@ -327,7 +353,7 @@ function compileOrderByRaw(
 
 function compileOrderByAggregate(
   signal: Signal,
-  orderBy: OrderItemShape[] | undefined
+  orderBy: OrderItemRaw[] | undefined
 ): string {
   if (!orderBy || orderBy.length === 0) return "";
   const parts: string[] = [];
@@ -335,7 +361,7 @@ function compileOrderByAggregate(
     if (o.type === "measure") {
       parts.push(`${escapeIdent(o.alias)} ${o.direction.toUpperCase()}`);
     } else {
-      const r = resolveRefSql(signal, o.column);
+      const r = resolveRefSql(signal, toColumnRef(o.column));
       parts.push(`${r.sql} ${o.direction.toUpperCase()}`);
     }
   }
@@ -361,7 +387,10 @@ type NumericOpName =
   | "RATE_SUM"
   | "RATE_MAX";
 
-const QUANTILE_MAP: Record<string, number> = {
+const QUANTILE_MAP: Record<
+  "P50" | "P75" | "P90" | "P95" | "P99" | "P999",
+  number
+> = {
   P50: 0.5,
   P75: 0.75,
   P90: 0.9,
@@ -393,10 +422,6 @@ function compileMeasure(
   }
   const r = resolveRefSql(signal, m.column);
   const numCol = numericCast(r);
-  if (m.op in QUANTILE_MAP) {
-    const q = QUANTILE_MAP[m.op]!;
-    return `quantile(${String(q)})(${numCol}) AS ${alias}`;
-  }
   const denom = bucketSeconds ?? windowSeconds;
   switch (m.op) {
     case "SUM":
@@ -413,8 +438,16 @@ function compileMeasure(
       return `(sum(${numCol}) / ${String(denom)}) AS ${alias}`;
     case "RATE_MAX":
       return `(max(${numCol}) / ${String(denom)}) AS ${alias}`;
+    case "P50":
+    case "P75":
+    case "P90":
+    case "P95":
+    case "P99":
+    case "P999":
+      return `quantile(${String(QUANTILE_MAP[m.op])})(${numCol}) AS ${alias}`;
   }
-  throw new Error(`Unknown measure op: ${String((m as { op: string }).op)}`);
+  const exhaustive: never = m;
+  throw new Error(`Unknown measure: ${JSON.stringify(exhaustive)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -496,7 +529,7 @@ function buildTraceRaw(q: TraceRawQuery): {
     const c = parseCursor(q.cursor);
     const tsParam = nextParam(ctx, nanosToDateTime64(c.ts), "curTs");
     const idParam = nextParam(ctx, c.id, "curId");
-    const sortDir = inferPrimaryDir(q.orderBy as OrderItemShape[] | undefined);
+    const sortDir = inferPrimaryDir(q.orderBy);
     if (sortDir === "desc") {
       conds.push(
         `(Timestamp < {${tsParam}:DateTime64(9)} OR (Timestamp = {${tsParam}:DateTime64(9)} AND SpanId < {${idParam}:String}))`
@@ -508,16 +541,12 @@ function buildTraceRaw(q: TraceRawQuery): {
     }
   }
 
-  const orderInfo = compileOrderByRaw(
-    "traces",
-    q.orderBy as OrderItemShape[] | undefined,
-    "Timestamp"
-  );
+  const orderInfo = compileOrderByRaw("traces", q.orderBy, "Timestamp");
   // Ensure secondary tiebreaker on SpanId for stable cursor.
   const orderSql = ensureTiebreaker(
     orderInfo.sql,
     "SpanId",
-    inferPrimaryDir(q.orderBy as OrderItemShape[] | undefined)
+    inferPrimaryDir(q.orderBy)
   );
 
   const limit = (q.limit ?? 100) + 1;
@@ -567,7 +596,7 @@ function buildLogRaw(q: LogRawQuery): {
     const c = parseCursor(q.cursor);
     const tsParam = nextParam(ctx, nanosToDateTime64(c.ts), "curTs");
     const hashParam = nextParam(ctx, c.id, "curHash");
-    const sortDir = inferPrimaryDir(q.orderBy as OrderItemShape[] | undefined);
+    const sortDir = inferPrimaryDir(q.orderBy);
     if (sortDir === "desc") {
       conds.push(
         `(Timestamp < {${tsParam}:DateTime64(9)} OR (Timestamp = {${tsParam}:DateTime64(9)} AND sipHash64(Timestamp, Body, ServiceName, TraceId, SpanId) < {${hashParam}:UInt64}))`
@@ -579,15 +608,11 @@ function buildLogRaw(q: LogRawQuery): {
     }
   }
 
-  const orderInfo = compileOrderByRaw(
-    "logs",
-    q.orderBy as OrderItemShape[] | undefined,
-    "Timestamp"
-  );
+  const orderInfo = compileOrderByRaw("logs", q.orderBy, "Timestamp");
   const orderSql = ensureTiebreaker(
     orderInfo.sql,
     "_rowHash",
-    inferPrimaryDir(q.orderBy as OrderItemShape[] | undefined)
+    inferPrimaryDir(q.orderBy)
   );
 
   const limit = (q.limit ?? 100) + 1;
@@ -693,7 +718,7 @@ function buildMetricRaw(q: MetricRawQuery): {
     const c = parseCursor(q.cursor);
     const tsParam = nextParam(ctx, nanosToDateTime64(c.ts), "curTs");
     const hashParam = nextParam(ctx, c.id, "curHash");
-    const sortDir = inferPrimaryDir(q.orderBy as OrderItemShape[] | undefined);
+    const sortDir = inferPrimaryDir(q.orderBy);
     if (sortDir === "desc") {
       conds.push(
         `(TimeUnix < {${tsParam}:DateTime64(9)} OR (TimeUnix = {${tsParam}:DateTime64(9)} AND sipHash64(TimeUnix, ServiceName, MetricName, toString(Attributes)) < {${hashParam}:UInt64}))`
@@ -705,15 +730,11 @@ function buildMetricRaw(q: MetricRawQuery): {
     }
   }
 
-  const orderInfo = compileOrderByRaw(
-    "metrics",
-    q.orderBy as OrderItemShape[] | undefined,
-    "TimeUnix"
-  );
+  const orderInfo = compileOrderByRaw("metrics", q.orderBy, "TimeUnix");
   const orderSql = ensureTiebreaker(
     orderInfo.sql,
     "_rowHash",
-    inferPrimaryDir(q.orderBy as OrderItemShape[] | undefined)
+    inferPrimaryDir(q.orderBy)
   );
 
   const limit = (q.limit ?? 100) + 1;
@@ -789,34 +810,35 @@ function buildAggregateSql(args: {
   if (filterSql) conds.push(filterSql);
 
   // bucketing
-  const isTimeSeries = q.output.type === "timeSeries";
-  const bucketSeconds = isTimeSeries
-    ? kopaiQueryCompiler.granularityToSeconds(
-        (q.output as { granularity: string }).granularity
-      )
-    : null;
+  const bucketSeconds =
+    q.output.type === "timeSeries"
+      ? kopaiQueryCompiler.granularityToSeconds(q.output.granularity)
+      : null;
+  const isTimeSeries = bucketSeconds !== null;
   const windowSeconds = windowSecondsFromTimeDim(q.timeDimension);
 
   // dimensions
-  const dims = (q.dimensions ?? []) as ColumnRef[];
+  const dims: unknown[] = q.dimensions ?? [];
   const groupBySql: string[] = [];
   const selectDimSql: string[] = [];
   for (const d of dims) {
-    const r = resolveRefSql(signal, d);
+    const r = resolveRefSql(signal, toColumnRef(d));
     const alias = escapeIdent(r.projectionKey);
     selectDimSql.push(`${r.sql} AS ${alias}`);
     groupBySql.push(r.sql);
   }
   if (isTimeSeries) {
+    if (bucketSeconds === null) {
+      throw new Error("Internal: timeSeries output requires bucketSeconds");
+    }
     const tsCol = kopaiQueryCompiler.timeColumnForSignal(signal);
-    const bucketExpr = `toStartOfInterval(${tsCol}, INTERVAL ${String(bucketSeconds!)} SECOND)`;
+    const bucketExpr = `toStartOfInterval(${tsCol}, INTERVAL ${String(bucketSeconds)} SECOND)`;
     selectDimSql.push(`${bucketExpr} AS bucket_start`);
     groupBySql.push(bucketExpr);
   }
 
   // measures
-  const measures = q.measures as MeasureExprShape[];
-  const measureSql = measures.map((m) =>
+  const measureSql = q.measures.map((m) =>
     compileMeasure(signal, m, bucketSeconds, windowSeconds)
   );
 
@@ -836,10 +858,7 @@ function buildAggregateSql(args: {
   }
 
   // ORDER BY
-  const orderSql = compileOrderByAggregate(
-    signal,
-    q.orderBy as OrderItemShape[] | undefined
-  );
+  const orderSql = compileOrderByAggregate(signal, q.orderBy);
 
   // LIMIT
   let limitSql = "";
@@ -872,14 +891,18 @@ function stripMetricTypeFilter(
   if (!filters) return filters;
   const out: AnyFilterExpr[] = [];
   for (const f of filters) {
-    if (f.kind === "logical" && f.op === "and") {
-      const inner = stripMetricTypeFilter(f.filters);
+    if ("and" in f) {
+      const inner = stripMetricTypeFilter(f.and);
       if (inner && inner.length > 0) {
-        out.push({ kind: "logical", op: "and", filters: inner });
+        out.push({ and: inner });
       }
+    } else if ("or" in f) {
+      // OR groups can't be partially stripped without changing semantics, so
+      // pass through untouched. MetricType pinning lives in top-level AND only.
+      out.push(f);
     } else if (
-      (f.kind === "string" && f.column === "MetricType") ||
-      (f.kind === "stringIn" && f.column === "MetricType")
+      f.column === "MetricType" &&
+      (f.op === "eq" || f.op === "neq" || f.op === "in" || f.op === "notIn")
     ) {
       // drop
     } else {
@@ -889,9 +912,7 @@ function stripMetricTypeFilter(
   return out;
 }
 
-function inferPrimaryDir(
-  orderBy: OrderItemShape[] | undefined
-): "asc" | "desc" {
+function inferPrimaryDir(orderBy: OrderItemRaw[] | undefined): "asc" | "desc" {
   if (!orderBy || orderBy.length === 0) return "desc";
   const first = orderBy[0];
   return first?.direction === "asc" ? "asc" : "desc";

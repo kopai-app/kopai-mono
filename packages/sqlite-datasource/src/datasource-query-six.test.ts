@@ -88,9 +88,7 @@ describe("OptimizedDatasource.queryTracesRaw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId", "SpanId"],
-      filters: [
-        { kind: "string", column: "TraceId", op: "eq", value: "target" },
-      ],
+      filters: [{ column: "TraceId", op: "eq", value: "target" }],
       timeDimension: WIDE_WINDOW,
       limit: 2,
     });
@@ -273,9 +271,7 @@ describe("OptimizedDatasource.queryLogsRaw", () => {
       signal: "logs",
       mode: "raw",
       dimensions: ["Timestamp", "SeverityText"],
-      filters: [
-        { kind: "string", column: "SeverityText", op: "eq", value: "ERROR" },
-      ],
+      filters: [{ column: "SeverityText", op: "eq", value: "ERROR" }],
       timeDimension: WIDE_WINDOW,
     });
 
@@ -437,9 +433,7 @@ describe("OptimizedDatasource.queryMetricsRaw", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName", "MetricType", "Value"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: WIDE_WINDOW,
     });
 
@@ -530,9 +524,7 @@ describe("OptimizedDatasource.queryMetricsAggregate", () => {
         { op: "MAX", column: "Value", as: "max_v" },
         { op: "COUNT", as: "cnt" },
       ],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: WIDE_WINDOW,
       output: { type: "summary" },
     });
@@ -638,9 +630,7 @@ describe("query() still dispatches correctly post-rewire", () => {
       signal: "metrics",
       mode: "aggregate",
       measures: [{ op: "AVG", column: "Value", as: "avg_v" }],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: WIDE_WINDOW,
       output: { type: "summary" },
     } as const satisfies kopaiQueryNs.MetricAggregateQuery;

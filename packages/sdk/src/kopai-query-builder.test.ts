@@ -2,6 +2,14 @@ import { describe, it, expect, expectTypeOf } from "vitest";
 import { kopaiQuery } from "@kopai/core";
 import { kq, KopaiQueryBuildError } from "./kopai-query-builder.js";
 
+function assertBuildError(err: unknown): asserts err is KopaiQueryBuildError {
+  if (!(err instanceof KopaiQueryBuildError)) {
+    throw new Error(
+      `expected KopaiQueryBuildError, got ${err === undefined ? "undefined" : String(err)}`
+    );
+  }
+}
+
 // ============================================================
 // Sanity (type-test plumbing)
 // ============================================================
@@ -118,19 +126,19 @@ describe("premature build rejection (aggregate)", () => {
 });
 
 describe("premature build rejection (raw)", () => {
-  it("rejects every missing-required-field combination", () => {
+  it("rejects missing timeDimension; build is available without dimensions", () => {
     if (false as boolean) {
-      const b1 = kq.traces.raw().timeRelative("1h");
-      // @ts-expect-error missing dimensions
-      b1.build();
-
       const b2 = kq.traces.raw().dimension("SpanId");
       // @ts-expect-error missing timeDimension
       b2.build();
 
       const b3 = kq.traces.raw();
-      // @ts-expect-error missing dimensions + timeDimension
+      // @ts-expect-error missing timeDimension
       b3.build();
+
+      // build is available without .dimension() once timeDimension is set
+      const b4 = kq.traces.raw().timeRelative("1h");
+      b4.build();
     }
     expect(true).toBe(true);
   });
@@ -223,24 +231,6 @@ describe("unknown column rejection", () => {
     expect(true).toBe(true);
   });
 
-  it("rejects cross-signal attr container on attr()", () => {
-    if (false as boolean) {
-      kq.traces.aggregate().where((f) =>
-        // @ts-expect-error LogAttributes is logs-only
-        f.attr("LogAttributes", "k").eq("v")
-      );
-      kq.logs.aggregate().where((f) =>
-        // @ts-expect-error SpanAttributes is traces-only
-        f.attr("SpanAttributes", "k").eq("v")
-      );
-      kq.metrics.aggregate().where((f) =>
-        // @ts-expect-error SpanAttributes is traces-only
-        f.attr("SpanAttributes", "k").eq("v")
-      );
-    }
-    expect(true).toBe(true);
-  });
-
   it("rejects cross-signal attr-ref via dimension()", () => {
     if (false as boolean) {
       // @ts-expect-error LogAttributes is logs-only
@@ -253,76 +243,6 @@ describe("unknown column rejection", () => {
         .dimension({ container: "LogAttributes", key: "k" });
     }
     expect(true).toBe(true);
-  });
-});
-
-// ============================================================
-// Type-only: filter eq overload discriminant
-// ============================================================
-describe("filter eq overload discriminant", () => {
-  it("string value -> kind:string", () => {
-    kq.traces.aggregate().where((f) => {
-      const r = f.eq("SpanName", "GET /");
-      expectTypeOf(r.kind).toEqualTypeOf<"string">();
-      return r;
-    });
-  });
-
-  it("number value -> kind:number", () => {
-    kq.traces.aggregate().where((f) => {
-      const r = f.eq("Duration", 42);
-      expectTypeOf(r.kind).toEqualTypeOf<"number">();
-      return r;
-    });
-  });
-
-  it("boolean value -> kind:boolean", () => {
-    kq.metrics.aggregate().where((f) => {
-      const r = f.eq("IsMonotonic", true);
-      expectTypeOf(r.kind).toEqualTypeOf<"boolean">();
-      return r;
-    });
-  });
-});
-
-// ============================================================
-// Type-only: attr().eq/neq discriminant parity with f.eq/neq
-// ============================================================
-describe("attr().eq/neq discriminant", () => {
-  it("attr().eq narrows kind by value type", () => {
-    kq.traces.aggregate().where((f) => {
-      const r = f.attr("SpanAttributes", "k").eq("v");
-      expectTypeOf(r.kind).toEqualTypeOf<"string">();
-      return r;
-    });
-    kq.traces.aggregate().where((f) => {
-      const r = f.attr("SpanAttributes", "k").eq(1);
-      expectTypeOf(r.kind).toEqualTypeOf<"number">();
-      return r;
-    });
-    kq.traces.aggregate().where((f) => {
-      const r = f.attr("SpanAttributes", "k").eq(true);
-      expectTypeOf(r.kind).toEqualTypeOf<"boolean">();
-      return r;
-    });
-  });
-
-  it("attr().neq narrows kind by value type", () => {
-    kq.traces.aggregate().where((f) => {
-      const r = f.attr("SpanAttributes", "k").neq("v");
-      expectTypeOf(r.kind).toEqualTypeOf<"string">();
-      return r;
-    });
-    kq.traces.aggregate().where((f) => {
-      const r = f.attr("SpanAttributes", "k").neq(1);
-      expectTypeOf(r.kind).toEqualTypeOf<"number">();
-      return r;
-    });
-    kq.traces.aggregate().where((f) => {
-      const r = f.attr("SpanAttributes", "k").neq(true);
-      expectTypeOf(r.kind).toEqualTypeOf<"boolean">();
-      return r;
-    });
   });
 });
 
@@ -373,6 +293,18 @@ describe("runtime: happy paths — minimum-valid per variant", () => {
       dimensions: ["SpanId"],
       timeDimension: { type: "relative", lookback: "1h" },
     });
+    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
+  });
+
+  it("traces.raw without .dimension() omits the dimensions field", () => {
+    const q = kq.traces.raw().timeRelative("1h").build();
+    expect(q).toEqual({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: { type: "relative", lookback: "1h" },
+    });
+    expect(Object.keys(q)).not.toContain("dimensions");
+    expect("dimensions" in q).toBe(false);
     expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
   });
 
@@ -454,7 +386,7 @@ describe("runtime: all-features aggregate", () => {
       .having("requests", "gt", 0)
       .orderByMeasure("p95_dur", "desc")
       .orderByDimension("service.name", "asc")
-      .timeRelative("2h", "7d")
+      .timeRelative("2h")
       .timeSeries("5m")
       .limit(100)
       .build();
@@ -472,12 +404,11 @@ describe("runtime: all-features aggregate", () => {
       ],
       filters: [
         {
-          kind: "string",
           column: "SpanKind",
           op: "eq",
           value: "SPAN_KIND_SERVER",
         },
-        { kind: "number", column: "Duration", op: "gt", value: 100 },
+        { column: "Duration", op: "gt", value: 100 },
       ],
       havings: [{ measure: "requests", op: "gt", value: 0 }],
       orderBy: [
@@ -487,7 +418,6 @@ describe("runtime: all-features aggregate", () => {
       timeDimension: {
         type: "relative",
         lookback: "2h",
-        compareOffset: "7d",
       },
       output: { type: "timeSeries", granularity: "5m" },
       limit: 100,
@@ -509,9 +439,7 @@ describe("runtime: all-features aggregate", () => {
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "c" }],
       dimensions: ["log.level"],
-      filters: [
-        { kind: "string", column: "Body", op: "contains", value: "error" },
-      ],
+      filters: [{ column: "Body", op: "contains", value: "error" }],
       timeDimension: {
         type: "absolute",
         startTime: "2024-01-01T00:00:00Z",
@@ -536,9 +464,7 @@ describe("runtime: all-features aggregate", () => {
       mode: "aggregate",
       measures: [{ op: "AVG", column: "Value", as: "avg_v" }],
       dimensions: ["MetricName"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: { type: "relative", lookback: "30m" },
       output: { type: "timeSeries", granularity: "1m" },
     });
@@ -565,7 +491,7 @@ describe("runtime: raw with cursor + limit + orderBy", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["SpanId", "Duration"],
-      filters: [{ kind: "number", column: "Duration", op: "gte", value: 1000 }],
+      filters: [{ column: "Duration", op: "gte", value: 1000 }],
       orderBy: [{ type: "dimension", column: "Duration", direction: "desc" }],
       timeDimension: { type: "relative", lookback: "1h" },
       limit: 50,
@@ -576,7 +502,7 @@ describe("runtime: raw with cursor + limit + orderBy", () => {
 });
 
 // ============================================================
-// Runtime: filter coverage (each kind)
+// Runtime: filter coverage (each op)
 // ============================================================
 describe("runtime: filter coverage", () => {
   it("string filter (eq)", () => {
@@ -591,16 +517,14 @@ describe("runtime: filter coverage", () => {
       signal: "traces",
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "c" }],
-      filters: [
-        { kind: "string", column: "SpanName", op: "eq", value: "GET /" },
-      ],
+      filters: [{ column: "SpanName", op: "eq", value: "GET /" }],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
     });
     expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
   });
 
-  it("stringIn filter", () => {
+  it("in filter (strings)", () => {
     const q = kq.traces
       .aggregate()
       .measure((m) => m.count("c"))
@@ -614,7 +538,6 @@ describe("runtime: filter coverage", () => {
       measures: [{ op: "COUNT", as: "c" }],
       filters: [
         {
-          kind: "stringIn",
           column: "SpanKind",
           op: "in",
           values: ["SPAN_KIND_SERVER", "SPAN_KIND_CLIENT"],
@@ -638,14 +561,14 @@ describe("runtime: filter coverage", () => {
       signal: "traces",
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "c" }],
-      filters: [{ kind: "number", column: "Duration", op: "gt", value: 500 }],
+      filters: [{ column: "Duration", op: "gt", value: 500 }],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
     });
     expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
   });
 
-  it("numberIn filter", () => {
+  it("in filter (numbers)", () => {
     const q = kq.traces
       .aggregate()
       .measure((m) => m.count("c"))
@@ -659,7 +582,6 @@ describe("runtime: filter coverage", () => {
       measures: [{ op: "COUNT", as: "c" }],
       filters: [
         {
-          kind: "numberIn",
           column: "Duration",
           op: "in",
           values: [1, 2, 3],
@@ -683,9 +605,7 @@ describe("runtime: filter coverage", () => {
       signal: "metrics",
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "c" }],
-      filters: [
-        { kind: "boolean", column: "IsMonotonic", op: "eq", value: true },
-      ],
+      filters: [{ column: "IsMonotonic", op: "eq", value: true }],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
     });
@@ -704,7 +624,7 @@ describe("runtime: filter coverage", () => {
       signal: "traces",
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "c" }],
-      filters: [{ kind: "null", column: "ParentSpanId", op: "isNull" }],
+      filters: [{ column: "ParentSpanId", op: "isNull" }],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
     });
@@ -733,25 +653,17 @@ describe("runtime: filter coverage", () => {
       measures: [{ op: "COUNT", as: "c" }],
       filters: [
         {
-          kind: "logical",
-          op: "and",
-          filters: [
+          and: [
             {
-              kind: "logical",
-              op: "or",
-              filters: [
+              or: [
                 {
-                  kind: "logical",
-                  op: "and",
-                  filters: [
+                  and: [
                     {
-                      kind: "string",
                       column: "SpanKind",
                       op: "eq",
                       value: "SPAN_KIND_SERVER",
                     },
                     {
-                      kind: "number",
                       column: "Duration",
                       op: "gt",
                       value: 100,
@@ -759,14 +671,13 @@ describe("runtime: filter coverage", () => {
                   ],
                 },
                 {
-                  kind: "string",
                   column: "StatusCode",
                   op: "eq",
                   value: "STATUS_CODE_ERROR",
                 },
               ],
             },
-            { kind: "null", column: "TraceId", op: "isNotNull" },
+            { column: "TraceId", op: "isNotNull" },
           ],
         },
       ],
@@ -776,11 +687,13 @@ describe("runtime: filter coverage", () => {
     expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
   });
 
-  it("attr-ref via explicit attr()", () => {
+  it("attr-ref via column literal", () => {
     const q = kq.traces
       .aggregate()
       .measure((m) => m.count("c"))
-      .where((f) => f.attr("SpanAttributes", "custom.flag").eq(true))
+      .where((f) =>
+        f.eq({ container: "SpanAttributes", key: "custom.flag" }, true)
+      )
       .timeRelative("1h")
       .summary()
       .build();
@@ -790,7 +703,6 @@ describe("runtime: filter coverage", () => {
       measures: [{ op: "COUNT", as: "c" }],
       filters: [
         {
-          kind: "boolean",
           column: { container: "SpanAttributes", key: "custom.flag" },
           op: "eq",
           value: true,
@@ -969,7 +881,7 @@ describe("runtime: measure ops per signal", () => {
 // Runtime: time + output combos
 // ============================================================
 describe("runtime: time + output", () => {
-  it("relative no compareOffset", () => {
+  it("relative time", () => {
     const q = kq.traces
       .aggregate()
       .measure((m) => m.count("c"))
@@ -986,28 +898,7 @@ describe("runtime: time + output", () => {
     expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
   });
 
-  it("relative with compareOffset", () => {
-    const q = kq.traces
-      .aggregate()
-      .measure((m) => m.count("c"))
-      .timeRelative("1h", "7d")
-      .summary()
-      .build();
-    expect(q).toEqual({
-      signal: "traces",
-      mode: "aggregate",
-      measures: [{ op: "COUNT", as: "c" }],
-      timeDimension: {
-        type: "relative",
-        lookback: "1h",
-        compareOffset: "7d",
-      },
-      output: { type: "summary" },
-    });
-    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
-  });
-
-  it("absolute no compareOffset", () => {
+  it("absolute time", () => {
     const q = kq.traces
       .aggregate()
       .measure((m) => m.count("c"))
@@ -1022,28 +913,6 @@ describe("runtime: time + output", () => {
         type: "absolute",
         startTime: "2024-01-01T00:00:00Z",
         endTime: "2024-01-02T00:00:00Z",
-      },
-      output: { type: "summary" },
-    });
-    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
-  });
-
-  it("absolute with compareOffset", () => {
-    const q = kq.traces
-      .aggregate()
-      .measure((m) => m.count("c"))
-      .timeAbsolute("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z", "7d")
-      .summary()
-      .build();
-    expect(q).toEqual({
-      signal: "traces",
-      mode: "aggregate",
-      measures: [{ op: "COUNT", as: "c" }],
-      timeDimension: {
-        type: "absolute",
-        startTime: "2024-01-01T00:00:00Z",
-        endTime: "2024-01-02T00:00:00Z",
-        compareOffset: "7d",
       },
       output: { type: "summary" },
     });
@@ -1084,13 +953,12 @@ describe("runtime: validation errors", () => {
     } catch (e) {
       err = e;
     }
-    expect(err).toBeInstanceOf(KopaiQueryBuildError);
-    const e = err as KopaiQueryBuildError;
-    expect(e.name).toBe("KopaiQueryBuildError");
-    expect(e.issues.length).toBeGreaterThan(0);
-    expect(e.issues.some((i) => i.path.includes("lookback"))).toBe(true);
-    expect(e.message).toContain("Failed to build KopaiQuery");
-    expect(e.message.split("\n").length).toBeGreaterThan(1);
+    assertBuildError(err);
+    expect(err.name).toBe("KopaiQueryBuildError");
+    expect(err.issues.length).toBeGreaterThan(0);
+    expect(err.issues.some((i) => i.path.includes("lookback"))).toBe(true);
+    expect(err.message).toContain("Failed to build KopaiQuery");
+    expect(err.message.split("\n").length).toBeGreaterThan(1);
   });
 
   it("invalid ISO -> path includes startTime", () => {
@@ -1105,12 +973,8 @@ describe("runtime: validation errors", () => {
     } catch (e) {
       err = e;
     }
-    expect(err).toBeInstanceOf(KopaiQueryBuildError);
-    expect(
-      (err as KopaiQueryBuildError).issues.some((i) =>
-        i.path.includes("startTime")
-      )
-    ).toBe(true);
+    assertBuildError(err);
+    expect(err.issues.some((i) => i.path.includes("startTime"))).toBe(true);
   });
 
   it("invalid granularity -> path includes granularity", () => {
@@ -1125,33 +989,26 @@ describe("runtime: validation errors", () => {
     } catch (e) {
       err = e;
     }
-    expect(err).toBeInstanceOf(KopaiQueryBuildError);
-    expect(
-      (err as KopaiQueryBuildError).issues.some((i) =>
-        i.path.includes("granularity")
-      )
-    ).toBe(true);
+    assertBuildError(err);
+    expect(err.issues.some((i) => i.path.includes("granularity"))).toBe(true);
   });
 
   it("empty .in([]) -> validation error on values", () => {
     let err: unknown;
+    const emptyValues: string[] = [];
     try {
       kq.traces
         .aggregate()
         .measure((m) => m.count("c"))
-        .where((f) => f.in("SpanKind", [] as string[]))
+        .where((f) => f.in("SpanKind", emptyValues))
         .timeRelative("1h")
         .summary()
         .build();
     } catch (e) {
       err = e;
     }
-    expect(err).toBeInstanceOf(KopaiQueryBuildError);
-    expect(
-      (err as KopaiQueryBuildError).issues.some((i) =>
-        i.path.includes("values")
-      )
-    ).toBe(true);
+    assertBuildError(err);
+    expect(err.issues.some((i) => i.path.includes("values"))).toBe(true);
   });
 
   it("limit(0) -> validation error on limit", () => {
@@ -1167,10 +1024,8 @@ describe("runtime: validation errors", () => {
     } catch (e) {
       err = e;
     }
-    expect(err).toBeInstanceOf(KopaiQueryBuildError);
-    expect(
-      (err as KopaiQueryBuildError).issues.some((i) => i.path.includes("limit"))
-    ).toBe(true);
+    assertBuildError(err);
+    expect(err.issues.some((i) => i.path.includes("limit"))).toBe(true);
   });
 
   it("limit(10001) -> validation error on limit", () => {
@@ -1186,10 +1041,8 @@ describe("runtime: validation errors", () => {
     } catch (e) {
       err = e;
     }
-    expect(err).toBeInstanceOf(KopaiQueryBuildError);
-    expect(
-      (err as KopaiQueryBuildError).issues.some((i) => i.path.includes("limit"))
-    ).toBe(true);
+    assertBuildError(err);
+    expect(err.issues.some((i) => i.path.includes("limit"))).toBe(true);
   });
 
   it("limit(1) and limit(10000) build successfully", () => {
@@ -1225,12 +1078,12 @@ describe("runtime: validation errors", () => {
     } catch (e) {
       err = e;
     }
-    const e = err as KopaiQueryBuildError;
-    expect(e).toBeInstanceOf(Error);
-    expect(e).toBeInstanceOf(KopaiQueryBuildError);
-    expect(e.name).toBe("KopaiQueryBuildError");
-    expect(Array.isArray(e.issues)).toBe(true);
-    e.issues.forEach((i) => {
+    assertBuildError(err);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(KopaiQueryBuildError);
+    expect(err.name).toBe("KopaiQueryBuildError");
+    expect(Array.isArray(err.issues)).toBe(true);
+    err.issues.forEach((i) => {
       expect(typeof i.path).toBe("string");
       expect(typeof i.message).toBe("string");
     });
@@ -1294,12 +1147,11 @@ describe("runtime: immutability", () => {
       measures: [{ op: "COUNT", as: "c" }],
       filters: [
         {
-          kind: "string",
           column: "SpanKind",
           op: "eq",
           value: "SPAN_KIND_SERVER",
         },
-        { kind: "number", column: "Duration", op: "gt", value: 100 },
+        { column: "Duration", op: "gt", value: 100 },
       ],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
