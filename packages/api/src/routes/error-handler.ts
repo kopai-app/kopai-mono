@@ -3,6 +3,7 @@ import {
   type FastifyReply,
   type FastifyRequest,
 } from "fastify";
+import { kopaiQueryCompiler } from "@kopai/core";
 import { ApiError, DashboardNotFoundError } from "./errors.js";
 import type { ApiErrorResponse } from "./error-schema-zod.js";
 export function errorHandler(
@@ -10,6 +11,19 @@ export function errorHandler(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
+  // KopaiQuery validator catches things zod schemas can't express
+  // (e.g. "metric aggregate without MetricType filter"). Treat the same
+  // as a 400 — the request shape is well-formed but semantically
+  // invalid, and the validator's message is safe to surface.
+  if (error instanceof kopaiQueryCompiler.KopaiQueryValidationError) {
+    return reply.status(400).send({
+      type: "https://docs.kopai.app/errors/signals-api-validation-error",
+      status: 400,
+      title: "Invalid query",
+      detail: error.message,
+    } satisfies ApiErrorResponse);
+  }
+
   if (isClientError(error)) {
     return reply.status(400).send({
       // https://datatracker.ietf.org/doc/html/rfc9457

@@ -21,7 +21,7 @@ metadata:
 
 1. **Discover metrics** — `npx @kopai/cli metrics discover --json`
 2. **Design tree** — build a uiTree using components from the schema above
-3. **Create dashboard** — pipe JSON to `npx @kopai/cli dashboards create --name "<name>" --tree-version "0.7.0" --json`
+3. **Create dashboard** — pipe JSON to `npx @kopai/cli dashboards create --name "<name>" --tree-version "0.14.0" --json`
 4. **Verify** — response contains `id` (success) or `error` (failure). On error: re-run `metrics discover` to check metric names and types match the component compatibility table below, fix the tree, and retry
 
 ## Quick Example
@@ -29,7 +29,7 @@ metadata:
 A single-card dashboard showing CPU usage:
 
 ```bash
-echo '{"uiTree":{"root":"stack-1","elements":{"stack-1":{"key":"stack-1","type":"Stack","props":{"direction":"vertical","gap":"md"},"children":["card-1"],"parentKey":""},"card-1":{"key":"card-1","type":"Card","props":{"title":"CPU Usage"},"children":["ts-1"],"parentKey":"stack-1"},"ts-1":{"key":"ts-1","type":"MetricTimeSeries","props":{"height":300,"unit":"1"},"children":[],"parentKey":"card-1","dataSource":{"method":"searchMetricsPage","params":{"metricType":"Gauge","metricName":"system.cpu.utilization"}}}}},"metadata":{}}' | npx @kopai/cli dashboards create --name "CPU Dashboard" --tree-version "0.7.0" --json
+echo '{"uiTree":{"root":"stack-1","elements":{"stack-1":{"key":"stack-1","type":"Stack","props":{"direction":"vertical","gap":"md"},"children":["card-1"],"parentKey":""},"card-1":{"key":"card-1","type":"Card","props":{"title":"CPU Usage"},"children":["ts-1"],"parentKey":"stack-1"},"ts-1":{"key":"ts-1","type":"MetricTimeSeries","props":{"height":300,"unit":"1"},"children":[],"parentKey":"card-1","dataSource":{"method":"searchMetricsPage","params":{"metricType":"Gauge","metricName":"system.cpu.utilization"}}}}},"metadata":{}}' | npx @kopai/cli dashboards create --name "CPU Dashboard" --tree-version "0.14.0" --json
 ```
 
 ## Common Components

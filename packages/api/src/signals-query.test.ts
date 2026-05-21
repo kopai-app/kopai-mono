@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { datasource, kopaiQuery } from "@kopai/core";
+import {
+  kopaiQueryCompiler,
+  type datasource,
+  type kopaiQuery,
+} from "@kopai/core";
 import { signalsRoutes } from "./index.js";
 import { SignalsApiError } from "./routes/errors.js";
 
@@ -470,6 +474,30 @@ describe("signals query routes", () => {
 
       expect(response.statusCode).toBe(500);
       expect(response.json()).toMatchObject({ detail: "Boom" });
+    });
+
+    // Aggregate metric query passes zod schema validation but the
+    // datasource validator rejects it (no MetricType filter → can't pick
+    // a backing table). Should be 400 with the validator's message, not
+    // a generic 500.
+    it("returns 400 when datasource throws KopaiQueryValidationError", async () => {
+      queryMetricsAggregateSpy.mockRejectedValue(
+        new kopaiQueryCompiler.KopaiQueryValidationError(
+          "Metric queries require a MetricType filter at the top level"
+        )
+      );
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/query/metrics/aggregate",
+        payload: validMetricAggregate,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        status: 400,
+        detail: expect.stringContaining("MetricType"),
+      });
     });
   });
 });

@@ -455,10 +455,12 @@ function LogTimeline(props: RendererProps<"LogTimeline">) {
 
 // ---------- TraceDetail (two accepted methods) ------------------------------
 type TraceDetailProps = RendererProps<"TraceDetail">;
+// Override `response` instead of intersecting — the renderer's response
+// union now includes the generic `query` shape, so a plain intersection
+// would collapse element types to `never`.
 function isTraceSummaries(
   props: TraceDetailProps & { hasData: true }
-): props is TraceDetailProps & {
-  hasData: true;
+): props is Omit<TraceDetailProps & { hasData: true }, "response"> & {
   response: SearchResult<TraceSummaryRow> | null;
 } {
   return props.element.dataSource?.method === "searchTraceSummariesPage";
