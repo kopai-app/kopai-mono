@@ -485,8 +485,9 @@ function isTraceRows(
   if (method !== "searchTracesPage" && method !== "query") return false;
   const data = (props.response as { data?: unknown } | null)?.data;
   if (!Array.isArray(data)) return false;
-  if (data.length === 0) return true;
-  return hasTraceRowShape(data[0]);
+  // Validate every row, not just the first — a `query` response can
+  // legitimately mix shapes and we'd otherwise narrow on a single sample.
+  return data.every(hasTraceRowShape);
 }
 
 function TraceDetail(props: TraceDetailProps) {
