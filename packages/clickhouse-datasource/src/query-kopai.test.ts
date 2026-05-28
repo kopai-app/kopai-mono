@@ -495,6 +495,73 @@ describe("cursor parsing (clickhouse)", () => {
     );
     expect(Object.values(params)).toContain("span-abc");
   });
+
+  // For logs and metrics the cursor id is bound as `{curHash:UInt64}` against
+  // a `sipHash64(...)` predicate. Letting a non-numeric value through to the
+  // server produces a CH parse error (500). Reject upfront with a 400.
+  it("rejects logs cursor with a non-numeric id (must be UInt64)", () => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "logs",
+        mode: "raw",
+        timeDimension: baseTimeDim,
+        cursor: "1704067200000000000:not-a-number",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  it("rejects metrics cursor with a non-numeric id (must be UInt64)", () => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "metrics",
+        mode: "raw",
+        timeDimension: baseTimeDim,
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+        cursor: "1704067200000000000:not-a-number",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  // The cursor predicate is built against the time column (Timestamp/TimeUnix)
+  // and the structural tiebreaker (SpanId / row hash). If the user-specified
+  // primary sort is anything else, the predicate and the ORDER BY disagree and
+  // pagination skips or repeats rows. Reject the combination explicitly.
+  it("rejects cursor when primary orderBy is not the time column", () => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: baseTimeDim,
+        orderBy: [{ type: "dimension", column: "Duration", direction: "desc" }],
+        cursor: "1704067200000000000:span-abc",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  it("accepts cursor when primary orderBy IS the time column", () => {
+    const { sql } = buildKopaiSql({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: baseTimeDim,
+      orderBy: [{ type: "dimension", column: "Timestamp", direction: "asc" }],
+      cursor: "1704067200000000000:span-abc",
+    });
+    expect(sql).toContain("Timestamp >");
+  });
+
+  it("rejects cursor id exceeding UInt64 max for non-trace signals", () => {
+    // 2^64 — one above the UInt64 range. Without an explicit check the
+    // numeric string passes through to CH and fails at execution.
+    const beyondU64 = "18446744073709551616";
+    expect(() =>
+      buildKopaiSql({
+        signal: "logs",
+        mode: "raw",
+        timeDimension: baseTimeDim,
+        cursor: `1704067200000000000:${beyondU64}`,
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -266,6 +266,41 @@ describe("KopaiQuery schema — raw mode dimensions optional", () => {
   });
 });
 
+describe("DurationString — rejects zero at schema level", () => {
+  // The compiler rejects "0s" but the schema regex was \d+, which also
+  // accepted "0s"/"0h"/etc. — letting a schema-validated query reach the
+  // compiler only to fail there. Tighten the schema so the two layers
+  // agree on what counts as a valid duration.
+  it('rejects lookback "0s" at schema parse', () => {
+    const r = KopaiQuery.safeParse({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: { type: "relative", lookback: "0s" },
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('rejects granularity "0m" at schema parse', () => {
+    const r = KopaiQuery.safeParse({
+      signal: "traces",
+      mode: "aggregate",
+      measures: [{ op: "COUNT", as: "n" }],
+      timeDimension: tdRelative,
+      output: { type: "timeSeries", granularity: "0m" },
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("still accepts positive durations", () => {
+    const r = KopaiQuery.safeParse({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: { type: "relative", lookback: "1h" },
+    });
+    expect(r.success).toBe(true);
+  });
+});
+
 describe("KopaiQuery schema — sanity round-trip", () => {
   it("11. full aggregate query with every optional field round-trips", () => {
     const q = {

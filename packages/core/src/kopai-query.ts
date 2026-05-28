@@ -16,12 +16,12 @@ import {
 
 const DurationString = z
   .string()
-  .regex(/^\d+[smhdw]$/, {
+  .regex(/^[1-9]\d*[smhdw]$/, {
     error:
-      'Duration must be a positive integer + unit (s,m,h,d,w) — e.g. "30s", "2h", "7d".',
+      'Duration must be a positive integer > 0 + unit (s,m,h,d,w) — e.g. "30s", "2h", "7d".',
   })
   .describe(
-    'Duration string: positive integer + unit suffix. Units: s=seconds, m=minutes, h=hours, d=days, w=weeks. Examples: "30s", "30m", "2h", "7d", "2w".'
+    'Duration string: positive integer > 0 + unit suffix. Units: s=seconds, m=minutes, h=hours, d=days, w=weeks. Examples: "30s", "30m", "2h", "7d", "2w".'
   );
 
 const ISODateString = z

@@ -334,6 +334,11 @@ function buildCursorWhere(
   }
   const tsStr = cursor.slice(0, sepIdx);
   const idStr = cursor.slice(sepIdx + 1);
+  if (!/^\d+$/.test(tsStr)) {
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      `Invalid cursor timestamp "${tsStr}" — expected unsigned integer nanoseconds.`
+    );
+  }
   const tsNs = BigInt(tsStr);
   const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
 
@@ -350,6 +355,13 @@ function buildCursorWhere(
     };
   }
 
+  // parseInt would accept "42xyz" and page from the wrong row; require a
+  // strict integer match before relying on it.
+  if (!/^\d+$/.test(idStr)) {
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      `Invalid cursor id "${idStr}" — expected integer rowid.`
+    );
+  }
   const rowid = parseInt(idStr, 10);
   if (Number.isNaN(rowid)) {
     throw new kopaiQueryCompiler.KopaiQueryValidationError(
@@ -436,6 +448,21 @@ function compileRawSql(q: KopaiQuery & { mode: "raw" }): CompiledRaw {
     order?.[0]?.direction ?? defaultRawDirection();
 
   if (q.cursor) {
+    // The cursor predicate is keyed off the time column + structural
+    // tiebreak (SpanId / rowid). A user-specified non-time primary sort
+    // would make ORDER BY and the predicate disagree, breaking pagination.
+    if (order && order.length > 0) {
+      const first = order[0];
+      const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
+      if (first && first.type === "dimension") {
+        const col = first.column;
+        if (typeof col !== "string" || col !== timeCol) {
+          throw new kopaiQueryCompiler.KopaiQueryValidationError(
+            `Cursor pagination requires the primary orderBy to be the time column ("${timeCol}"). Got ${JSON.stringify(col)}.`
+          );
+        }
+      }
+    }
     wheres.push(buildCursorWhere(signal, q.cursor, direction));
   }
 
@@ -822,9 +849,18 @@ export function buildKopaiSql(q: KopaiQuery): {
   return { sql: compiled.sql, params: compiled.params };
 }
 
-function normalizeCellValue(v: unknown): string | number | null {
+export function normalizeCellValue(v: unknown): string | number | null {
   if (v === null || v === undefined) return null;
-  if (typeof v === "bigint") return Number(v);
+  if (typeof v === "bigint") {
+    // Number() silently rounds bigints outside the 53-bit safe range.
+    // Preserve full precision as a string for those (KopaiAggregateRow
+    // already permits strings); coerce safe values to number so common
+    // small-count aggregates keep their familiar JS-numeric shape.
+    if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
+      return v.toString();
+    }
+    return Number(v);
+  }
   if (typeof v === "number") return v;
   if (typeof v === "string") return v;
   if (typeof v === "boolean") return v ? 1 : 0;

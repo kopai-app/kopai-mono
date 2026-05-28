@@ -124,7 +124,7 @@ export class KopaiQueryBuildError extends Error {
 // Column resolution
 // ============================================================
 
-const STRUCTURAL_SET: Record<Signal, ReadonlySet<string>> = {
+const TOP_LEVEL_COLUMN_SET: Record<Signal, ReadonlySet<string>> = {
   traces: new Set<string>(kopaiQuery.TraceColumn.options),
   logs: new Set<string>(kopaiQuery.LogColumn.options),
   metrics: new Set<string>(kopaiQuery.MetricColumn.options),
@@ -172,7 +172,7 @@ function resolveColumn(input: unknown, signal: Signal): ColumnRef {
   if (typeof input !== "string") {
     throw new TypeError(`Column must be a string or attr-ref object`);
   }
-  if (STRUCTURAL_SET[signal].has(input)) return input;
+  if (TOP_LEVEL_COLUMN_SET[signal].has(input)) return input;
   return { container: inferContainer(input, signal), key: input };
 }
 

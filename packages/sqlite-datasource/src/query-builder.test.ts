@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { kopaiQuery } from "@kopai/core";
-import { buildKopaiSql } from "./query-builder.js";
+import { buildKopaiSql, normalizeCellValue } from "./query-builder.js";
 
 // ---------------------------------------------------------------------------
 // Filter compilation tests via the public buildKopaiSql entry point.
@@ -647,6 +647,63 @@ describe("cursor pagination (sqlite)", () => {
     ).toThrow(/Invalid cursor format/);
   });
 
+  // Malformed timestamp must surface as KopaiQueryValidationError so the API
+  // returns 400. Without the regex check, `BigInt("abc")` throws a raw
+  // SyntaxError that escapes as a 500.
+  // The cursor predicate is keyed off the time column + structural tiebreak
+  // (SpanId / rowid). A user-specified non-time primary sort would make ORDER
+  // BY and the cursor predicate disagree, breaking pagination. Reject early.
+  it("rejects cursor when primary orderBy is not the time column", async () => {
+    const { kopaiQueryCompiler } = await import("@kopai/core");
+    expect(() =>
+      buildKopaiSql({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: {
+          type: "absolute",
+          startTime: "2024-01-01T00:00:00.000Z",
+          endTime: "2024-01-02T00:00:00.000Z",
+        },
+        orderBy: [{ type: "dimension", column: "Duration", direction: "desc" }],
+        cursor: "1704067200000000000:span-abc",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  it("rejects cursor with a non-numeric timestamp via KopaiQueryValidationError", async () => {
+    const { kopaiQueryCompiler } = await import("@kopai/core");
+    expect(() =>
+      buildKopaiSql({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: {
+          type: "absolute",
+          startTime: "2024-01-01T00:00:00.000Z",
+          endTime: "2024-01-02T00:00:00.000Z",
+        },
+        cursor: "not-a-number:span-abc",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
+  it("rejects cursor with a partially-numeric rowid for non-trace signals", async () => {
+    // parseInt is lenient — "42xyz" parses as 42 and would silently page from
+    // the wrong row. A regex match upfront keeps the contract strict.
+    const { kopaiQueryCompiler } = await import("@kopai/core");
+    expect(() =>
+      buildKopaiSql({
+        signal: "logs",
+        mode: "raw",
+        timeDimension: {
+          type: "absolute",
+          startTime: "2024-01-01T00:00:00.000Z",
+          endTime: "2024-01-02T00:00:00.000Z",
+        },
+        cursor: "1704067200000000000:42xyz",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
   // Both backends round-trip their own cursors, but the cursor field is part
   // of the public KopaiQuery contract — the format must be the same shape on
   // either side so a future shared integration test (or a caller debugging
@@ -665,5 +722,37 @@ describe("cursor pagination (sqlite)", () => {
     expect(sql).toContain(`(Timestamp < ? OR (Timestamp = ? AND SpanId < ?))`);
     expect(params).toContain(1704067200000000000n);
     expect(params).toContain("span-abc");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeCellValue — bigint precision. SQLite returns integer columns as
+// bigint (via setReadBigInts). Number() silently rounds anything beyond the
+// 53-bit safe range, which would drop precision on large aggregate results
+// (huge COUNTs, SUMs of integer columns, etc.). KopaiAggregateRow already
+// permits strings, so out-of-range values must round-trip as strings.
+// ---------------------------------------------------------------------------
+
+describe("normalizeCellValue", () => {
+  it("preserves precision for bigints outside the safe integer range", () => {
+    const big = BigInt(Number.MAX_SAFE_INTEGER) + 10n;
+    const out = normalizeCellValue(big);
+    expect(typeof out).toBe("string");
+    expect(out).toBe(big.toString());
+  });
+
+  it("preserves precision for negative bigints outside the safe range", () => {
+    const big = BigInt(Number.MIN_SAFE_INTEGER) - 10n;
+    const out = normalizeCellValue(big);
+    expect(typeof out).toBe("string");
+    expect(out).toBe(big.toString());
+  });
+
+  it("returns number for in-range bigints (keeps common counts numeric)", () => {
+    expect(normalizeCellValue(3n)).toBe(3);
+    expect(normalizeCellValue(0n)).toBe(0);
+    expect(normalizeCellValue(BigInt(Number.MAX_SAFE_INTEGER))).toBe(
+      Number.MAX_SAFE_INTEGER
+    );
   });
 });

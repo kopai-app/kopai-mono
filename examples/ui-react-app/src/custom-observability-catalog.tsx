@@ -453,7 +453,7 @@ function LogTimeline(props: RendererProps<"LogTimeline">) {
   );
 }
 
-// ---------- TraceDetail (two accepted methods) ------------------------------
+// ---------- TraceDetail (three accepted methods) ----------------------------
 type TraceDetailProps = RendererProps<"TraceDetail">;
 // Override `response` instead of intersecting — the renderer's response
 // union now includes the generic `query` shape, so a plain intersection
@@ -464,6 +464,29 @@ function isTraceSummaries(
   response: SearchResult<TraceSummaryRow> | null;
 } {
   return props.element.dataSource?.method === "searchTraceSummariesPage";
+}
+
+function hasTraceRowShape(v: unknown): v is OtelTracesRow {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return typeof r.SpanId === "string" && typeof r.TraceId === "string";
+}
+
+// `query` can return any shape (raw traces/logs/metrics or an aggregate row).
+// Only narrow to OtelTracesRow[] when the response actually looks like trace
+// rows — otherwise fall through to the unsupported-shape fallback rather
+// than blindly casting.
+function isTraceRows(
+  props: TraceDetailProps & { hasData: true }
+): props is Omit<TraceDetailProps & { hasData: true }, "response"> & {
+  response: { data: OtelTracesRow[]; nextCursor?: string | null } | null;
+} {
+  const method = props.element.dataSource?.method;
+  if (method !== "searchTracesPage" && method !== "query") return false;
+  const data = (props.response as { data?: unknown } | null)?.data;
+  if (!Array.isArray(data)) return false;
+  if (data.length === 0) return true;
+  return hasTraceRowShape(data[0]);
 }
 
 function TraceDetail(props: TraceDetailProps) {
@@ -489,21 +512,23 @@ function TraceDetail(props: TraceDetailProps) {
             </li>
           ))}
         </ul>
-      ) : (
+      ) : isTraceRows(props) ? (
         <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: 12 }}>
-          {((props.response?.data ?? []) as OtelTracesRow[])
-            .slice(0, 10)
-            .map((s) => (
-              <li
-                key={s.SpanId}
-                style={{ padding: "4px 0", borderBottom: "1px solid #eee" }}
-              >
-                <code style={{ color: "#666" }}>{s.SpanId}</code>{" "}
-                {s.SpanName ?? "—"} · {s.ServiceName ?? "—"} ·{" "}
-                {s.Duration ?? "—"}ns
-              </li>
-            ))}
+          {(props.response?.data ?? []).slice(0, 10).map((s) => (
+            <li
+              key={s.SpanId}
+              style={{ padding: "4px 0", borderBottom: "1px solid #eee" }}
+            >
+              <code style={{ color: "#666" }}>{s.SpanId}</code>{" "}
+              {s.SpanName ?? "—"} · {s.ServiceName ?? "—"} · {s.Duration ?? "—"}
+              ns
+            </li>
+          ))}
         </ul>
+      ) : (
+        <div style={{ color: "#999", fontSize: 12, padding: 8 }}>
+          TraceDetail: unsupported response shape.
+        </div>
       )}
     </RequestState>
   );

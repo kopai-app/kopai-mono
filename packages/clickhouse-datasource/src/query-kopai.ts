@@ -461,7 +461,16 @@ export interface RawCursorParts {
   id: string;
 }
 
-export function parseCursor(cursor: string): RawCursorParts {
+// UInt64 max as a BigInt — used to validate that cursor ids bound against
+// `{:UInt64}` parameters (logs/metrics sipHash) actually fit. ClickHouse
+// rejects out-of-range UInt64 literals at execution time, which would
+// otherwise surface as a 500.
+const U64_MAX = (1n << 64n) - 1n;
+
+export function parseCursor(
+  cursor: string,
+  opts: { requireUInt64Id?: boolean } = {}
+): RawCursorParts {
   const colon = cursor.indexOf(":");
   if (colon === -1) {
     throw new kopaiQueryCompiler.KopaiQueryValidationError(
@@ -474,6 +483,18 @@ export function parseCursor(cursor: string): RawCursorParts {
     throw new kopaiQueryCompiler.KopaiQueryValidationError(
       `Invalid cursor timestamp: expected numeric string, got '${ts}'`
     );
+  }
+  if (opts.requireUInt64Id) {
+    if (!/^\d+$/.test(id)) {
+      throw new kopaiQueryCompiler.KopaiQueryValidationError(
+        `Invalid cursor id: expected unsigned 64-bit integer, got '${id}'`
+      );
+    }
+    if (BigInt(id) > U64_MAX) {
+      throw new kopaiQueryCompiler.KopaiQueryValidationError(
+        `Invalid cursor id: '${id}' exceeds UInt64 range.`
+      );
+    }
   }
   return { ts, id };
 }
@@ -520,6 +541,7 @@ function buildTraceRaw(q: TraceRawQuery): {
   if (filterSql) conds.push(filterSql);
 
   if (q.cursor) {
+    assertCursorCompatibleOrderBy("traces", q.orderBy);
     const c = parseCursor(q.cursor);
     const tsParam = nextParam(ctx, nanosToDateTime64(c.ts), "curTs");
     const idParam = nextParam(ctx, c.id, "curId");
@@ -588,7 +610,8 @@ function buildLogRaw(q: LogRawQuery): {
   if (filterSql) conds.push(filterSql);
 
   if (q.cursor) {
-    const c = parseCursor(q.cursor);
+    assertCursorCompatibleOrderBy("logs", q.orderBy);
+    const c = parseCursor(q.cursor, { requireUInt64Id: true });
     const tsParam = nextParam(ctx, nanosToDateTime64(c.ts), "curTs");
     const hashParam = nextParam(ctx, c.id, "curHash");
     const sortDir = inferPrimaryDir(q.orderBy);
@@ -713,7 +736,8 @@ function buildMetricRaw(q: MetricRawQuery): {
   if (filterSql) conds.push(filterSql);
 
   if (q.cursor) {
-    const c = parseCursor(q.cursor);
+    assertCursorCompatibleOrderBy("metrics", q.orderBy);
+    const c = parseCursor(q.cursor, { requireUInt64Id: true });
     const tsParam = nextParam(ctx, nanosToDateTime64(c.ts), "curTs");
     const hashParam = nextParam(ctx, c.id, "curHash");
     const sortDir = inferPrimaryDir(q.orderBy);
@@ -937,6 +961,26 @@ function inferPrimaryDir(orderBy: OrderItemRaw[] | undefined): "asc" | "desc" {
   if (!orderBy || orderBy.length === 0) return "desc";
   const first = orderBy[0];
   return first?.direction === "asc" ? "asc" : "desc";
+}
+
+// The raw-mode cursor predicate is keyed off the time column + a structural
+// tiebreaker (SpanId for traces; the sipHash for logs/metrics). If the user
+// specifies a non-time primary sort, ORDER BY no longer matches the predicate
+// and pagination silently skips or repeats rows. Reject the combination so
+// callers either drop the orderBy or sort on the time column.
+function assertCursorCompatibleOrderBy(
+  signal: Signal,
+  orderBy: OrderItemRaw[] | undefined
+): void {
+  if (!orderBy || orderBy.length === 0) return;
+  const first = orderBy[0];
+  if (!first || first.type !== "dimension") return;
+  const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
+  const col = first.column;
+  if (typeof col === "string" && col === timeCol) return;
+  throw new kopaiQueryCompiler.KopaiQueryValidationError(
+    `Cursor pagination requires the primary orderBy to be the time column ("${timeCol}"). Got ${JSON.stringify(col)}.`
+  );
 }
 
 function ensureTiebreaker(
