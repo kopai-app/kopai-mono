@@ -28,7 +28,6 @@ import {
   type OtelLogsRow,
   type OtelMetricsRow,
   type OtelTracesRow,
-  type SearchResult,
   type TraceSummaryRow,
 } from "@kopai/sdk";
 import {
@@ -83,6 +82,62 @@ function NoSource({ name }: { name: string }) {
     <span style={{ color: "#999", fontStyle: "italic" }}>
       {name}: no dataSource configured
     </span>
+  );
+}
+
+/** Shown when a (polymorphic `query`) response doesn't match the shape a
+ * signal-specific renderer expects — better than rendering garbage off a
+ * blind cast. */
+function UnsupportedShape({ name }: { name: string }) {
+  return (
+    <div style={{ color: "#999", fontSize: 12, padding: 8 }}>
+      {name}: unsupported response shape.
+    </div>
+  );
+}
+
+// The `query` method is polymorphic: a renderer wired to it can receive any of
+// the six KopaiQuery result shapes. `narrowRows` validates that a response's
+// `data` is an array of the expected row type (every element, not just a
+// sample) and returns null otherwise, so each renderer can fall back instead
+// of casting blindly. Same pattern as TraceDetail's isTraceRows below.
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function narrowRows<T>(
+  response: unknown,
+  guard: (v: unknown) => v is T
+): T[] | null {
+  if (!isRecord(response)) return null;
+  const data = response.data;
+  if (!Array.isArray(data)) return null;
+  // Accumulate through the guard so each row is narrowed to T — no `as T[]`.
+  const rows: T[] = [];
+  for (const row of data) {
+    if (!guard(row)) return null;
+    rows.push(row);
+  }
+  return rows;
+}
+
+function hasMetricRowShape(v: unknown): v is OtelMetricsRow {
+  if (!isRecord(v)) return false;
+  // Only metric data points carry TimeUnix (trace/log rows use Timestamp).
+  return typeof v.TimeUnix === "string";
+}
+
+function hasLogRowShape(v: unknown): v is OtelLogsRow {
+  if (!isRecord(v)) return false;
+  // Logs use Timestamp (not TimeUnix), but so do spans — a log-only structural
+  // key (Body/SeverityText/…) is what separates them, since a trace-correlated
+  // log also has SpanId/TraceId. Production code should validate the full schema.
+  return (
+    typeof v.Timestamp === "string" &&
+    typeof v.TimeUnix !== "string" &&
+    ("Body" in v || "SeverityText" in v || "SeverityNumber" in v) &&
+    !("SpanName" in v) &&
+    !("Duration" in v)
   );
 }
 
@@ -294,22 +349,32 @@ function MetricStat(props: MetricStatProps) {
   if (!props.hasData) return <NoSource name="MetricStat" />;
   const { label } = props.element.props;
 
+  let body: ReactNode;
+  if (isAggregatedMetricStat(props)) {
+    body = (
+      <span style={{ fontSize: 24, fontWeight: 600 }}>
+        {props.response?.data[0]?.value ?? "—"}
+      </span>
+    );
+  } else {
+    // searchMetricsPage or a `query` returning metric rows.
+    const rows = narrowRows(props.response, hasMetricRowShape);
+    body =
+      rows === null ? (
+        <UnsupportedShape name="MetricStat" />
+      ) : (
+        <span style={{ fontSize: 14 }}>
+          {rows.length} rows
+          {rows[0]?.MetricName ? ` · ${rows[0].MetricName}` : ""}
+        </span>
+      );
+  }
+
   return (
     <RequestState loading={props.loading} error={props.error}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {label && <span style={{ color: "#666", fontSize: 12 }}>{label}</span>}
-        {isAggregatedMetricStat(props) ? (
-          <span style={{ fontSize: 24, fontWeight: 600 }}>
-            {props.response?.data[0]?.value ?? "—"}
-          </span>
-        ) : (
-          <span style={{ fontSize: 14 }}>
-            {props.response?.data.length ?? 0} rows
-            {props.response?.data[0]?.MetricName
-              ? ` · ${props.response.data[0].MetricName}`
-              : ""}
-          </span>
-        )}
+        {body}
       </div>
     </RequestState>
   );
@@ -318,14 +383,18 @@ function MetricStat(props: MetricStatProps) {
 // ---------- MetricTimeSeries ------------------------------------------------
 function MetricTimeSeries(props: RendererProps<"MetricTimeSeries">) {
   if (!props.hasData) return <NoSource name="MetricTimeSeries" />;
-  const rows: OtelMetricsRow[] = props.response?.data ?? [];
+  const rows = narrowRows(props.response, hasMetricRowShape);
   return (
     <RequestState loading={props.loading} error={props.error}>
-      <div style={{ fontSize: 13, color: "#666" }}>
-        {rows.length} points
-        {rows[0]?.MetricName ? ` · ${rows[0].MetricName}` : ""}{" "}
-        <em>(render a line chart here)</em>
-      </div>
+      {rows === null ? (
+        <UnsupportedShape name="MetricTimeSeries" />
+      ) : (
+        <div style={{ fontSize: 13, color: "#666" }}>
+          {rows.length} points
+          {rows[0]?.MetricName ? ` · ${rows[0].MetricName}` : ""}{" "}
+          <em>(render a line chart here)</em>
+        </div>
+      )}
     </RequestState>
   );
 }
@@ -333,18 +402,24 @@ function MetricTimeSeries(props: RendererProps<"MetricTimeSeries">) {
 // ---------- MetricHistogram -------------------------------------------------
 function MetricHistogram(props: RendererProps<"MetricHistogram">) {
   if (!props.hasData) return <NoSource name="MetricHistogram" />;
-  const rows: OtelMetricsRow[] = props.response?.data ?? [];
-  const first = rows[0];
+  const rows = narrowRows(props.response, hasMetricRowShape);
+  const first = rows?.[0];
   return (
     <RequestState loading={props.loading} error={props.error}>
-      <div style={{ fontSize: 13, color: "#666" }}>
-        {rows.length} data points
-        {first?.MetricName ? ` · ${first.MetricName}` : ""}
-        {first && first.MetricType === "Histogram" && first.Count !== undefined
-          ? ` · count=${first.Count}`
-          : ""}{" "}
-        <em>(render a histogram here)</em>
-      </div>
+      {rows === null ? (
+        <UnsupportedShape name="MetricHistogram" />
+      ) : (
+        <div style={{ fontSize: 13, color: "#666" }}>
+          {rows.length} data points
+          {first?.MetricName ? ` · ${first.MetricName}` : ""}
+          {first &&
+          first.MetricType === "Histogram" &&
+          first.Count !== undefined
+            ? ` · count=${first.Count}`
+            : ""}{" "}
+          <em>(render a histogram here)</em>
+        </div>
+      )}
     </RequestState>
   );
 }
@@ -353,7 +428,14 @@ function MetricHistogram(props: RendererProps<"MetricHistogram">) {
 function MetricTable(props: RendererProps<"MetricTable">) {
   if (!props.hasData) return <NoSource name="MetricTable" />;
   const maxRows = props.element.props.maxRows ?? 5;
-  const rows: OtelMetricsRow[] = props.response?.data ?? [];
+  const rows = narrowRows(props.response, hasMetricRowShape);
+  if (rows === null) {
+    return (
+      <RequestState loading={props.loading} error={props.error}>
+        <UnsupportedShape name="MetricTable" />
+      </RequestState>
+    );
+  }
   const shown = rows.slice(0, maxRows);
   return (
     <RequestState loading={props.loading} error={props.error}>
@@ -421,7 +503,14 @@ function MetricDiscovery(props: RendererProps<"MetricDiscovery">) {
 // ---------- LogTimeline -----------------------------------------------------
 function LogTimeline(props: RendererProps<"LogTimeline">) {
   if (!props.hasData) return <NoSource name="LogTimeline" />;
-  const rows: OtelLogsRow[] = props.response?.data ?? [];
+  const rows = narrowRows(props.response, hasLogRowShape);
+  if (rows === null) {
+    return (
+      <RequestState loading={props.loading} error={props.error}>
+        <UnsupportedShape name="LogTimeline" />
+      </RequestState>
+    );
+  }
   return (
     <RequestState loading={props.loading} error={props.error}>
       {rows.length === 0 ? (
@@ -455,49 +544,59 @@ function LogTimeline(props: RendererProps<"LogTimeline">) {
 
 // ---------- TraceDetail (three accepted methods) ----------------------------
 type TraceDetailProps = RendererProps<"TraceDetail">;
-// Override `response` instead of intersecting — the renderer's response
-// union now includes the generic `query` shape, so a plain intersection
-// would collapse element types to `never`.
-function isTraceSummaries(
-  props: TraceDetailProps & { hasData: true }
-): props is Omit<TraceDetailProps & { hasData: true }, "response"> & {
-  response: SearchResult<TraceSummaryRow> | null;
-} {
-  return props.element.dataSource?.method === "searchTraceSummariesPage";
-}
 
 function hasTraceRowShape(v: unknown): v is OtelTracesRow {
-  if (typeof v !== "object" || v === null) return false;
-  const r = v as Record<string, unknown>;
-  return typeof r.SpanId === "string" && typeof r.TraceId === "string";
+  if (!isRecord(v)) return false;
+  // A trace-correlated log also has SpanId/TraceId, so require a span-only
+  // structural key to avoid mis-accepting log rows here.
+  return (
+    typeof v.SpanId === "string" &&
+    typeof v.TraceId === "string" &&
+    typeof v.TimeUnix !== "string" &&
+    ("SpanName" in v || "SpanKind" in v || "Duration" in v) &&
+    !("Body" in v) &&
+    !("SeverityText" in v)
+  );
 }
 
-// `query` can return any shape (raw traces/logs/metrics or an aggregate row).
-// Only narrow to OtelTracesRow[] when the response actually looks like trace
-// rows — otherwise fall through to the unsupported-shape fallback rather
-// than blindly casting.
-function isTraceRows(
+function hasTraceSummaryShape(v: unknown): v is TraceSummaryRow {
+  if (!isRecord(v)) return false;
+  return typeof v.traceId === "string" && typeof v.durationNs === "string";
+}
+
+// Trace summaries come only from `searchTraceSummariesPage` (not from a
+// `query`). Gate on the method, then validate the row shape.
+function traceSummaryRows(
   props: TraceDetailProps & { hasData: true }
-): props is Omit<TraceDetailProps & { hasData: true }, "response"> & {
-  response: { data: OtelTracesRow[]; nextCursor?: string | null } | null;
-} {
+): TraceSummaryRow[] | null {
+  if (props.element.dataSource?.method !== "searchTraceSummariesPage")
+    return null;
+  return narrowRows(props.response, hasTraceSummaryShape);
+}
+
+// `query` can return any shape (raw traces/logs/metrics or aggregate rows), so
+// only narrow to OtelTracesRow[] when the response actually looks like trace
+// rows — otherwise fall through to the unsupported-shape fallback rather than
+// casting blindly. (Same narrow-or-fallback pattern the other renderers use.)
+function traceRows(
+  props: TraceDetailProps & { hasData: true }
+): OtelTracesRow[] | null {
   const method = props.element.dataSource?.method;
-  if (method !== "searchTracesPage" && method !== "query") return false;
-  const data = (props.response as { data?: unknown } | null)?.data;
-  if (!Array.isArray(data)) return false;
-  // Validate every row, not just the first — a `query` response can
-  // legitimately mix shapes and we'd otherwise narrow on a single sample.
-  return data.every(hasTraceRowShape);
+  if (method !== "searchTracesPage" && method !== "query") return null;
+  return narrowRows(props.response, hasTraceRowShape);
 }
 
 function TraceDetail(props: TraceDetailProps) {
   if (!props.hasData) return <NoSource name="TraceDetail" />;
 
+  const summaries = traceSummaryRows(props);
+  const traces = summaries === null ? traceRows(props) : null;
+
   return (
     <RequestState loading={props.loading} error={props.error}>
-      {isTraceSummaries(props) ? (
+      {summaries !== null ? (
         <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: 12 }}>
-          {(props.response?.data ?? []).slice(0, 10).map((t) => (
+          {summaries.slice(0, 10).map((t) => (
             <li
               key={t.traceId}
               style={{ padding: "4px 0", borderBottom: "1px solid #eee" }}
@@ -513,9 +612,9 @@ function TraceDetail(props: TraceDetailProps) {
             </li>
           ))}
         </ul>
-      ) : isTraceRows(props) ? (
+      ) : traces !== null ? (
         <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: 12 }}>
-          {(props.response?.data ?? []).slice(0, 10).map((s) => (
+          {traces.slice(0, 10).map((s) => (
             <li
               key={s.SpanId}
               style={{ padding: "4px 0", borderBottom: "1px solid #eee" }}
@@ -527,9 +626,7 @@ function TraceDetail(props: TraceDetailProps) {
           ))}
         </ul>
       ) : (
-        <div style={{ color: "#999", fontSize: 12, padding: 8 }}>
-          TraceDetail: unsupported response shape.
-        </div>
+        <UnsupportedShape name="TraceDetail" />
       )}
     </RequestState>
   );

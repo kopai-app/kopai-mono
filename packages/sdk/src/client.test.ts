@@ -581,6 +581,7 @@ describe("KopaiClient", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName"],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: { type: "relative", lookback: "1h" },
     };
 
@@ -616,6 +617,7 @@ describe("KopaiClient", () => {
       signal: "metrics",
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "c" }],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
     };
@@ -641,6 +643,20 @@ describe("KopaiClient", () => {
       expect(capturedUrl).toBe(`${BASE_URL}/signals/query/metrics/aggregate`);
       expect(capturedBody).toEqual(q);
       expect(result.data).toEqual([{ c: 99 }]);
+    });
+
+    it("rejects a metric query missing the MetricType filter before sending (M1)", async () => {
+      // No server mock: validateKopaiQuery must reject locally so the request
+      // is never made (would otherwise be a server 400).
+      await expect(
+        client.queryMetricsAggregate({
+          signal: "metrics",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "c" }],
+          timeDimension: { type: "relative", lookback: "1h" },
+          output: { type: "summary" },
+        })
+      ).rejects.toThrow(/MetricType/);
     });
   });
 
@@ -767,6 +783,7 @@ describe("KopaiClient", () => {
         signal: "metrics",
         mode: "raw",
         dimensions: ["MetricName"],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: { type: "relative", lookback: "1h" },
       };
       let capturedUrl = "";
@@ -811,6 +828,7 @@ describe("KopaiClient", () => {
         signal: "metrics",
         mode: "aggregate",
         measures: [{ op: "COUNT", as: "c" }],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
         timeDimension: { type: "relative", lookback: "1h" },
         output: { type: "summary" },
       });

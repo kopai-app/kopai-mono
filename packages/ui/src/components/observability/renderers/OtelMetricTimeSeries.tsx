@@ -4,6 +4,7 @@ import {
 } from "@kopai/ui-core";
 import { MetricTimeSeries } from "../index.js";
 import { NoDataSource } from "./NoDataSource.js";
+import { narrowRows, hasMetricRowShape } from "./narrowRows.js";
 
 type Props = RendererComponentProps<
   typeof observabilityCatalog.components.MetricTimeSeries
@@ -12,9 +13,12 @@ type Props = RendererComponentProps<
 export function OtelMetricTimeSeries(props: Props) {
   if (!props.hasData) return <NoDataSource />;
 
+  // `query` is polymorphic — only forward rows that are actually metric rows.
+  const rows = narrowRows(props.response, hasMetricRowShape) ?? [];
+
   return (
     <MetricTimeSeries
-      rows={props.response?.data ?? []}
+      rows={rows}
       isLoading={props.loading}
       error={props.error ?? undefined}
       height={props.element.props.height ?? 400}

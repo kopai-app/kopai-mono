@@ -34,6 +34,26 @@ import {
   metricSchemaMap,
 } from "./ch-row-schemas.js";
 import { buildKopaiSql } from "./query-kopai.js";
+import { dateTime64ToNanos } from "./timestamp.js";
+
+// Coerces a ClickHouse JSON cell into the KopaiAggregateRow value union.
+// Mirrors the sqlite backend's normalizeCellValue: a bigint outside the
+// 53-bit safe-integer range is preserved as a string rather than silently
+// rounded by Number(). (ClickHouse usually serializes UInt64 as a string, so
+// the bigint branch is rare — this keeps the two backends consistent.)
+export function coerceAggregateCellValue(v: unknown): string | number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "string") return v;
+  if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  if (typeof v === "bigint") {
+    return v > BigInt(Number.MAX_SAFE_INTEGER) ||
+      v < BigInt(Number.MIN_SAFE_INTEGER)
+      ? v.toString()
+      : Number(v);
+  }
+  return String(v);
+}
 
 const MAX_ATTR_VALUES = 100;
 
@@ -691,7 +711,8 @@ export class ClickHouseReadDatasource
       }[] = [];
       for await (const batch of resultSet.stream()) {
         for (const row of batch) {
-          const json = row.json() as Record<string, unknown>;
+          const json = row.json();
+          if (!isRecord(json)) continue;
           rows.push({
             parsed: parseChRow(chLogsRowSchema, json),
             _rowHash: String(json._rowHash),
@@ -742,7 +763,8 @@ export class ClickHouseReadDatasource
       }[] = [];
       for await (const batch of resultSet.stream()) {
         for (const row of batch) {
-          const json = row.json() as Record<string, unknown>;
+          const json = row.json();
+          if (!isRecord(json)) continue;
           rows.push({
             parsed: parseChRow(schema, json),
             _rowHash: String(json._rowHash),
@@ -816,19 +838,16 @@ export class ClickHouseReadDatasource
           const out: Record<string, string | number | null> = {};
           for (const [k, v] of Object.entries(json)) {
             if (k === "bucket_start" && isTimeSeries) {
-              out[k] = typeof v === "string" ? v : String(v);
-            } else if (v === null || typeof v === "string") {
-              out[k] = v;
-            } else if (typeof v === "number") {
-              out[k] = v;
-            } else if (typeof v === "boolean") {
-              out[k] = v ? 1 : 0;
-            } else if (typeof v === "bigint") {
-              out[k] = Number(v);
-            } else if (v === undefined) {
-              out[k] = null;
+              // ClickHouse serializes the bucket as a DateTime64 string
+              // ("YYYY-MM-DD HH:MM:SS.nnnnnnnnn"). Normalize to canonical
+              // ISO-8601 UTC so the same timeSeries query returns identical
+              // bucket_start strings on the ClickHouse and SQLite backends.
+              const nanos = BigInt(
+                dateTime64ToNanos(typeof v === "string" ? v : String(v))
+              );
+              out[k] = new Date(Number(nanos / 1_000_000n)).toISOString();
             } else {
-              out[k] = String(v);
+              out[k] = coerceAggregateCellValue(v);
             }
           }
           data.push(out);

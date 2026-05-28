@@ -289,6 +289,19 @@ describe("attribute refs across query slots (clickhouse)", () => {
     expect(sql).toContain("GROUP BY SpanAttributes['http.route']");
   });
 
+  it("accepts an attribute dimension key with characters outside the identifier allowlist (M3)", () => {
+    // OTel attribute keys can contain '/', spaces, etc. The SELECT alias must
+    // be backtick-escaped rather than allowlisted, so grouping by such a key
+    // succeeds (parity with SQLite) instead of throwing a 400.
+    const { sql } = buildKopaiSql(
+      baseTraceAggregate({
+        dimensions: [{ container: "SpanAttributes", key: "k8s/node name" }],
+      })
+    );
+    expect(sql).toContain("SpanAttributes['k8s/node name']");
+    expect(sql).toContain("AS `SpanAttributes.k8s/node name`");
+  });
+
   it("compiles attr-ref COUNT_DISTINCT to uniq(Map())", () => {
     const { sql } = buildKopaiSql(
       baseTraceAggregate({
@@ -301,8 +314,11 @@ describe("attribute refs across query slots (clickhouse)", () => {
         ],
       })
     );
+    // nullIf maps a missing key (Map default "") and empty values to NULL,
+    // which uniq() ignores — matching SQLite's COUNT(DISTINCT NULLIF(...))
+    // so distinct counts agree across backends.
     expect(sql).toContain(
-      "uniq(SpanAttributes['user.id']) AS `distinct_users`"
+      "uniq(nullIf(SpanAttributes['user.id'], '')) AS `distinct_users`"
     );
   });
 
@@ -549,6 +565,62 @@ describe("cursor parsing (clickhouse)", () => {
     expect(sql).toContain("Timestamp >");
   });
 
+  // H1: the keyset predicate resumes on (timeColumn, tiebreaker) only. A
+  // secondary sort key after the time column makes ORDER BY disagree with the
+  // predicate and silently skips/repeats rows — reject it even though the
+  // primary key IS the time column.
+  it("rejects cursor when a secondary (non-time) sort key is present", () => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: baseTimeDim,
+        orderBy: [
+          { type: "dimension", column: "Timestamp", direction: "desc" },
+          { type: "dimension", column: "Duration", direction: "desc" },
+        ],
+        cursor: "1704067200000000000:span-abc",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+});
+
+describe("ORDER BY tiebreaker (clickhouse)", () => {
+  const baseTimeDim: kopaiQuery.TraceRawQuery["timeDimension"] = {
+    type: "absolute",
+    startTime: "2024-01-01T00:00:00.000Z",
+    endTime: "2024-01-02T00:00:00.000Z",
+  };
+
+  // H1: ensureTiebreaker must append the SpanId tiebreaker even when the
+  // ORDER BY contains ParentSpanId — a substring match wrongly treats
+  // "parentspanid" as already containing "spanid" and drops the tiebreaker,
+  // leaving a non-unique, non-deterministic sort.
+  it("appends the SpanId tiebreaker when ordering by ParentSpanId", () => {
+    const { sql } = buildKopaiSql({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: baseTimeDim,
+      orderBy: [
+        { type: "dimension", column: "Timestamp", direction: "desc" },
+        { type: "dimension", column: "ParentSpanId", direction: "desc" },
+      ],
+    });
+    expect(sql).toContain("ParentSpanId");
+    expect(sql).toMatch(/,\s*SpanId DESC/);
+  });
+
+  it("does not duplicate the SpanId tiebreaker when already sorting by SpanId", () => {
+    const { sql } = buildKopaiSql({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: baseTimeDim,
+      orderBy: [{ type: "dimension", column: "SpanId", direction: "desc" }],
+    });
+    // Exactly one SpanId sort token (no "SpanId DESC, SpanId DESC").
+    expect(sql).not.toMatch(/SpanId DESC,\s*SpanId DESC/);
+  });
+
   it("rejects cursor id exceeding UInt64 max for non-trace signals", () => {
     // 2^64 — one above the UInt64 range. Without an explicit check the
     // numeric string passes through to CH and fails at execution.
@@ -622,5 +694,29 @@ describe("metric type placement (clickhouse)", () => {
         ],
       } as unknown as kopaiQuery.KopaiQuery)
     ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+});
+
+describe("empty logical group fallback (clickhouse)", () => {
+  // Zod enforces .min(1) on and/or arrays, so an empty group is unreachable
+  // through the validated API. buildKopaiSql is called directly here, so cover
+  // its defensive 1=1 fallback to guard against a regression (or a future
+  // relaxation of the min(1) constraint).
+  it("emits 1=1 for an empty and-group", () => {
+    const { sql } = buildKopaiSql(
+      baseTraceRaw([
+        { and: [] },
+      ] as unknown as kopaiQuery.TraceRawQuery["filters"])
+    );
+    expect(sql).toContain("1=1");
+  });
+
+  it("emits 1=1 for an empty or-group", () => {
+    const { sql } = buildKopaiSql(
+      baseTraceRaw([
+        { or: [] },
+      ] as unknown as kopaiQuery.TraceRawQuery["filters"])
+    );
+    expect(sql).toContain("1=1");
   });
 });

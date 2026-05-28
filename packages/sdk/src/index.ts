@@ -1,5 +1,6 @@
 // Client
 export { KopaiClient } from "./client.js";
+export type { KopaiQueryResponse } from "./client.js";
 
 // Types
 export type {

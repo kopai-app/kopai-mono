@@ -447,6 +447,55 @@ const METRIC_EXCLUDED = new Set<string>([
  * misbehavior since the query API is API-shaped (downstream callers
  * read these enums via JSON Schema).
  */
+/**
+ * Per-signal partition check, extracted so it can be unit-tested with
+ * crafted inputs. Enforces the documented XOR contract for one signal:
+ *   - every storage key is in STRUCTURAL or EXCLUDED (not neither),
+ *   - STRUCTURAL has no key absent from storage (not stale),
+ *   - no key is in BOTH STRUCTURAL and EXCLUDED.
+ * Throws Error on any violation. Stale EXCLUDED entries are tolerated.
+ */
+export function assertColumnPartition(
+  name: string,
+  schemaKeys: readonly string[],
+  structural: readonly string[],
+  excluded: ReadonlySet<string>
+): void {
+  const structuralSet = new Set<string>(structural);
+
+  // Schema has a key not classified as structural or excluded.
+  const unaccounted = schemaKeys.filter(
+    (k) => !structuralSet.has(k) && !excluded.has(k)
+  );
+  if (unaccounted.length > 0) {
+    throw new Error(
+      `kopai-query: ${name} storage schema has unaccounted field(s) ${JSON.stringify(unaccounted)}. ` +
+        `Add to STRUCTURAL or EXCLUDED list.`
+    );
+  }
+
+  // Structural claims a key the schema no longer has.
+  const schemaSet = new Set(schemaKeys);
+  const stale = structural.filter((k) => !schemaSet.has(k));
+  if (stale.length > 0) {
+    throw new Error(
+      `kopai-query: ${name} STRUCTURAL contains stale field(s) ${JSON.stringify(stale)} not in storage schema.`
+    );
+  }
+
+  // Key listed in BOTH sets — violates the XOR (the column would appear in
+  // the query API enum via STRUCTURAL while also being marked excluded).
+  const both = structural.filter((k) => excluded.has(k));
+  if (both.length > 0) {
+    throw new Error(
+      `kopai-query: ${name} field(s) ${JSON.stringify(both)} appear in BOTH STRUCTURAL and EXCLUDED (XOR violated). Remove from one list.`
+    );
+  }
+
+  // Excluded claims a key the schema no longer has — kept silent; stale
+  // exclusions are harmless and removing them is a no-op cleanup, not a bug.
+}
+
 function _assertStructuralColumnsInSyncWithSchema(): void {
   const cases: Array<{
     name: string;
@@ -479,31 +528,7 @@ function _assertStructuralColumnsInSyncWithSchema(): void {
   ];
 
   for (const { name, schemaKeys, structural, excluded } of cases) {
-    const structuralSet = new Set<string>(structural);
-
-    // Schema has a key not classified as structural or excluded.
-    const unaccounted = schemaKeys.filter(
-      (k) => !structuralSet.has(k) && !excluded.has(k)
-    );
-    if (unaccounted.length > 0) {
-      throw new Error(
-        `kopai-query: ${name} storage schema has unaccounted field(s) ${JSON.stringify(unaccounted)}. ` +
-          `Add to STRUCTURAL or EXCLUDED list.`
-      );
-    }
-
-    // Structural claims a key the schema no longer has.
-    const schemaSet = new Set(schemaKeys);
-    const stale = structural.filter((k) => !schemaSet.has(k));
-    if (stale.length > 0) {
-      throw new Error(
-        `kopai-query: ${name} STRUCTURAL contains stale field(s) ${JSON.stringify(stale)} not in storage schema.`
-      );
-    }
-
-    // Excluded claims a key the schema no longer has — relax to warn
-    // by keeping silent; stale exclusions are harmless and removing
-    // them is a no-op cleanup, not a bug.
+    assertColumnPartition(name, schemaKeys, structural, excluded);
   }
 
   // metricsBaseSchema is the shared base of every metric variant; its
@@ -606,7 +631,7 @@ const NumericOp = z
     "RATE_MAX",
   ])
   .describe(
-    "Aggregation that requires a numeric column. RATE_* divides the aggregate by the time-bucket width."
+    "Aggregation that requires a numeric column. RATE_* divides the aggregate by the time-bucket width. NOTE: the percentile ops (P50–P999) are supported only on the ClickHouse backend; the SQLite backend rejects them with a validation error."
   );
 
 // ============================================================
@@ -726,7 +751,7 @@ export type FilterExpr<C = AnyColumnRef> =
       value: string;
     }
   | { column: C; op: "gt" | "gte" | "lt" | "lte"; value: number }
-  | { column: C; op: "in" | "notIn"; values: (string | number)[] }
+  | { column: C; op: "in" | "notIn"; values: string[] | number[] }
   | { column: C; op: "isNull" | "isNotNull" }
   | { and: FilterExpr<C>[] }
   | { or: FilterExpr<C>[] };
@@ -754,7 +779,16 @@ const buildFilterExpr = <C extends z.ZodType>(
       z.object({
         column: columnRef,
         op: z.enum(["in", "notIn"]),
-        values: z.array(z.union([z.string(), z.number()])).min(1),
+        // Homogeneous array — all strings OR all numbers. A mixed array is
+        // rejected: the backends bind the whole list as one typed SQL
+        // parameter (ClickHouse Array(String)/Array(Float64)), so a mixed
+        // list either fails at execution (500) or behaves inconsistently
+        // across backends. Keep the two element types as separate branches.
+        values: z
+          .union([z.array(z.string()).min(1), z.array(z.number()).min(1)])
+          .describe(
+            "Non-empty array of match values. All elements must be the same type — either all strings or all numbers."
+          ),
       }),
       z.object({
         column: columnRef,
@@ -762,7 +796,7 @@ const buildFilterExpr = <C extends z.ZodType>(
       }),
     ])
     .describe(
-      "Leaf filter on a column. Discriminated on `op`: eq/neq accept string|number|boolean; contains/notContains/startsWith/endsWith require a string; gt/gte/lt/lte require a number; in/notIn take a non-empty `values` array of strings/numbers; isNull/isNotNull take no value."
+      "Leaf filter on a column. Discriminated on `op`: eq/neq accept string|number|boolean; contains/notContains/startsWith/endsWith require a string; gt/gte/lt/lte require a number; in/notIn take a non-empty `values` array whose elements are all strings or all numbers (mixed arrays are rejected); isNull/isNotNull take no value."
     );
 
   // `z.lazy(...)` returns `ZodLazy<...>` whose inferred type does not
@@ -1122,6 +1156,75 @@ export const METRIC_TYPES = [
   "Summary",
 ] as const satisfies readonly MetricType[];
 
+// ============================================================
+// Column metadata for server-side validation
+// ============================================================
+
+// Numeric scalar structural columns per signal. The validator uses this to
+// reject numeric comparisons (gt/gte/lt/lte, or eq/neq/in with a numeric
+// value) against non-numeric structural columns — the backends cannot
+// coerce a String column to a number and would surface a 500. Attribute-map
+// refs are intentionally absent: their values are dynamically typed and the
+// SQL layer coerces them.
+//
+// Hand-maintained: storage types are not recoverable from
+// denormalized-signals-zod.ts, which models the JSON wire shape (e.g.
+// Duration / *Unix are nanosecond strings in JSON but numeric/temporal
+// columns in storage). Time columns are deliberately excluded — they are
+// filtered via timeDimension, not numeric comparisons.
+export const NUMERIC_STRUCTURAL_COLUMNS: Record<Signal, ReadonlySet<string>> = {
+  traces: new Set(["Duration"]),
+  logs: new Set(["SeverityNumber", "TraceFlags"]),
+  metrics: new Set([
+    "Value",
+    "Count",
+    "Sum",
+    "Min",
+    "Max",
+    "Scale",
+    "ZeroCount",
+    "ZeroThreshold",
+    "PositiveOffset",
+    "NegativeOffset",
+    "IsMonotonic",
+    "Flags",
+  ]),
+};
+
+// Structural columns that exist on each MetricType's storage table. Each
+// metric type lives in its own table holding only its variant's columns, so
+// a query pinned to one type must not reference another type's columns.
+// Derived from the discriminated-union variants ∩ METRIC_STRUCTURAL so it
+// stays in sync with both the storage schema and the query-exposed column
+// set (the drift detector guards METRIC_STRUCTURAL itself).
+function _metricStructuralColumnsByType(): Record<
+  MetricType,
+  ReadonlySet<string>
+> {
+  const structuralSet = new Set<string>(METRIC_STRUCTURAL);
+  // Fully initialized so the type is a complete Record (no `{} as Record` cast)
+  // and `out[type]` indexing is checked. The loop below overwrites each entry.
+  const out: Record<MetricType, Set<string>> = {
+    Gauge: new Set(),
+    Sum: new Set(),
+    Histogram: new Set(),
+    ExponentialHistogram: new Set(),
+    Summary: new Set(),
+  };
+  for (const variant of otelMetricsSchema.options) {
+    const type = variant.shape.MetricType.value;
+    out[type] = new Set(
+      Object.keys(variant.shape).filter((k) => structuralSet.has(k))
+    );
+  }
+  return out;
+}
+
+export const METRIC_STRUCTURAL_COLUMNS_BY_TYPE: Record<
+  MetricType,
+  ReadonlySet<string>
+> = _metricStructuralColumnsByType();
+
 export {
   TraceAggregateQuery as TraceAggregateQuerySchema,
   TraceRawQuery as TraceRawQuerySchema,
@@ -1168,3 +1271,17 @@ export type KopaiQueryResult<Q extends KopaiQuery = KopaiQuery> = Q extends {
         : Q extends { mode: "aggregate"; output: { type: "timeSeries" } }
           ? { data: (KopaiAggregateRow & { bucket_start: string })[] }
           : never;
+
+// Concrete, non-generic union of every KopaiQuery result shape. This is the
+// "collapsed" form of KopaiQueryResult, for callers that handle a query
+// response without a statically-known query type (e.g. a UI renderer wired to
+// the polymorphic `query` method). Note: KopaiQueryResult<KopaiQuery> does NOT
+// produce this union — an aggregate query's `output` is itself a
+// summary|timeSeries union, so neither aggregate branch matches and those
+// members collapse to `never`. Hence the explicit listing here.
+export type KopaiQueryResponse =
+  | { data: OtelTracesRow[]; nextCursor: string | null }
+  | { data: OtelLogsRow[]; nextCursor: string | null }
+  | { data: OtelMetricsRow[]; nextCursor: string | null }
+  | { data: KopaiAggregateRow[] }
+  | { data: (KopaiAggregateRow & { bucket_start: string })[] };

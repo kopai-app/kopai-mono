@@ -3,8 +3,10 @@
 
 import {
   LogColumn,
+  METRIC_STRUCTURAL_COLUMNS_BY_TYPE,
   METRIC_TYPES,
   MetricColumn,
+  NUMERIC_STRUCTURAL_COLUMNS,
   Signal,
   TraceColumn,
   type FilterExpr,
@@ -139,6 +141,15 @@ export const STATUS_CODE_ERROR_LITERAL = "STATUS_CODE_ERROR";
 export function timeColumnForSignal(signal: Signal): "TimeUnix" | "Timestamp" {
   return signal === "metrics" ? "TimeUnix" : "Timestamp";
 }
+
+// Temporal structural columns per signal. Stored as nanosecond integers, so
+// numeric comparison filters on them are valid (used by the numeric-op
+// validation below to avoid rejecting legitimate time-bound filters).
+const TIME_STRUCTURAL_COLUMNS: Record<Signal, ReadonlySet<string>> = {
+  traces: new Set(["Timestamp"]),
+  logs: new Set(["Timestamp"]),
+  metrics: new Set(["TimeUnix", "StartTimeUnix"]),
+};
 
 export const NUMBER_COMPARATOR_SQL = {
   eq: "=",
@@ -322,8 +333,14 @@ export function columnRefProjectionKey(ref: ColumnRefStructural): string {
 function isColumnRefStructural(v: unknown): v is ColumnRefStructural {
   if (typeof v === "string") return true;
   if (typeof v !== "object" || v === null) return false;
-  const o = v as { container?: unknown; key?: unknown };
-  return typeof o.container === "string" && typeof o.key === "string";
+  // `in` narrows v to an object carrying the key, so the property reads are
+  // typed `unknown` without an intermediate `as {...}` cast.
+  return (
+    "container" in v &&
+    typeof v.container === "string" &&
+    "key" in v &&
+    typeof v.key === "string"
+  );
 }
 
 function projectionKeyOrThrow(v: unknown, context: string): string {
@@ -368,6 +385,67 @@ export function collectFilterColumns(
     }
   }
   return out;
+}
+
+// A non-logical (leaf) filter — same shape as the FilterExpr leaf variants,
+// retaining op + value so validators can inspect them. Logical and/or nodes
+// are flattened out by collectFilterLeaves.
+export type FilterLeaf =
+  | { column: AnyColumnRef; op: "eq" | "neq"; value: string | number | boolean }
+  | {
+      column: AnyColumnRef;
+      op: "contains" | "notContains" | "startsWith" | "endsWith";
+      value: string;
+    }
+  | { column: AnyColumnRef; op: "gt" | "gte" | "lt" | "lte"; value: number }
+  | { column: AnyColumnRef; op: "in" | "notIn"; values: string[] | number[] }
+  | { column: AnyColumnRef; op: "isNull" | "isNotNull" };
+
+// Flattens the filter tree to its leaf predicates (recursing through and/or),
+// preserving op + value/values for type/existence checks in validateKopaiQuery.
+export function collectFilterLeaves(
+  filters: AnyFilterExpr[] | undefined
+): FilterLeaf[] {
+  const out: FilterLeaf[] = [];
+  if (!filters) return out;
+  for (const f of filters) {
+    if ("and" in f) {
+      out.push(...collectFilterLeaves(f.and));
+    } else if ("or" in f) {
+      out.push(...collectFilterLeaves(f.or));
+    } else {
+      out.push(f);
+    }
+  }
+  return out;
+}
+
+// Gathers every column reference a query points at — dimensions, filter
+// columns, measure columns, and dimension-typed orderBy keys — for
+// cross-field validation. orderBy.column is typed `unknown` upstream, so it
+// is narrowed with the structural guard before inclusion.
+// Returns ColumnRefStructural (the wider shape) rather than AnyColumnRef: every
+// narrow ref is assignable to it, and the isColumnRefStructural guard narrows
+// the `unknown` orderBy column to exactly this type — so no cast is needed. The
+// sole consumer only inspects `typeof ref` and passes refs to resolveColumn /
+// Set.has, all of which accept ColumnRefStructural.
+function collectColumnRefsForValidation(q: KopaiQuery): ColumnRefStructural[] {
+  const refs: ColumnRefStructural[] = [];
+  if (q.dimensions) refs.push(...q.dimensions);
+  refs.push(...collectFilterColumns(q.filters));
+  if (q.mode === "aggregate") {
+    for (const m of q.measures) {
+      if ("column" in m) refs.push(m.column);
+    }
+  }
+  if (q.orderBy) {
+    for (const o of q.orderBy) {
+      if (o.type === "dimension" && isColumnRefStructural(o.column)) {
+        refs.push(o.column);
+      }
+    }
+  }
+  return refs;
 }
 
 // Looks for MetricType references anywhere in the filter tree. Returns:
@@ -504,7 +582,24 @@ export function validateKopaiQuery(q: KopaiQuery): void {
     }
     // Narrows the string into the typed union — throws a clear error if
     // the user passed an unrecognized type.
-    assertMetricType(pin.value);
+    const metricType = assertMetricType(pin.value);
+
+    // Each MetricType is stored in its own table holding only that variant's
+    // structural columns. Reject any referenced structural column that does
+    // not exist on the pinned type's table — otherwise the backend emits SQL
+    // against a missing column and surfaces a 500 instead of a clean 400.
+    const allowed = METRIC_STRUCTURAL_COLUMNS_BY_TYPE[metricType];
+    for (const ref of collectColumnRefsForValidation(q)) {
+      if (typeof ref !== "string") continue; // attribute refs exist on all tables
+      if (ref === "MetricType") continue; // synthetic; routes table selection
+      if (resolveColumn("metrics", ref).kind !== "structural") continue; // semconv attr
+      if (!allowed.has(ref)) {
+        throw new KopaiQueryValidationError(
+          `Column "${ref}" does not exist on MetricType "${metricType}". ` +
+            `Structural columns available for ${metricType}: ${[...allowed].sort().join(", ")}.`
+        );
+      }
+    }
   }
 
   if (q.mode === "aggregate") {
@@ -587,6 +682,47 @@ export function validateKopaiQuery(q: KopaiQuery): void {
           `Column "MetricType" is only valid on metric queries.`
         );
       }
+    }
+  }
+
+  // Numeric comparisons require a numeric (or temporal) column. A structural
+  // String column compared to a number cannot be coerced by the backends and
+  // surfaces as a 500. Time columns are nanosecond integers and may be
+  // compared numerically. Attribute / semconv refs are dynamically typed and
+  // coerced at the SQL layer (toFloat64OrNull / CAST), so they are exempt.
+  const numericComparable = new Set<string>([
+    ...NUMERIC_STRUCTURAL_COLUMNS[q.signal],
+    ...TIME_STRUCTURAL_COLUMNS[q.signal],
+  ]);
+  for (const leaf of collectFilterLeaves(q.filters)) {
+    const col = leaf.column;
+    if (typeof col !== "string") continue;
+    if (col === "MetricType") continue;
+    if (resolveColumn(q.signal, col).kind !== "structural") continue;
+    let wantsNumeric: boolean;
+    switch (leaf.op) {
+      case "gt":
+      case "gte":
+      case "lt":
+      case "lte":
+        wantsNumeric = true;
+        break;
+      case "eq":
+      case "neq":
+        wantsNumeric = typeof leaf.value === "number";
+        break;
+      case "in":
+      case "notIn":
+        wantsNumeric = typeof leaf.values[0] === "number";
+        break;
+      default:
+        wantsNumeric = false;
+    }
+    if (wantsNumeric && !numericComparable.has(col)) {
+      throw new KopaiQueryValidationError(
+        `Column "${col}" is not numeric; the "${leaf.op}" operator/value requires a numeric column. ` +
+          `Use a string value, or choose a numeric column.`
+      );
     }
   }
 }

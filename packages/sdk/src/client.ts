@@ -3,6 +3,7 @@ import {
   denormalizedSignals,
   dashboardDatasource,
   kopaiQuery,
+  kopaiQueryCompiler,
 } from "@kopai/core";
 import z from "zod";
 import { request } from "./request.js";
@@ -55,6 +56,21 @@ const aggregateResponseSchema = z.object({
     z.record(z.string(), z.union([z.string(), z.number(), z.null()]))
   ),
 });
+
+// Aggregate result shape keyed off the query's `output.type`: timeSeries rows
+// carry an extra `bucket_start` ISO string. Mirrors core's KopaiQueryResult so
+// the narrow query*Aggregate methods stay consistent with query().
+type AggregateResultFor<Q extends { output: { type: string } }> = Q extends {
+  output: { type: "timeSeries" };
+}
+  ? { data: (kopaiQuery.KopaiAggregateRow & { bucket_start: string })[] }
+  : { data: kopaiQuery.KopaiAggregateRow[] };
+
+// Concrete union of every result shape `query()` can return. Use this when
+// consuming a query response without a statically-known query type (the
+// generic `KopaiQueryResult<Q>` requires the specific Q). Re-exported from the
+// package root.
+export type KopaiQueryResponse = kopaiQuery.KopaiQueryResponse;
 
 const dashboardResponseSchema = dashboardDatasource.dashboardSchema;
 
@@ -440,6 +456,7 @@ export class KopaiClient {
     opts?: RequestOptions
   ): Promise<SearchResult<OtelTracesRow>> {
     const validated = kopaiQuery.TraceRawQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
     return request(
       `${this.baseUrl}/signals/query/traces/raw`,
       tracesResponseSchema,
@@ -457,12 +474,13 @@ export class KopaiClient {
   /**
    * Run an aggregate trace query (KopaiQuery). Returns grouped rows.
    */
-  async queryTracesAggregate(
-    q: kopaiQuery.TraceAggregateQuery,
+  async queryTracesAggregate<Q extends kopaiQuery.TraceAggregateQuery>(
+    q: Q,
     opts?: RequestOptions
-  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+  ): Promise<AggregateResultFor<Q>> {
     const validated = kopaiQuery.TraceAggregateQuerySchema.parse(q);
-    return request(
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    const res = await request(
       `${this.baseUrl}/signals/query/traces/aggregate`,
       aggregateResponseSchema,
       {
@@ -474,6 +492,7 @@ export class KopaiClient {
         defaultTimeout: this.defaultTimeout,
       }
     );
+    return res as AggregateResultFor<Q>;
   }
 
   /**
@@ -484,6 +503,7 @@ export class KopaiClient {
     opts?: RequestOptions
   ): Promise<SearchResult<OtelLogsRow>> {
     const validated = kopaiQuery.LogRawQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
     return request(
       `${this.baseUrl}/signals/query/logs/raw`,
       logsResponseSchema,
@@ -501,12 +521,13 @@ export class KopaiClient {
   /**
    * Run an aggregate log query (KopaiQuery). Returns grouped rows.
    */
-  async queryLogsAggregate(
-    q: kopaiQuery.LogAggregateQuery,
+  async queryLogsAggregate<Q extends kopaiQuery.LogAggregateQuery>(
+    q: Q,
     opts?: RequestOptions
-  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+  ): Promise<AggregateResultFor<Q>> {
     const validated = kopaiQuery.LogAggregateQuerySchema.parse(q);
-    return request(
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    const res = await request(
       `${this.baseUrl}/signals/query/logs/aggregate`,
       aggregateResponseSchema,
       {
@@ -518,6 +539,7 @@ export class KopaiClient {
         defaultTimeout: this.defaultTimeout,
       }
     );
+    return res as AggregateResultFor<Q>;
   }
 
   /**
@@ -528,6 +550,7 @@ export class KopaiClient {
     opts?: RequestOptions
   ): Promise<SearchResult<OtelMetricsRow>> {
     const validated = kopaiQuery.MetricRawQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
     return request(
       `${this.baseUrl}/signals/query/metrics/raw`,
       metricsResponseSchema,
@@ -545,12 +568,13 @@ export class KopaiClient {
   /**
    * Run an aggregate metric query (KopaiQuery). Returns grouped rows.
    */
-  async queryMetricsAggregate(
-    q: kopaiQuery.MetricAggregateQuery,
+  async queryMetricsAggregate<Q extends kopaiQuery.MetricAggregateQuery>(
+    q: Q,
     opts?: RequestOptions
-  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+  ): Promise<AggregateResultFor<Q>> {
     const validated = kopaiQuery.MetricAggregateQuerySchema.parse(q);
-    return request(
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    const res = await request(
       `${this.baseUrl}/signals/query/metrics/aggregate`,
       aggregateResponseSchema,
       {
@@ -562,6 +586,7 @@ export class KopaiClient {
         defaultTimeout: this.defaultTimeout,
       }
     );
+    return res as AggregateResultFor<Q>;
   }
 
   /**

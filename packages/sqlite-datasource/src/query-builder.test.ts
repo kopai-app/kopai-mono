@@ -186,13 +186,16 @@ describe("compileFilter (sqlite)", () => {
     ).toContain(`"Duration" <= ?`);
   });
 
-  it("emits IS NULL / IS NOT NULL for isNull / isNotNull", () => {
+  it("treats empty string as null for isNull / isNotNull (parity with CH empty())", () => {
+    // ClickHouse uses empty()/notEmpty(), which treat a missing attribute
+    // (Map default "") and an empty value identically. SQLite mirrors that so
+    // the same query returns the same rows on both backends.
     expect(
       buildKopaiSql(baseTraceRaw([{ column: "SpanName", op: "isNull" }])).sql
-    ).toContain(`"SpanName" IS NULL`);
+    ).toContain(`("SpanName" IS NULL OR "SpanName" = '')`);
     expect(
       buildKopaiSql(baseTraceRaw([{ column: "SpanName", op: "isNotNull" }])).sql
-    ).toContain(`"SpanName" IS NOT NULL`);
+    ).toContain(`("SpanName" IS NOT NULL AND "SpanName" <> '')`);
   });
 
   it("emits json_extract for non-semconv attribute refs", () => {
@@ -259,7 +262,7 @@ describe("compileFilter (sqlite) — nested AND/OR matrix", () => {
     // parenthesization or join-order fails loudly.
     const expected =
       `(("SpanName" = ? OR "SpanName" LIKE ? ESCAPE '\\') ` +
-      `AND ("Duration" > ? OR json_extract("SpanAttributes", ?) = ? OR "StatusMessage" IS NULL) ` +
+      `AND ("Duration" > ? OR CAST(json_extract("SpanAttributes", ?) AS REAL) = ? OR ("StatusMessage" IS NULL OR "StatusMessage" = '')) ` +
       `AND "TraceId" IN (?, ?))`;
     expect(sql).toContain(expected);
   });
@@ -312,8 +315,11 @@ describe("attribute refs across query slots (sqlite)", () => {
         ],
       })
     );
+    // NULLIF drops both missing keys (json_extract -> NULL) and empty
+    // values, matching ClickHouse's uniq(nullIf(...)) so distinct counts
+    // agree across backends.
     expect(sql).toContain(
-      `COUNT(DISTINCT json_extract("SpanAttributes", ?)) AS "distinct_users"`
+      `COUNT(DISTINCT NULLIF(json_extract("SpanAttributes", ?), '')) AS "distinct_users"`
     );
     expect(params).toContain(`$."user.id"`);
   });
@@ -670,6 +676,30 @@ describe("cursor pagination (sqlite)", () => {
     ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
   });
 
+  // H1: a secondary sort key after the time column desyncs the keyset
+  // predicate (which only resumes on time + tiebreaker), silently
+  // skipping/repeating rows. Reject it even when the primary key is the time
+  // column.
+  it("rejects cursor when a secondary (non-time) sort key is present", async () => {
+    const { kopaiQueryCompiler } = await import("@kopai/core");
+    expect(() =>
+      buildKopaiSql({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: {
+          type: "absolute",
+          startTime: "2024-01-01T00:00:00.000Z",
+          endTime: "2024-01-02T00:00:00.000Z",
+        },
+        orderBy: [
+          { type: "dimension", column: "Timestamp", direction: "desc" },
+          { type: "dimension", column: "Duration", direction: "desc" },
+        ],
+        cursor: "1704067200000000000:span-abc",
+      })
+    ).toThrow(kopaiQueryCompiler.KopaiQueryValidationError);
+  });
+
   it("rejects cursor with a non-numeric timestamp via KopaiQueryValidationError", async () => {
     const { kopaiQueryCompiler } = await import("@kopai/core");
     expect(() =>
@@ -754,5 +784,29 @@ describe("normalizeCellValue", () => {
     expect(normalizeCellValue(BigInt(Number.MAX_SAFE_INTEGER))).toBe(
       Number.MAX_SAFE_INTEGER
     );
+  });
+});
+
+describe("empty logical group fallback (sqlite)", () => {
+  // Zod enforces .min(1) on and/or arrays, so an empty group is unreachable
+  // through the validated API. buildKopaiSql is called directly here, so cover
+  // its defensive 1=1 fallback to guard against a regression (or a future
+  // relaxation of the min(1) constraint).
+  it("emits 1=1 for an empty and-group", () => {
+    const { sql } = buildKopaiSql(
+      baseTraceRaw([
+        { and: [] },
+      ] as unknown as kopaiQuery.TraceRawQuery["filters"])
+    );
+    expect(sql).toContain("1=1");
+  });
+
+  it("emits 1=1 for an empty or-group", () => {
+    const { sql } = buildKopaiSql(
+      baseTraceRaw([
+        { or: [] },
+      ] as unknown as kopaiQuery.TraceRawQuery["filters"])
+    );
+    expect(sql).toContain("1=1");
   });
 });

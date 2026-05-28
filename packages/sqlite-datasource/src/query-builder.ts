@@ -209,6 +209,22 @@ function columnSqlExpr(signal: Signal, ref: ColumnRef): SqlFragment {
   };
 }
 
+// Coerces an attribute-map expression to a number for numeric comparisons.
+// Attribute values are stored as JSON (commonly strings, via OTLP
+// stringValue); SQLite's type affinity would otherwise compare them
+// lexically (the text "50" sorts after the number 100). Mirrors ClickHouse's
+// toFloat64OrNull. Structural columns already carry a numeric affinity and
+// are returned unchanged.
+function numericExpr(
+  signal: Signal,
+  ref: ColumnRef,
+  col: SqlFragment
+): SqlFragment {
+  const resolved = kopaiQueryCompiler.resolveColumn(signal, ref);
+  if (resolved.kind === "structural") return col;
+  return { sql: `CAST(${col.sql} AS REAL)`, params: col.params };
+}
+
 function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
   // Logical: key-based discrimination on `and`/`or`.
   if ("and" in f || "or" in f) {
@@ -232,18 +248,39 @@ function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
 
   switch (f.op) {
     case "isNull":
-      return { sql: `${col.sql} IS NULL`, params: col.params };
+      // Treat empty string as null to match ClickHouse's empty(), which can't
+      // distinguish a missing attribute (Map default "") from an empty value.
+      return {
+        sql: `(${col.sql} IS NULL OR ${col.sql} = '')`,
+        params: [...col.params, ...col.params],
+      };
     case "isNotNull":
-      return { sql: `${col.sql} IS NOT NULL`, params: col.params };
+      return {
+        sql: `(${col.sql} IS NOT NULL AND ${col.sql} <> '')`,
+        params: [...col.params, ...col.params],
+      };
 
     case "eq":
     case "neq": {
       // Polymorphic value — typeof picks the SQL coercion. Booleans
-      // serialize to 0/1 (matches SQLite storage); strings/numbers
-      // bind through directly.
+      // serialize to 0/1 (matches SQLite storage); a numeric value coerces
+      // the (possibly string-stored attribute) column to REAL so the
+      // comparison is numeric, not lexical; strings bind through directly.
       const opSql = f.op === "eq" ? "=" : "<>";
-      const param = typeof f.value === "boolean" ? (f.value ? 1 : 0) : f.value;
-      return { sql: `${col.sql} ${opSql} ?`, params: [...col.params, param] };
+      if (typeof f.value === "boolean") {
+        return {
+          sql: `${col.sql} ${opSql} ?`,
+          params: [...col.params, f.value ? 1 : 0],
+        };
+      }
+      if (typeof f.value === "number") {
+        const num = numericExpr(signal, f.column, col);
+        return {
+          sql: `${num.sql} ${opSql} ?`,
+          params: [...num.params, f.value],
+        };
+      }
+      return { sql: `${col.sql} ${opSql} ?`, params: [...col.params, f.value] };
     }
 
     case "contains":
@@ -274,19 +311,27 @@ function buildFilter(signal: Signal, f: AnyFilterExpr): SqlFragment {
     case "gt":
     case "gte":
     case "lt":
-    case "lte":
+    case "lte": {
+      const num = numericExpr(signal, f.column, col);
       return {
-        sql: `${col.sql} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[f.op]} ?`,
-        params: [...col.params, f.value],
+        sql: `${num.sql} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[f.op]} ?`,
+        params: [...num.params, f.value],
       };
+    }
 
     case "in":
     case "notIn": {
       const placeholders = f.values.map(() => "?").join(", ");
       const opSql = f.op === "in" ? "IN" : "NOT IN";
+      // Numeric value lists coerce the column to REAL (mirrors gt/lt and the
+      // ClickHouse backend); string lists bind through as text.
+      const expr =
+        typeof f.values[0] === "number"
+          ? numericExpr(signal, f.column, col)
+          : col;
       return {
-        sql: `${col.sql} ${opSql} (${placeholders})`,
-        params: [...col.params, ...f.values],
+        sql: `${expr.sql} ${opSql} (${placeholders})`,
+        params: [...expr.params, ...f.values],
       };
     }
   }
@@ -323,9 +368,11 @@ function buildCursorWhere(
   cursor: string,
   direction: "asc" | "desc"
 ): SqlFragment {
-  // Canonical "<timestamp-nanos>:<id>" matches the clickhouse backend so
-  // cursors round-trip identically regardless of which datasource served
-  // the previous page.
+  // Cursor FORMAT ("<timestamp-nanos>:<id>") matches the clickhouse backend,
+  // but the id token is backend-specific: traces use SpanId on both, while
+  // logs/metrics use the SQLite rowid here vs a sipHash64 on ClickHouse.
+  // Cursors are therefore NOT portable across backends for logs/metrics — only
+  // within a single deployment.
   const sepIdx = cursor.indexOf(":");
   if (sepIdx === -1) {
     throw new kopaiQueryCompiler.KopaiQueryValidationError(
@@ -449,18 +496,23 @@ function compileRawSql(q: KopaiQuery & { mode: "raw" }): CompiledRaw {
 
   if (q.cursor) {
     // The cursor predicate is keyed off the time column + structural
-    // tiebreak (SpanId / rowid). A user-specified non-time primary sort
-    // would make ORDER BY and the predicate disagree, breaking pagination.
+    // tiebreak (SpanId / rowid). Any other sort key — a non-time primary OR a
+    // secondary key after the time column — makes ORDER BY and the predicate
+    // disagree, silently skipping/repeating rows. Allow only an empty orderBy
+    // or exactly the time column.
     if (order && order.length > 0) {
-      const first = order[0];
       const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
-      if (first && first.type === "dimension") {
-        const col = first.column;
-        if (typeof col !== "string" || col !== timeCol) {
-          throw new kopaiQueryCompiler.KopaiQueryValidationError(
-            `Cursor pagination requires the primary orderBy to be the time column ("${timeCol}"). Got ${JSON.stringify(col)}.`
-          );
-        }
+      const only = order[0];
+      const ok =
+        order.length === 1 &&
+        only !== undefined &&
+        only.type === "dimension" &&
+        typeof only.column === "string" &&
+        only.column === timeCol;
+      if (!ok) {
+        throw new kopaiQueryCompiler.KopaiQueryValidationError(
+          `Cursor pagination requires orderBy to be empty or exactly the time column ("${timeCol}"); a secondary or non-time sort key desyncs keyset pagination.`
+        );
       }
     }
     wheres.push(buildCursorWhere(signal, q.cursor, direction));
@@ -700,8 +752,14 @@ function compileAggregateSql(
     }
     if (m.op === "COUNT_DISTINCT") {
       const expr = columnSqlExpr(signal, m.column);
+      // For attribute refs, drop missing keys (json_extract -> NULL) AND empty
+      // values via NULLIF so the distinct count matches ClickHouse's
+      // uniq(nullIf(...)). Structural columns are counted as-is.
+      const resolved = kopaiQueryCompiler.resolveColumn(signal, m.column);
+      const distinctExpr =
+        resolved.kind === "structural" ? expr.sql : `NULLIF(${expr.sql}, '')`;
       measureSelectParts.push(
-        `COUNT(DISTINCT ${expr.sql}) AS ${quoteAlias(m.as)}`
+        `COUNT(DISTINCT ${distinctExpr}) AS ${quoteAlias(m.as)}`
       );
       measureSelectParams.push(...expr.params);
       continue;

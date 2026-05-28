@@ -116,9 +116,35 @@ interface ResolvedRef {
   isString: boolean; // attribute Map() lookups return String — useful for numeric ops
 }
 
+// Attribute-map containers are the only identifiers in this builder that come
+// from the request body. Zod constrains them to the per-signal *AttrContainer
+// enums upstream, but `buildKopaiSql` is also called directly (tests, and any
+// future caller that skips validation), so re-check here rather than trust the
+// type. The `key` is escaped via quoteLiteral; the container is interpolated as
+// a bare identifier, so it must be an exact match to a known column name.
+// Mirrors TraceAttrContainer ∪ LogAttrContainer ∪ MetricAttrContainer in core.
+const KNOWN_ATTR_CONTAINERS = new Set<string>([
+  "SpanAttributes",
+  "ResourceAttributes",
+  "LogAttributes",
+  "ScopeAttributes",
+  "Attributes",
+]);
+
+function assertKnownContainer(container: string): void {
+  if (!KNOWN_ATTR_CONTAINERS.has(container)) {
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      `Unknown attribute container "${container}". Expected one of: ${[
+        ...KNOWN_ATTR_CONTAINERS,
+      ].join(", ")}.`
+    );
+  }
+}
+
 function resolveRefSql(signal: Signal, ref: ColumnRef): ResolvedRef {
   if (typeof ref === "object") {
     // Direct attribute lookup like SpanAttributes['http.route']
+    assertKnownContainer(ref.container);
     return {
       sql: `${ref.container}[${quoteLiteral(ref.key)}]`,
       projectionKey: `${ref.container}.${ref.key}`,
@@ -162,17 +188,13 @@ function quoteLiteral(s: string): string {
 }
 
 function escapeIdent(name: string): string {
-  // ClickHouse backtick-quoted identifiers — accept any printable chars in
-  // our controlled namespace (alpha/num/underscore/dot/dash). The set is
-  // intentionally narrow; aliases come from KopaiQuery zod-validated input
-  // (Alias regex is even stricter), so this throw is defensive. Surface as
-  // a validation error so the API maps it to 400, not 500.
-  if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(name)) {
-    throw new kopaiQueryCompiler.KopaiQueryValidationError(
-      `Refusing unsafe SQL identifier: ${JSON.stringify(name)}`
-    );
-  }
-  return `\`${name}\``;
+  // ClickHouse backtick-quoted identifier. Names include measure aliases
+  // (strict Alias regex) and dimension projection keys, which for attribute
+  // refs are `${container}.${key}` where the OTel key may contain arbitrary
+  // characters (spaces, '/', ':', etc.). Escape backslashes and backticks
+  // rather than allowlisting, so any valid key is accepted (parity with the
+  // SQLite backend) while interpolation stays safe.
+  return `\`${name.replace(/\\/g, "\\\\").replace(/`/g, "\\`")}\``;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +430,13 @@ function compileMeasure(
   }
   if (m.op === "COUNT_DISTINCT") {
     const r = resolveRefSql(signal, m.column);
-    return `uniq(${r.sql}) AS ${alias}`;
+    // For attribute Map lookups, a missing key returns the value-type default
+    // "" — without nullIf, uniq() would count that empty string as a distinct
+    // value (N+1). nullIf maps missing/empty to NULL (which uniq ignores),
+    // matching SQLite's COUNT(DISTINCT NULLIF(...)). Structural columns are
+    // counted directly.
+    const expr = r.isString ? `nullIf(${r.sql}, '')` : r.sql;
+    return `uniq(${expr}) AS ${alias}`;
   }
   const r = resolveRefSql(signal, m.column);
   const numCol = numericCast(r);
@@ -973,14 +1001,27 @@ function assertCursorCompatibleOrderBy(
   orderBy: OrderItemRaw[] | undefined
 ): void {
   if (!orderBy || orderBy.length === 0) return;
-  const first = orderBy[0];
-  if (!first || first.type !== "dimension") return;
   const timeCol = kopaiQueryCompiler.timeColumnForSignal(signal);
-  const col = first.column;
-  if (typeof col === "string" && col === timeCol) return;
-  throw new kopaiQueryCompiler.KopaiQueryValidationError(
-    `Cursor pagination requires the primary orderBy to be the time column ("${timeCol}"). Got ${JSON.stringify(col)}.`
-  );
+  // The keyset predicate resumes on (timeColumn, tiebreaker) only. Any other
+  // sort key — a non-time primary OR a secondary key after the time column —
+  // makes the ORDER BY disagree with the predicate and silently skips/repeats
+  // rows. Allow only an empty orderBy or exactly the time column.
+  const only = orderBy[0];
+  const ok =
+    orderBy.length === 1 &&
+    only !== undefined &&
+    only.type === "dimension" &&
+    typeof only.column === "string" &&
+    only.column === timeCol;
+  if (!ok) {
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      `Cursor pagination requires orderBy to be empty or exactly the time column ("${timeCol}"); a secondary or non-time sort key desyncs keyset pagination. Got ${JSON.stringify(
+        orderBy.map((o) =>
+          o.type === "measure" ? `measure:${o.alias}` : o.column
+        )
+      )}.`
+    );
+  }
 }
 
 function ensureTiebreaker(
@@ -988,8 +1029,15 @@ function ensureTiebreaker(
   tiebreakerCol: string,
   dir: "asc" | "desc"
 ): string {
-  const lower = baseOrderSql.toLowerCase();
-  if (lower.includes(tiebreakerCol.toLowerCase())) return baseOrderSql;
+  // Compare the tiebreaker against each ORDER BY key by its bare column token
+  // — a loose substring check wrongly treats `ParentSpanId` as already
+  // containing `SpanId` and drops the tiebreaker, leaving a non-unique sort.
+  const body = baseOrderSql.replace(/^\s*ORDER BY\s+/i, "");
+  const existingTokens = body.split(",").map((seg) => {
+    const token = seg.trim().split(/\s+/)[0] ?? "";
+    return token.replace(/`/g, "").toLowerCase();
+  });
+  if (existingTokens.includes(tiebreakerCol.toLowerCase())) return baseOrderSql;
   return `${baseOrderSql}, ${tiebreakerCol} ${dir.toUpperCase()}`;
 }
 

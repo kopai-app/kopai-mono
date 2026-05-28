@@ -61,16 +61,37 @@ describe("build return-type equality", () => {
     const q = kq.metrics
       .aggregate()
       .measure((m) => m.count("c"))
+      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .summary()
       .build();
     expectTypeOf(q).toEqualTypeOf<kopaiQuery.MetricAggregateQuery>();
   });
 
+  it("metrics.aggregate without a MetricType filter throws KopaiQueryBuildError (M1)", () => {
+    // validateKopaiQuery requires a top-level MetricType filter on metric
+    // queries; the builder must surface that locally instead of producing a
+    // query the server rejects with 400.
+    let caught: unknown;
+    try {
+      kq.metrics
+        .aggregate()
+        .measure((m) => m.count("c"))
+        .timeRelative("1h")
+        .summary()
+        .build();
+    } catch (e) {
+      caught = e;
+    }
+    assertBuildError(caught);
+    expect(caught.message).toContain("MetricType");
+  });
+
   it("metrics.raw -> MetricRawQuery", () => {
     const q = kq.metrics
       .raw()
       .dimension("MetricName")
+      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .build();
     expectTypeOf(q).toEqualTypeOf<kopaiQuery.MetricRawQuery>();
@@ -340,6 +361,7 @@ describe("runtime: happy paths — minimum-valid per variant", () => {
     const q = kq.metrics
       .aggregate()
       .measure((m) => m.count("c"))
+      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .summary()
       .build();
@@ -347,6 +369,7 @@ describe("runtime: happy paths — minimum-valid per variant", () => {
       signal: "metrics",
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "c" }],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
     });
@@ -357,12 +380,14 @@ describe("runtime: happy paths — minimum-valid per variant", () => {
     const q = kq.metrics
       .raw()
       .dimension("MetricName")
+      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .build();
     expect(q).toEqual({
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName"],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: { type: "relative", lookback: "1h" },
     });
     expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
@@ -594,9 +619,11 @@ describe("runtime: filter coverage", () => {
   });
 
   it("boolean filter", () => {
+    // IsMonotonic exists only on the Sum metric type, so pin MetricType=Sum.
     const q = kq.metrics
       .aggregate()
       .measure((m) => m.count("c"))
+      .where((f) => f.eq("MetricType", "Sum"))
       .where((f) => f.eq("IsMonotonic", true))
       .timeRelative("1h")
       .summary()
@@ -605,7 +632,10 @@ describe("runtime: filter coverage", () => {
       signal: "metrics",
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "c" }],
-      filters: [{ column: "IsMonotonic", op: "eq", value: true }],
+      filters: [
+        { column: "MetricType", op: "eq", value: "Sum" },
+        { column: "IsMonotonic", op: "eq", value: true },
+      ],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
     });
@@ -856,10 +886,12 @@ describe("runtime: measure ops per signal", () => {
   });
 
   it("metrics: numeric ops", () => {
+    // Value exists on the Gauge metric type.
     const q = kq.metrics
       .aggregate()
       .measure((m) => m.count("c"))
       .measure((m) => m.sum("Value", "s"))
+      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .summary()
       .build();
@@ -870,6 +902,7 @@ describe("runtime: measure ops per signal", () => {
         { op: "COUNT", as: "c" },
         { op: "SUM", column: "Value", as: "s" },
       ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "summary" },
     });
@@ -1008,7 +1041,10 @@ describe("runtime: validation errors", () => {
       err = e;
     }
     assertBuildError(err);
-    expect(err.issues.some((i) => i.path.includes("values"))).toBe(true);
+    // The in/notIn `values` schema is a union of (string[] | number[]); an
+    // empty array fails both branches, so Zod reports an invalid_union at the
+    // filter node (filters.0) rather than at filters.0.values.
+    expect(err.issues.some((i) => i.path.includes("filters"))).toBe(true);
   });
 
   it("limit(0) -> validation error on limit", () => {
@@ -1241,6 +1277,7 @@ describe("runtime: round-trip parse", () => {
         q: kq.metrics
           .aggregate()
           .measure((m) => m.count("c"))
+          .where((f) => f.eq("MetricType", "Gauge"))
           .timeRelative("1h")
           .summary()
           .build(),
@@ -1248,16 +1285,23 @@ describe("runtime: round-trip parse", () => {
           signal: "metrics",
           mode: "aggregate",
           measures: [{ op: "COUNT", as: "c" }],
+          filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
           timeDimension: { type: "relative", lookback: "1h" },
           output: { type: "summary" },
         },
       },
       {
-        q: kq.metrics.raw().dimension("MetricName").timeRelative("1h").build(),
+        q: kq.metrics
+          .raw()
+          .dimension("MetricName")
+          .where((f) => f.eq("MetricType", "Gauge"))
+          .timeRelative("1h")
+          .build(),
         expected: {
           signal: "metrics",
           mode: "raw",
           dimensions: ["MetricName"],
+          filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
           timeDimension: { type: "relative", lookback: "1h" },
         },
       },

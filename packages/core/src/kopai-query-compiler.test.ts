@@ -232,3 +232,163 @@ describe("extractMetricType — typed return", () => {
     expect(extractMetricType(q)).toBe("Sum");
   });
 });
+
+describe("validateKopaiQuery — metric column exists on pinned type (M4)", () => {
+  const metricsAgg = (measures: unknown[], filters: unknown[]): KopaiQuery =>
+    asTestQuery({
+      signal: "metrics",
+      mode: "aggregate",
+      measures,
+      timeDimension: tdRelative,
+      output: { type: "summary" },
+      filters,
+    });
+
+  it("13. rejects a structural column absent on the pinned MetricType", () => {
+    // `Count` exists on Histogram/Summary, not on Gauge.
+    const q = metricsAgg(
+      [{ op: "SUM", column: "Count", as: "c" }],
+      [{ column: "MetricType", op: "eq", value: "Gauge" }]
+    );
+    expect(() => validateKopaiQuery(q)).toThrow(/does not exist|Count/);
+  });
+
+  it("14. accepts a type-specific column on the matching MetricType", () => {
+    const q = metricsAgg(
+      [{ op: "SUM", column: "Count", as: "c" }],
+      [{ column: "MetricType", op: "eq", value: "Histogram" }]
+    );
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+
+  it("15. accepts Value on Gauge", () => {
+    const q = metricsAgg(
+      [{ op: "AVG", column: "Value", as: "v" }],
+      [{ column: "MetricType", op: "eq", value: "Gauge" }]
+    );
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+
+  it("16. rejects a dimension column absent on the pinned type", () => {
+    const q = asTestQuery({
+      signal: "metrics",
+      mode: "aggregate",
+      measures: [{ op: "COUNT", as: "n" }],
+      dimensions: ["BucketCounts"], // Histogram-only
+      timeDimension: tdRelative,
+      output: { type: "summary" },
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+    });
+    expect(() => validateKopaiQuery(q)).toThrow(/does not exist|BucketCounts/);
+  });
+});
+
+describe("validateKopaiQuery — numeric op on non-numeric column (L1)", () => {
+  const tracesRaw = (filters: unknown[]): KopaiQuery =>
+    asTestQuery({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: tdRelative,
+      filters,
+    });
+
+  it("17. rejects gt on a string structural column", () => {
+    const q = tracesRaw([{ column: "SpanName", op: "gt", value: 5 }]);
+    expect(() => validateKopaiQuery(q)).toThrow(/numeric|SpanName/);
+  });
+
+  it("18. rejects eq with a numeric value on a string column", () => {
+    const q = tracesRaw([{ column: "SpanName", op: "eq", value: 42 }]);
+    expect(() => validateKopaiQuery(q)).toThrow(/numeric|SpanName/);
+  });
+
+  it("19. rejects in with numeric values on a string column", () => {
+    const q = tracesRaw([{ column: "SpanName", op: "in", values: [1, 2] }]);
+    expect(() => validateKopaiQuery(q)).toThrow(/numeric|SpanName/);
+  });
+
+  it("20. allows gt on a numeric structural column (Duration)", () => {
+    const q = tracesRaw([{ column: "Duration", op: "gt", value: 5 }]);
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+
+  it("21. allows eq with a string value on a string column", () => {
+    const q = tracesRaw([{ column: "SpanName", op: "eq", value: "GET /" }]);
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+
+  it("22. allows a numeric op on an attribute ref (coerced at SQL layer)", () => {
+    const q = tracesRaw([
+      {
+        column: { container: "SpanAttributes", key: "http.status" },
+        op: "gt",
+        value: 200,
+      },
+    ]);
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+});
+
+describe("validateKopaiQuery — aggregate cross-field references", () => {
+  const agg = (over: object): KopaiQuery =>
+    asTestQuery({
+      signal: "traces",
+      mode: "aggregate",
+      timeDimension: tdRelative,
+      output: { type: "summary" },
+      measures: [{ op: "COUNT", as: "c" }],
+      ...over,
+    });
+
+  it("23. rejects duplicate measure aliases", () => {
+    const q = agg({
+      measures: [
+        { op: "COUNT", as: "c" },
+        { op: "ERROR_RATE", as: "c" },
+      ],
+    });
+    expect(() => validateKopaiQuery(q)).toThrow(/[Dd]uplicate measure alias/);
+  });
+
+  it("24. rejects a HAVING that references an unknown measure alias", () => {
+    const q = agg({
+      havings: [{ measure: "missing", op: "gt", value: 1 }],
+    });
+    expect(() => validateKopaiQuery(q)).toThrow(/having\.measure|missing/);
+  });
+
+  it("25. accepts a HAVING that references a declared alias", () => {
+    const q = agg({ havings: [{ measure: "c", op: "gt", value: 1 }] });
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+
+  it("26. rejects an orderBy measure that references an unknown alias", () => {
+    const q = agg({
+      orderBy: [{ type: "measure", alias: "nope", direction: "desc" }],
+    });
+    expect(() => validateKopaiQuery(q)).toThrow(/orderBy measure|nope/);
+  });
+
+  it("27. rejects an orderBy dimension absent from dimensions (aggregate mode)", () => {
+    const q = agg({
+      dimensions: ["SpanName"],
+      orderBy: [{ type: "dimension", column: "SpanKind", direction: "asc" }],
+    });
+    expect(() => validateKopaiQuery(q)).toThrow(/must appear in dimensions/);
+  });
+
+  it("28. accepts an orderBy dimension that appears in dimensions", () => {
+    const q = agg({
+      dimensions: ["SpanName"],
+      orderBy: [{ type: "dimension", column: "SpanName", direction: "asc" }],
+    });
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+
+  it("29. accepts an orderBy measure that references a declared alias", () => {
+    const q = agg({
+      orderBy: [{ type: "measure", alias: "c", direction: "desc" }],
+    });
+    expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+});

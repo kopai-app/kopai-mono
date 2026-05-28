@@ -2,6 +2,7 @@ import { observabilityCatalog } from "@kopai/ui-core";
 import type { RendererComponentProps } from "@kopai/ui-core";
 import { MetricHistogram } from "../index.js";
 import { NoDataSource } from "./NoDataSource.js";
+import { narrowRows, hasMetricRowShape } from "./narrowRows.js";
 
 type Props = RendererComponentProps<
   typeof observabilityCatalog.components.MetricHistogram
@@ -10,9 +11,12 @@ type Props = RendererComponentProps<
 export function OtelMetricHistogram(props: Props) {
   if (!props.hasData) return <NoDataSource />;
 
+  // `query` is polymorphic — only forward rows that are actually metric rows.
+  const rows = narrowRows(props.response, hasMetricRowShape) ?? [];
+
   return (
     <MetricHistogram
-      rows={props.response?.data ?? []}
+      rows={rows}
       isLoading={props.loading}
       error={props.error ?? undefined}
       height={props.element.props.height ?? 400}

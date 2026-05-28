@@ -1,5 +1,5 @@
 /// <reference types="vitest/globals" />
-import { KopaiQuery } from "./kopai-query.js";
+import { KopaiQuery, assertColumnPartition } from "./kopai-query.js";
 
 // Helper: minimal valid TimeDimension used across cases.
 const tdRelative = { type: "relative" as const, lookback: "1h" };
@@ -104,7 +104,31 @@ describe("KopaiQuery schema — FilterExpr op-discriminated leaves", () => {
     expect(r.success).toBe(false);
   });
 
-  it("5b. in accepts a non-empty values array of string|number", () => {
+  it("5b. in accepts a non-empty homogeneous string values array", () => {
+    const r = KopaiQuery.safeParse(
+      tracesAggWithFilter({
+        column: "SpanName",
+        op: "in",
+        values: ["a", "b"],
+      })
+    );
+    expect(r.success).toBe(true);
+  });
+
+  it("5c. in accepts a non-empty homogeneous number values array", () => {
+    const r = KopaiQuery.safeParse(
+      tracesAggWithFilter({
+        column: "Duration",
+        op: "in",
+        values: [1, 2, 3],
+      })
+    );
+    expect(r.success).toBe(true);
+  });
+
+  it("5d. in rejects a mixed string+number values array (M2)", () => {
+    // Mixed arrays bound to ClickHouse as a single typed Array() param fail
+    // at execution (500) and behave differently on SQLite — reject upfront.
     const r = KopaiQuery.safeParse(
       tracesAggWithFilter({
         column: "SpanName",
@@ -112,7 +136,7 @@ describe("KopaiQuery schema — FilterExpr op-discriminated leaves", () => {
         values: ["a", 1, "b"],
       })
     );
-    expect(r.success).toBe(true);
+    expect(r.success).toBe(false);
   });
 
   it("6. isNull / isNotNull accept no value field", () => {
@@ -298,6 +322,35 @@ describe("DurationString — rejects zero at schema level", () => {
       timeDimension: { type: "relative", lookback: "1h" },
     });
     expect(r.success).toBe(true);
+  });
+});
+
+describe("assertColumnPartition — drift detector XOR contract (L8)", () => {
+  it("accepts a clean partition (every key in exactly one set)", () => {
+    expect(() =>
+      assertColumnPartition("t", ["A", "B", "C"], ["A", "B"], new Set(["C"]))
+    ).not.toThrow();
+  });
+
+  it("throws when a schema key is in neither set (unaccounted)", () => {
+    expect(() =>
+      assertColumnPartition("t", ["A", "B", "C"], ["A"], new Set(["B"]))
+    ).toThrow(/unaccounted/);
+  });
+
+  it("throws when STRUCTURAL has a key absent from the schema (stale)", () => {
+    expect(() =>
+      assertColumnPartition("t", ["A"], ["A", "Z"], new Set())
+    ).toThrow(/stale/);
+  });
+
+  it("throws when a key is in BOTH structural and excluded (XOR violated)", () => {
+    // "A" is listed as both structural and excluded — the documented XOR
+    // forbids this, but the original implementation only caught the
+    // 'neither' case.
+    expect(() =>
+      assertColumnPartition("t", ["A", "B"], ["A"], new Set(["A", "B"]))
+    ).toThrow(/both|BOTH|XOR/);
   });
 });
 

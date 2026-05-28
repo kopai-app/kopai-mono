@@ -1800,11 +1800,16 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       requestContext: requestContext(),
     });
     // 3 gauge points at 00:00:01, 00:00:02, 00:00:03 → 3 buckets at 1s.
+    // bucket_start must be canonical ISO-8601 UTC (matching the SQLite
+    // backend exactly), not ClickHouse's space-separated DateTime64 form.
     expect(result.data.length).toBe(3);
+    const buckets = result.data.map((r) => r.bucket_start).sort();
+    expect(buckets).toEqual([
+      "2024-01-01T00:00:01.000Z",
+      "2024-01-01T00:00:02.000Z",
+      "2024-01-01T00:00:03.000Z",
+    ]);
     for (const r of result.data) {
-      const bs = r.bucket_start;
-      expect(typeof bs).toBe("string");
-      expect(Number.isNaN(Date.parse(String(bs)))).toBe(false);
       expect(Number(r.cnt)).toBe(1);
     }
   });

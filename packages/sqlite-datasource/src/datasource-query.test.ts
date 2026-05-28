@@ -230,6 +230,50 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
       expect(row.SpanId).toBe("s1");
     });
 
+    it("numeric gt on a string-stored attribute compares numerically, not lexically (H2)", async () => {
+      // Attribute values arrive as OTLP stringValue and are stored as JSON
+      // strings. Without a numeric cast, SQLite's type affinity ranks all
+      // text above all numbers, so the string "50" wrongly satisfies > 100.
+      await insertSpan({
+        traceId: "t1",
+        spanId: "s50",
+        startTimeNanos: "1000000000000000",
+        endTimeNanos: "1001000000000000",
+        spanAttributes: { "http.status": "50" },
+      });
+      await insertSpan({
+        traceId: "t2",
+        spanId: "s200",
+        startTimeNanos: "2000000000000000",
+        endTimeNanos: "2001000000000000",
+        spanAttributes: { "http.status": "200" },
+      });
+      await insertSpan({
+        traceId: "t3",
+        spanId: "s500",
+        startTimeNanos: "3000000000000000",
+        endTimeNanos: "3001000000000000",
+        spanAttributes: { "http.status": "500" },
+      });
+
+      const result = await readDs.query({
+        signal: "traces",
+        mode: "raw",
+        dimensions: ["SpanId"],
+        filters: [
+          {
+            column: { container: "SpanAttributes", key: "http.status" },
+            op: "gt",
+            value: 100,
+          },
+        ],
+        timeDimension: WIDE_WINDOW,
+      });
+
+      const ids = result.data.map((r) => r.SpanId).sort();
+      expect(ids).toEqual(["s200", "s500"]);
+    });
+
     it("respects limit + returns next cursor for pagination", async () => {
       for (let i = 0; i < 5; i++) {
         await insertSpan({

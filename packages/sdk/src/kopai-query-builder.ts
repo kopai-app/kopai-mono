@@ -1,4 +1,4 @@
-import { kopaiQuery } from "@kopai/core";
+import { kopaiQuery, kopaiQueryCompiler } from "@kopai/core";
 import type { z } from "zod";
 
 // ============================================================
@@ -441,6 +441,17 @@ function validateAndReturn<T>(state: State): T {
       }))
     );
   }
+  // Cross-field semantic checks the Zod schema can't express (required
+  // MetricType filter, having/orderBy alias + dimension references, numeric
+  // column typing). Surface them locally as a build error instead of letting
+  // the query round-trip to a server 400.
+  try {
+    kopaiQueryCompiler.validateKopaiQuery(result.data as kopaiQuery.KopaiQuery);
+  } catch (e) {
+    throw new KopaiQueryBuildError([
+      { path: "", message: e instanceof Error ? e.message : String(e) },
+    ]);
+  }
   // WHY: SCHEMA_MAP returns a union of schemas; TS cannot prove the inferred
   // output narrows to the caller's T (AggregateQueryFor<S> / RawQueryFor<S>).
   // The (signal, mode) -> schema mapping is the source of truth.
@@ -462,9 +473,17 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
     this._state = state ?? initialState(signal, "aggregate");
   }
 
-  private clone(patch: (s: State) => State): AggBuilder<S, AggFlags> {
+  // Generic over the resulting flag type F2 so each method names the phantom
+  // flag it advances to and gets that builder type back with no cast. The
+  // phantom `_flags` field is `declare`d (erased at runtime), so constructing
+  // `AggBuilder<S, F2>` for any F2 is purely a compile-time relabel of the same
+  // frozen state. Defaults to F for methods that don't change required-field
+  // tracking (dimension/where/having/orderBy/limit).
+  private clone<F2 extends AggFlags = F>(
+    patch: (s: State) => State
+  ): AggBuilder<S, F2> {
     const next = Object.freeze(patch(this._state));
-    return new AggBuilder<S, AggFlags>(this._signal, next);
+    return new AggBuilder<S, F2>(this._signal, next);
   }
 
   /** Adds a measure. Repeatable; each call appends. */
@@ -472,10 +491,10 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
     fn: (m: MeasureBuilderFor<S>) => MeasureExprFor<S>
   ): AggBuilder<S, WithFlag<F, "measures">> {
     const expr = fn(makeMeasureBuilder(this._signal));
-    return this.clone((s) => ({
+    return this.clone<WithFlag<F, "measures">>((s) => ({
       ...s,
       measures: Object.freeze([...s.measures, expr]),
-    })) as unknown as AggBuilder<S, WithFlag<F, "measures">>;
+    }));
   }
 
   /** Adds a GROUP BY column. Repeatable. */
@@ -484,7 +503,7 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
     return this.clone((s) => ({
       ...s,
       dimensions: Object.freeze([...s.dimensions, ref]),
-    })) as unknown as AggBuilder<S, F>;
+    }));
   }
 
   /** Adds a pre-aggregation filter (top-level AND with other where calls). */
@@ -493,7 +512,7 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
     return this.clone((s) => ({
       ...s,
       filters: Object.freeze([...s.filters, expr]),
-    })) as unknown as AggBuilder<S, F>;
+    }));
   }
 
   /** Adds a HAVING clause on a measure alias. */
@@ -501,7 +520,7 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
     return this.clone((s) => ({
       ...s,
       havings: Object.freeze([...s.havings, { measure: alias, op, value }]),
-    })) as unknown as AggBuilder<S, F>;
+    }));
   }
 
   /** Order by a dimension column. */
@@ -516,7 +535,7 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
         ...s.orderBy,
         { type: "dimension", column: ref, direction },
       ]),
-    })) as unknown as AggBuilder<S, F>;
+    }));
   }
 
   /** Order by a measure alias. */
@@ -530,16 +549,16 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
         ...s.orderBy,
         { type: "measure", alias, direction },
       ]),
-    })) as unknown as AggBuilder<S, F>;
+    }));
   }
 
   /** Relative time window ending now. */
   timeRelative(lookback: string): AggBuilder<S, WithFlag<F, "timeDimension">> {
     const td: TimeDim = { type: "relative", lookback };
-    return this.clone((s) => ({
+    return this.clone<WithFlag<F, "timeDimension">>((s) => ({
       ...s,
       timeDimension: td,
-    })) as unknown as AggBuilder<S, WithFlag<F, "timeDimension">>;
+    }));
   }
 
   /** Absolute ISO-bounded time window. */
@@ -548,34 +567,31 @@ export class AggBuilder<S extends Signal, F extends AggFlags = AggInit> {
     endTime: string
   ): AggBuilder<S, WithFlag<F, "timeDimension">> {
     const td: TimeDim = { type: "absolute", startTime, endTime };
-    return this.clone((s) => ({
+    return this.clone<WithFlag<F, "timeDimension">>((s) => ({
       ...s,
       timeDimension: td,
-    })) as unknown as AggBuilder<S, WithFlag<F, "timeDimension">>;
+    }));
   }
 
   /** One row per group across the full window. */
   summary(): AggBuilder<S, WithFlag<F, "output">> {
-    return this.clone((s) => ({
+    return this.clone<WithFlag<F, "output">>((s) => ({
       ...s,
       output: { type: "summary" },
-    })) as unknown as AggBuilder<S, WithFlag<F, "output">>;
+    }));
   }
 
   /** One row per (group, bucket) where bucket width is `granularity`. */
   timeSeries(granularity: string): AggBuilder<S, WithFlag<F, "output">> {
-    return this.clone((s) => ({
+    return this.clone<WithFlag<F, "output">>((s) => ({
       ...s,
       output: { type: "timeSeries", granularity },
-    })) as unknown as AggBuilder<S, WithFlag<F, "output">>;
+    }));
   }
 
   /** Maximum rows to return (server-side hard cap = 10000). */
   limit(n: number): AggBuilder<S, F> {
-    return this.clone((s) => ({ ...s, limit: n })) as unknown as AggBuilder<
-      S,
-      F
-    >;
+    return this.clone((s) => ({ ...s, limit: n }));
   }
 
   /** Finalizes the query. Available only when all required fields are set. */
@@ -599,9 +615,13 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
     this._state = state ?? initialState(signal, "raw");
   }
 
-  private clone(patch: (s: State) => State): RawBuilder<S, RawFlags> {
+  // Generic over the resulting flag type F2 (see AggBuilder.clone). Defaults to
+  // F for methods that don't advance required-field tracking.
+  private clone<F2 extends RawFlags = F>(
+    patch: (s: State) => State
+  ): RawBuilder<S, F2> {
     const next = Object.freeze(patch(this._state));
-    return new RawBuilder<S, RawFlags>(this._signal, next);
+    return new RawBuilder<S, F2>(this._signal, next);
   }
 
   /** Adds a column to project. Repeatable. Omit entirely to receive the full denormalized row. */
@@ -610,7 +630,7 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
     return this.clone((s) => ({
       ...s,
       dimensions: Object.freeze([...s.dimensions, ref]),
-    })) as unknown as RawBuilder<S, F>;
+    }));
   }
 
   /** Adds a filter (top-level AND with other where calls). */
@@ -619,7 +639,7 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
     return this.clone((s) => ({
       ...s,
       filters: Object.freeze([...s.filters, expr]),
-    })) as unknown as RawBuilder<S, F>;
+    }));
   }
 
   /** Order by a dimension column. */
@@ -634,16 +654,16 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
         ...s.orderBy,
         { type: "dimension", column: ref, direction },
       ]),
-    })) as unknown as RawBuilder<S, F>;
+    }));
   }
 
   /** Relative time window ending now. */
   timeRelative(lookback: string): RawBuilder<S, WithFlag<F, "timeDimension">> {
     const td: TimeDim = { type: "relative", lookback };
-    return this.clone((s) => ({
+    return this.clone<WithFlag<F, "timeDimension">>((s) => ({
       ...s,
       timeDimension: td,
-    })) as unknown as RawBuilder<S, WithFlag<F, "timeDimension">>;
+    }));
   }
 
   /** Absolute ISO-bounded time window. */
@@ -652,18 +672,15 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
     endTime: string
   ): RawBuilder<S, WithFlag<F, "timeDimension">> {
     const td: TimeDim = { type: "absolute", startTime, endTime };
-    return this.clone((s) => ({
+    return this.clone<WithFlag<F, "timeDimension">>((s) => ({
       ...s,
       timeDimension: td,
-    })) as unknown as RawBuilder<S, WithFlag<F, "timeDimension">>;
+    }));
   }
 
   /** Maximum rows to return (server-side hard cap = 10000). */
   limit(n: number): RawBuilder<S, F> {
-    return this.clone((s) => ({ ...s, limit: n })) as unknown as RawBuilder<
-      S,
-      F
-    >;
+    return this.clone((s) => ({ ...s, limit: n }));
   }
 
   /** Opaque pagination token from a prior page's response. */
@@ -671,7 +688,7 @@ export class RawBuilder<S extends Signal, F extends RawFlags = RawInit> {
     return this.clone((s) => ({
       ...s,
       cursor: token,
-    })) as unknown as RawBuilder<S, F>;
+    }));
   }
 
   /** Finalizes the query. Available only when all required fields are set. */

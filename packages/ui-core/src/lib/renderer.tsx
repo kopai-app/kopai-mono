@@ -14,6 +14,7 @@ import z from "zod";
 import { useKopaiData } from "../hooks/use-kopai-data.js";
 import type { DataSource } from "./component-catalog.js";
 import type { KopaiClient } from "../providers/kopai-provider.js";
+import type { kopaiQuery } from "@kopai/core";
 
 type RegistryFromCatalog<
   C extends { components: Record<string, ComponentDefinition> },
@@ -44,10 +45,19 @@ type BaseElement<Props> = {
   props: Props;
 };
 
-/** Derives the SDK response type for a given client method. */
-type SDKResponseFor<M extends keyof KopaiClient> = Awaited<
-  ReturnType<KopaiClient[M]>
->;
+/**
+ * Derives the SDK response type for a given client method.
+ *
+ * `query` is special-cased: it is generic
+ * (`query<Q extends KopaiQuery>(q: Q): Promise<KopaiQueryResult<Q>>`), so
+ * `Awaited<ReturnType<...>>` collapses to `any` — which would poison the whole
+ * `InferData` union and silently disable shape checking for every component
+ * that accepts `query`. Map it to the concrete `KopaiQueryResponse` union so
+ * renderers must narrow the polymorphic response instead.
+ */
+type SDKResponseFor<M extends keyof KopaiClient> = M extends "query"
+  ? kopaiQuery.KopaiQueryResponse
+  : Awaited<ReturnType<KopaiClient[M]>>;
 
 /** Infers the data type from a component definition's `acceptsDataFrom`. */
 type InferData<CD> = CD extends { acceptsDataFrom: readonly (infer M)[] }

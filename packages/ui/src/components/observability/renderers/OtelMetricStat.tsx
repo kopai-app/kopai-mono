@@ -3,6 +3,7 @@ import type { RendererComponentProps } from "@kopai/ui-core";
 import { MetricStat } from "../index.js";
 import { formatOtelValue } from "../utils/units.js";
 import { NoDataSource } from "./NoDataSource.js";
+import { narrowRows, hasMetricRowShape } from "./narrowRows.js";
 import type { denormalizedSignals } from "@kopai/core";
 
 type AggregatedMetricRow = denormalizedSignals.AggregatedMetricRow;
@@ -57,7 +58,9 @@ export function OtelMetricStat(props: Props) {
     );
   }
 
-  const rows = props.response?.data ?? [];
+  // searchMetricsPage or a `query` returning metric rows. `query` is
+  // polymorphic, so narrow to metric rows and fall back to empty otherwise.
+  const rows = narrowRows(props.response, hasMetricRowShape) ?? [];
 
   return (
     <MetricStat
