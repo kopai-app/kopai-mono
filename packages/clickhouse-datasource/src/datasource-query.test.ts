@@ -455,9 +455,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId", "SpanId"],
-      filters: [
-        { kind: "string", column: "TraceId", op: "eq", value: "trace-001" },
-      ],
+      filters: [{ column: "TraceId", op: "eq", value: "trace-001" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -472,7 +470,6 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       dimensions: ["TraceId", "SpanId"],
       filters: [
         {
-          kind: "string",
           column: "service.name",
           op: "eq",
           value: "order-service",
@@ -490,9 +487,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["SpanId"],
-      filters: [
-        { kind: "string", column: "SpanName", op: "eq", value: "DB query" },
-      ],
+      filters: [{ column: "SpanName", op: "eq", value: "DB query" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -507,7 +502,6 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       dimensions: ["SpanId"],
       filters: [
         {
-          kind: "string",
           column: { container: "SpanAttributes", key: "http.method" },
           op: "eq",
           value: "POST",
@@ -525,9 +519,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId", "SpanId"],
-      filters: [
-        { kind: "string", column: "SpanId", op: "eq", value: "span-001" },
-      ],
+      filters: [{ column: "SpanId", op: "eq", value: "span-001" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -540,9 +532,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId", "SpanId"],
-      filters: [
-        { kind: "string", column: "TraceId", op: "eq", value: "trace-001" },
-      ],
+      filters: [{ column: "TraceId", op: "eq", value: "trace-001" }],
       timeDimension: relativeWindow(),
       limit: 1,
       requestContext: requestContext(),
@@ -554,9 +544,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId", "SpanId"],
-      filters: [
-        { kind: "string", column: "TraceId", op: "eq", value: "trace-001" },
-      ],
+      filters: [{ column: "TraceId", op: "eq", value: "trace-001" }],
       timeDimension: relativeWindow(),
       limit: 1,
       cursor: page1.nextCursor,
@@ -572,9 +560,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["TraceId"],
-      filters: [
-        { kind: "string", column: "TraceId", op: "eq", value: "nonexistent" },
-      ],
+      filters: [{ column: "TraceId", op: "eq", value: "nonexistent" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -604,7 +590,6 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       dimensions: ["TraceId", "SpanId", "ParentSpanId"],
       filters: [
         {
-          kind: "string",
           column: "ParentSpanId",
           op: "eq",
           value: "span-001",
@@ -626,7 +611,6 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       dimensions: ["SpanId", "StatusCode"],
       filters: [
         {
-          kind: "string",
           column: "StatusCode",
           op: "eq",
           value: "STATUS_CODE_ERROR",
@@ -648,9 +632,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       signal: "traces",
       mode: "raw",
       dimensions: ["SpanId", "SpanKind"],
-      filters: [
-        { kind: "string", column: "SpanKind", op: "eq", value: "CLIENT" },
-      ],
+      filters: [{ column: "SpanKind", op: "eq", value: "CLIENT" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -668,8 +650,8 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       mode: "raw",
       dimensions: ["SpanId", "Duration"],
       filters: [
-        { kind: "number", column: "Duration", op: "gte", value: 3000000 },
-        { kind: "number", column: "Duration", op: "lte", value: 10000000 },
+        { column: "Duration", op: "gte", value: 3000000 },
+        { column: "Duration", op: "lte", value: 10000000 },
       ],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
@@ -688,7 +670,6 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
       dimensions: ["TraceId", "SpanId"],
       filters: [
         {
-          kind: "string",
           column: { container: "ResourceAttributes", key: "service.version" },
           op: "eq",
           value: "2.0",
@@ -740,7 +721,6 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       dimensions: ["Timestamp", "service.name"],
       filters: [
         {
-          kind: "string",
           column: "service.name",
           op: "eq",
           value: "order-service",
@@ -758,9 +738,7 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       signal: "logs",
       mode: "raw",
       dimensions: ["Timestamp", "Body"],
-      filters: [
-        { kind: "string", column: "Body", op: "contains", value: "database" },
-      ],
+      filters: [{ column: "Body", op: "contains", value: "database" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -773,9 +751,7 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       signal: "logs",
       mode: "raw",
       dimensions: ["Timestamp", "SeverityNumber"],
-      filters: [
-        { kind: "number", column: "SeverityNumber", op: "gte", value: 13 },
-      ],
+      filters: [{ column: "SeverityNumber", op: "gte", value: 13 }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -790,7 +766,6 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       dimensions: ["Timestamp", "EventName"],
       filters: [
         {
-          kind: "string",
           column: "EventName",
           op: "eq",
           value: "db.connection.error",
@@ -861,9 +836,7 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       signal: "logs",
       mode: "raw",
       dimensions: ["Timestamp", "SeverityText"],
-      filters: [
-        { kind: "string", column: "SeverityText", op: "eq", value: "ERROR" },
-      ],
+      filters: [{ column: "SeverityText", op: "eq", value: "ERROR" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -883,7 +856,6 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       dimensions: ["Timestamp", "Body"],
       filters: [
         {
-          kind: "string",
           column: { container: "ResourceAttributes", key: "service.version" },
           op: "eq",
           value: "1.0",
@@ -903,7 +875,6 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       dimensions: ["Timestamp", "ScopeName"],
       filters: [
         {
-          kind: "string",
           column: "ScopeName",
           op: "eq",
           value: "auth-scope",
@@ -927,9 +898,7 @@ describe("ClickHouseReadDatasource.query — logs raw", () => {
       signal: "logs",
       mode: "raw",
       dimensions: ["Timestamp", "Body"],
-      filters: [
-        { kind: "string", column: "Body", op: "contains", value: "database" },
-      ],
+      filters: [{ column: "Body", op: "contains", value: "database" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -947,9 +916,8 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       mode: "raw",
       dimensions: ["MetricName", "Value"],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "MetricName",
           op: "eq",
           value: "system.cpu.utilization",
@@ -967,9 +935,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName", "Value"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Sum" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -987,9 +953,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName", "Count"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Histogram" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Histogram" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -1009,7 +973,6 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       dimensions: ["MetricName"],
       filters: [
         {
-          kind: "string",
           column: "MetricType",
           op: "eq",
           value: "ExponentialHistogram",
@@ -1027,9 +990,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName", "Count"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Summary" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Summary" }],
       timeDimension: relativeWindow(),
       requestContext: requestContext(),
     });
@@ -1063,9 +1024,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName", "Value"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: relativeWindow(),
       limit: 2,
       requestContext: requestContext(),
@@ -1078,9 +1037,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName", "Value"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: relativeWindow(),
       limit: 2,
       cursor: page1.nextCursor,
@@ -1105,9 +1062,7 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       signal: "metrics",
       mode: "raw",
       dimensions: ["MetricName", "TimeUnix", "Value"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: relativeWindow(),
       orderBy: [{ type: "dimension", column: "TimeUnix", direction: "asc" }],
       requestContext: requestContext(),
@@ -1129,9 +1084,8 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       mode: "raw",
       dimensions: ["MetricName", "Value"],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "MetricName",
           op: "eq",
           value: "nonexistent.metric",
@@ -1150,9 +1104,8 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       mode: "raw",
       dimensions: ["MetricName", "Value"],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: { container: "Attributes", key: "cpu" },
           op: "eq",
           value: "1",
@@ -1176,9 +1129,8 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       mode: "raw",
       dimensions: ["MetricName", "Value"],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "service.name",
           op: "eq",
           value: "user-service",
@@ -1194,9 +1146,8 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       mode: "raw",
       dimensions: ["MetricName", "Value"],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "service.name",
           op: "eq",
           value: "order-service",
@@ -1215,9 +1166,8 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       mode: "raw",
       dimensions: ["MetricName", "Value"],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: { container: "ResourceAttributes", key: "service.version" },
           op: "eq",
           value: "1.0",
@@ -1233,9 +1183,8 @@ describe("ClickHouseReadDatasource.query — metrics raw", () => {
       mode: "raw",
       dimensions: ["MetricName", "Value"],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: { container: "ResourceAttributes", key: "service.version" },
           op: "eq",
           value: "9.9",
@@ -1331,7 +1280,6 @@ describe("ClickHouseReadDatasource.query — traces aggregate", () => {
       measures: [{ op: "COUNT", as: "n" }],
       filters: [
         {
-          kind: "stringIn",
           column: "service.name",
           op: "in",
           values: ["order-service"],
@@ -1378,7 +1326,6 @@ describe("ClickHouseReadDatasource.query — traces aggregate", () => {
       dimensions: ["SpanName"],
       filters: [
         {
-          kind: "string",
           column: "service.name",
           op: "eq",
           value: "user-service",
@@ -1441,9 +1388,7 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       mode: "aggregate",
       dimensions: [{ container: "Attributes", key: "http.method" }],
       measures: [{ op: "SUM", column: "Value", as: "total" }],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Sum" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Sum" }],
       timeDimension: relativeWindow(),
       output: { type: "summary" },
       requestContext: requestContext(),
@@ -1463,9 +1408,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
         { op: "MIN", column: "Value", as: "min_v" },
       ],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "MetricName",
           op: "eq",
           value: "system.cpu.utilization",
@@ -1485,9 +1429,7 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       signal: "metrics",
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "n" }],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       timeDimension: relativeWindow(),
       output: { type: "summary" },
       requestContext: requestContext(),
@@ -1505,9 +1447,7 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "cnt" }],
       dimensions: ["MetricName"],
-      filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
-      ],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
       havings: [{ measure: "cnt", op: "gte", value: 3 }],
       timeDimension: relativeWindow(),
       output: { type: "summary" },
@@ -1525,9 +1465,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       measures: [{ op: "AVG", column: "Value", as: "avg_v" }],
       dimensions: [{ container: "Attributes", key: "cpu" }],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "MetricName",
           op: "eq",
           value: "system.cpu.utilization",
@@ -1555,9 +1494,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
         },
       ],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "MetricName",
           op: "eq",
           value: "system.cpu.utilization",
@@ -1582,9 +1520,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
         { op: "P999", column: "Value", as: "p999" },
       ],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "MetricName",
           op: "eq",
           value: "system.cpu.utilization",
@@ -1618,9 +1555,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
         { op: "RATE_MAX", column: "Value", as: "rmax" },
       ],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "MetricName",
           op: "eq",
           value: "system.cpu.utilization",
@@ -1644,9 +1580,8 @@ describe("ClickHouseReadDatasource.query — metrics aggregate", () => {
       mode: "aggregate",
       measures: [{ op: "COUNT", as: "cnt" }],
       filters: [
-        { kind: "string", column: "MetricType", op: "eq", value: "Gauge" },
+        { column: "MetricType", op: "eq", value: "Gauge" },
         {
-          kind: "string",
           column: "MetricName",
           op: "eq",
           value: "system.cpu.utilization",

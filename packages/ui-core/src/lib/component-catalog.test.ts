@@ -98,7 +98,6 @@ describe("schemas", () => {
           timeDimension: validTimeDimension,
           filters: [
             {
-              kind: "string",
               column: "MetricType",
               op: "eq",
               value: "Gauge",
