@@ -23,7 +23,7 @@ describe("narrowRows", () => {
     expect(narrowRows(res, hasMetricRowShape)).toBeNull();
   });
 
-  it("returns null when a metric renderer receives raw metric rows lacking the synthetic MetricType", () => {
+  it("returns the row when a metric renderer receives raw metric rows lacking the synthetic MetricType", () => {
     // MetricType is injected by the datasource after mapping; the guard must
     // not depend on it. A row with just TimeUnix is still a metric row.
     const res = { data: [{ TimeUnix: "1", Value: 1 }] };
