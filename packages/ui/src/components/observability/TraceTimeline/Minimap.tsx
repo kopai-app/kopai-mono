@@ -198,7 +198,7 @@ export function Minimap({
           const width = Math.max(0.2, (span.durationMs / traceDuration) * 100);
           const color = getSpanBarColor(
             span.serviceName,
-            span.status === "ERROR"
+            span.status === "Error"
           );
           return (
             <div

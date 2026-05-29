@@ -44,11 +44,11 @@ function buildDAG(trace: ParsedTrace) {
     const existing = nodeMap.get(svc);
     if (existing) {
       existing.spanCount++;
-      if (span.status === "ERROR") existing.errorCount++;
+      if (span.status === "Error") existing.errorCount++;
     } else {
       nodeMap.set(svc, {
         spanCount: 1,
-        errorCount: span.status === "ERROR" ? 1 : 0,
+        errorCount: span.status === "Error" ? 1 : 0,
       });
     }
 

@@ -75,7 +75,7 @@ function makeSpan(
     ScopeVersion: "",
     SpanAttributes: {},
     Duration: 1000000,
-    StatusCode: "OK",
+    StatusCode: "Ok",
     StatusMessage: "",
     "Events.Timestamp": [],
     "Events.Name": [],
@@ -231,7 +231,7 @@ async function seedTenantBData(client: ClickHouseClient) {
         ScopeVersion: "1.0.0",
         SpanAttributes: { "http.method": "GET" },
         Duration: 3000000,
-        StatusCode: "OK",
+        StatusCode: "Ok",
         StatusMessage: "",
         "Events.Timestamp": [],
         "Events.Name": [],
@@ -375,7 +375,7 @@ async function seedTraces(client: ClickHouseClient) {
         ScopeVersion: "1.0.0",
         SpanAttributes: { "http.method": "GET", "http.status_code": "200" },
         Duration: 5000000,
-        StatusCode: "OK",
+        StatusCode: "Ok",
         StatusMessage: "",
         "Events.Timestamp": [],
         "Events.Name": [],
@@ -399,7 +399,7 @@ async function seedTraces(client: ClickHouseClient) {
         ScopeVersion: "1.0.0",
         SpanAttributes: { "db.system": "postgresql" },
         Duration: 2000000,
-        StatusCode: "OK",
+        StatusCode: "Ok",
         StatusMessage: "",
         "Events.Timestamp": ["2024-01-01 00:00:02.100000000"],
         "Events.Name": ["query_start"],
@@ -423,7 +423,7 @@ async function seedTraces(client: ClickHouseClient) {
         ScopeVersion: "1.0.0",
         SpanAttributes: { "http.method": "POST", "http.status_code": "500" },
         Duration: 15000000,
-        StatusCode: "ERROR",
+        StatusCode: "Error",
         StatusMessage: "Internal server error",
         "Events.Timestamp": [],
         "Events.Name": [],
@@ -1611,51 +1611,90 @@ describe("ClickHouseReadDatasource", () => {
     });
   });
 
-  describe("discoverMetrics errors without MVs", () => {
-    beforeAll(async () => {
-      // Ensure no MV tables exist regardless of test ordering
+  describe("discoverMetrics provisions MVs on demand", () => {
+    // Each test drops the discover MV target tables first so we exercise the
+    // provisioning-on-demand path (the OTel contrib exporter creates the base
+    // metric tables but not these discovery MVs).
+    async function dropDiscoverMVs() {
+      // Drop the MVs too so they don't dangle pointing at recreated targets.
+      const { materializedViews } = getDiscoverMVSchema(TEST_DATABASE);
+      for (const stmt of materializedViews) {
+        const mvName = stmt.match(/MATERIALIZED VIEW IF NOT EXISTS (\S+)/)?.[1];
+        if (mvName) {
+          await adminClient.command({
+            query: `DROP TABLE IF EXISTS ${mvName}`,
+          });
+        }
+      }
       await adminClient.command({
         query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}`,
       });
       await adminClient.command({
         query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
       });
-    });
+    }
 
-    it("throws when MV tables do not exist", async () => {
-      await expect(
-        ds.discoverMetrics({ requestContext: requestContext() })
-      ).rejects.toThrow(/MV tables not found/);
-    });
+    beforeEach(dropDiscoverMVs);
 
-    it("logs warning when MV tables not found", async () => {
-      const spy = createSpyLogger();
-      await expect(
-        ds.discoverMetrics({
-          requestContext: { ...requestContext(), logger: spy },
-        })
-      ).rejects.toThrow(/MV tables not found/);
-
-      expect(spy.warn).toHaveBeenCalledOnce();
-      expect(spy.warn.mock.calls[0]?.[0]).toMatchObject({
-        database: TEST_DATABASE,
-        method: "discoverMetrics",
+    it("provisions MVs and serves metrics when tables do not exist", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
       });
+
+      // Provisioning + backfill must surface the already-ingested metrics
+      // rather than 500ing because the discovery MVs were absent.
+      expect(result.metrics.length).toBe(8);
+      const names = result.metrics.map((m) => m.name).sort();
+      expect(names).toEqual([
+        "dup.ts.gauge",
+        "http.server.request.count",
+        "http.server.request.duration",
+        "http.server.request.duration.exp",
+        "rpc.server.duration.summary",
+        "system.cpu.utilization",
+        "test.multi.attr",
+        "test.truncation.metric",
+      ]);
     });
 
-    it("throws when only names MV table exists", async () => {
+    it("backfill seeds attribute values from existing base-table rows", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const gauge = defined(
+        result.metrics.find((m) => m.name === "system.cpu.utilization"),
+        "gauge metric"
+      );
+      expect(gauge.attributes.values).toHaveProperty("cpu");
+      expect(gauge.resourceAttributes.values).toHaveProperty("service.version");
+    });
+
+    it("is idempotent across repeated calls (no duplicate metrics)", async () => {
+      const first = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+      // Second call hits the fast path (MVs now exist) and must not double
+      // anything despite the backfill having run once.
+      const second = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+      expect(first.metrics.length).toBe(8);
+      expect(second.metrics.length).toBe(8);
+    });
+
+    it("provisions when only the names MV target table exists", async () => {
+      // Partial state: one target table present, the other missing. The
+      // CREATE … IF NOT EXISTS provisioning must heal it without error.
       const namesOnly = `CREATE TABLE IF NOT EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
 (MetricName String, MetricType LowCardinality(String), MetricDescription String, MetricUnit String)
 ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
       await adminClient.command({ query: namesOnly });
 
-      await expect(
-        ds.discoverMetrics({ requestContext: requestContext() })
-      ).rejects.toThrow(/MV tables not found/);
-
-      await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
       });
+      expect(result.metrics.length).toBe(8);
     });
   });
 
@@ -1946,11 +1985,17 @@ GROUP BY MetricName, MetricType, source, attr_key`,
       expect(tenantANames).not.toContain("tenant.b.gauge");
     });
 
-    it("discoverMetrics throws for tenant without MVs", async () => {
-      // Tenant B has no MV tables — discoverMetrics must fail explicitly
-      await expect(
-        ds.discoverMetrics({ requestContext: tenantBRequestContext() })
-      ).rejects.toThrow(/MV tables not found/);
+    it("discoverMetrics provisions MVs on demand for a tenant without them", async () => {
+      // Tenant B has no discover MV tables — discoverMetrics must provision +
+      // backfill them in tenant B's database (not 500), then serve its own
+      // metrics only (tenant-isolated).
+      const tenantB = await ds.discoverMetrics({
+        requestContext: tenantBRequestContext(),
+      });
+      const names = tenantB.metrics.map((m) => m.name);
+      expect(names).toContain("tenant.b.gauge");
+      // Tenant A's metrics must NOT leak into tenant B's discovery.
+      expect(names).not.toContain("system.cpu.utilization");
     });
   });
 

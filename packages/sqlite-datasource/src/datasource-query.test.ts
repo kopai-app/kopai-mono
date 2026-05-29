@@ -421,9 +421,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "traces",
         mode: "raw",
         dimensions: ["SpanId", "StatusCode"],
-        filters: [
-          { column: "StatusCode", op: "eq", value: "STATUS_CODE_ERROR" },
-        ],
+        filters: [{ column: "StatusCode", op: "eq", value: "Error" }],
         timeDimension: WIDE_WINDOW,
       });
 
@@ -453,7 +451,7 @@ describe("OptimizedDatasource.query (KopaiQuery)", () => {
         signal: "traces",
         mode: "raw",
         dimensions: ["SpanId", "SpanKind"],
-        filters: [{ column: "SpanKind", op: "eq", value: "SPAN_KIND_SERVER" }],
+        filters: [{ column: "SpanKind", op: "eq", value: "Server" }],
         timeDimension: WIDE_WINDOW,
       });
 

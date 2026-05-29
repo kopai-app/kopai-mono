@@ -35,6 +35,7 @@ import {
 } from "./ch-row-schemas.js";
 import { buildKopaiSql } from "./query-kopai.js";
 import { dateTime64ToNanos } from "./timestamp.js";
+import { getDiscoverMVSchema } from "./discover-mv-schema.js";
 
 // Coerces a ClickHouse JSON cell into the KopaiAggregateRow value union.
 // Mirrors the sqlite backend's normalizeCellValue: a bigint outside the
@@ -51,6 +52,43 @@ export function coerceAggregateCellValue(v: unknown): string | number | null {
       v < BigInt(Number.MIN_SAFE_INTEGER)
       ? v.toString()
       : Number(v);
+  }
+  return String(v);
+}
+
+// Coerces a measure column (count/sum/min/max/avg/percentiles/...). ClickHouse
+// serializes integer aggregates (UInt64/Int64 from count/sum/min/max) as JSON
+// strings while Float64 aggregates (avg/percentiles) arrive as numbers. The
+// SQLite backend returns numbers for all of these, so we coerce strings to
+// numbers here to keep the two backends consistent. The bigint>safe-integer
+// guard from coerceAggregateCellValue is preserved: a stringified integer that
+// overflows the 53-bit safe range stays a string rather than being silently
+// rounded by Number() (matching sqlite's normalizeCellValue).
+export function coerceMeasureCellValue(v: unknown): string | number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  if (typeof v === "bigint") {
+    return v > BigInt(Number.MAX_SAFE_INTEGER) ||
+      v < BigInt(Number.MIN_SAFE_INTEGER)
+      ? v.toString()
+      : Number(v);
+  }
+  if (typeof v === "string") {
+    // Preserve full-precision integers beyond the 53-bit safe range as strings
+    // (e.g. huge UInt64 counts), matching the bigint guard above.
+    if (/^-?\d+$/.test(v)) {
+      const asBig = BigInt(v);
+      if (
+        asBig > BigInt(Number.MAX_SAFE_INTEGER) ||
+        asBig < BigInt(Number.MIN_SAFE_INTEGER)
+      ) {
+        return v;
+      }
+      return Number(asBig);
+    }
+    const n = Number(v);
+    return Number.isNaN(n) ? v : n;
   }
   return String(v);
 }
@@ -147,6 +185,56 @@ export class ClickHouseReadDatasource
       http_headers: { "X-ClickHouse-Database": database },
       ...(clickhouseSettings && { clickhouse_settings: clickhouseSettings }),
     });
+  }
+
+  /**
+   * Run a statement that returns no result set (DDL / INSERT … SELECT).
+   * Used by discoverMetrics to provision + backfill the discover MVs.
+   */
+  private async clientCommand(
+    ctx: ClickHouseRequestContext,
+    query: string,
+    params: Record<string, unknown> = {}
+  ): Promise<void> {
+    const { username, password, database, clickhouseSettings } = ctx;
+    await this.client.command({
+      query,
+      query_params: params,
+      auth: { username, password },
+      http_headers: { "X-ClickHouse-Database": database },
+      ...(clickhouseSettings && { clickhouse_settings: clickhouseSettings }),
+    });
+  }
+
+  /**
+   * Idempotently provision the metrics-discovery materialized views and seed
+   * them with already-ingested base-table data.
+   *
+   * The OTel Collector contrib ClickHouse exporter creates the base metric
+   * tables but not these discovery MVs. A ClickHouse MV only captures rows
+   * inserted after its creation, so we (1) CREATE … IF NOT EXISTS the target
+   * tables + MVs and (2) backfill the existing base-table rows into the target
+   * tables. Re-running is safe: the target tables are ReplacingMergeTree /
+   * AggregatingMergeTree, and the discover read queries already use FINAL /
+   * groupUniqArrayMerge to collapse duplicates/partials.
+   */
+  private async provisionDiscoverMVs(
+    ctx: ClickHouseRequestContext
+  ): Promise<void> {
+    const { targetTables, materializedViews, backfill } = getDiscoverMVSchema(
+      ctx.database
+    );
+    // Target tables first, then MVs (which TO those tables), then backfill so
+    // the MVs already exist to capture any concurrent inserts.
+    for (const stmt of targetTables) {
+      await this.clientCommand(ctx, stmt);
+    }
+    for (const stmt of materializedViews) {
+      await this.clientCommand(ctx, stmt);
+    }
+    for (const stmt of backfill) {
+      await this.clientCommand(ctx, stmt);
+    }
   }
 
   async getTraces(
@@ -584,14 +672,16 @@ export class ClickHouseReadDatasource
           { count: number; hasError: boolean }
         >();
         for (const [svcName, statusCode] of r._serviceData) {
+          const isError =
+            statusCode === kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL;
           const existing = serviceMap.get(svcName);
           if (existing) {
             existing.count++;
-            if (statusCode === "ERROR") existing.hasError = true;
+            if (isError) existing.hasError = true;
           } else {
             serviceMap.set(svcName, {
               count: 1,
-              hasError: statusCode === "ERROR",
+              hasError: isError,
             });
           }
         }
@@ -832,6 +922,12 @@ export class ClickHouseReadDatasource
 
       const data: kopaiQuery.KopaiAggregateRow[] = [];
       const isTimeSeries = q.output.type === "timeSeries";
+      // Measure-aliased columns hold numeric aggregates. ClickHouse serializes
+      // integer aggregates (count/sum/min/max → UInt64/Int64) as JSON strings,
+      // so coerce them to numbers to match the SQLite backend. Dimension columns
+      // and bucket_start stay strings (a dimension like "service.name" must not
+      // be numerically coerced).
+      const measureAliases = new Set(q.measures.map((m) => m.as));
       for await (const batch of resultSet.stream()) {
         for (const row of batch) {
           const json = row.json() as Record<string, unknown>;
@@ -846,6 +942,8 @@ export class ClickHouseReadDatasource
                 dateTime64ToNanos(typeof v === "string" ? v : String(v))
               );
               out[k] = new Date(Number(nanos / 1_000_000n)).toISOString();
+            } else if (measureAliases.has(k)) {
+              out[k] = coerceMeasureCellValue(v);
             } else {
               out[k] = coerceAggregateCellValue(v);
             }
@@ -944,6 +1042,25 @@ export class ClickHouseReadDatasource
     );
   }
 
+  /** Read the discover MV target tables. Throws CH error code 60 if absent. */
+  private async readDiscoverMVs(ctx: ClickHouseRequestContext): Promise<{
+    nameRows: z.infer<typeof chDiscoverNameRowSchema>[];
+    attrRows: z.infer<typeof chDiscoverAttrRowSchema>[];
+    chNodes: (string | undefined)[];
+  }> {
+    const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
+    const [namesRs, attrsRs] = await Promise.all([
+      this.clientQuery(ctx, namesQuery),
+      this.clientQuery(ctx, attributesQuery),
+    ]);
+    const chNodes = [getChNode(namesRs), getChNode(attrsRs)];
+    const [nameRows, attrRows] = await Promise.all([
+      streamParse(namesRs, chDiscoverNameRowSchema),
+      streamParse(attrsRs, chDiscoverAttrRowSchema),
+    ]);
+    return { nameRows, attrRows, chNodes };
+  }
+
   async discoverMetrics(options?: {
     requestContext?: unknown;
   }): Promise<datasource.MetricsDiscoveryResult> {
@@ -960,25 +1077,34 @@ export class ClickHouseReadDatasource
     let attrRows: z.infer<typeof chDiscoverAttrRowSchema>[];
     let chNodes: (string | undefined)[] = [];
     try {
-      const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
-      const [namesRs, attrsRs] = await Promise.all([
-        this.clientQuery(ctx, namesQuery),
-        this.clientQuery(ctx, attributesQuery),
-      ]);
-      chNodes = [getChNode(namesRs), getChNode(attrsRs)];
-      [nameRows, attrRows] = await Promise.all([
-        streamParse(namesRs, chDiscoverNameRowSchema),
-        streamParse(attrsRs, chDiscoverAttrRowSchema),
-      ]);
+      ({ nameRows, attrRows, chNodes } = await this.readDiscoverMVs(ctx));
     } catch (err) {
-      const durationMs = Math.round(performance.now() - start);
-      // ClickHouse error code 60 = TABLE_DOES_NOT_EXIST → MV tables not provisioned
-      if (isChError(err, CH_ERR_TABLE_NOT_FOUND)) {
-        log.warn({ ...logCtx, durationMs, chNodes }, "MV tables not found");
-        throw new Error(`MV tables not found in ${database}`, { cause: err });
+      // ClickHouse error code 60 = TABLE_DOES_NOT_EXIST → the discover MVs
+      // haven't been provisioned in this database yet. The OTel Collector
+      // contrib exporter creates the base metric tables but not these MVs, so
+      // provision them on demand (idempotently) + backfill existing rows, then
+      // serve the query. Only a missing-table error triggers provisioning;
+      // anything else propagates.
+      if (!isChError(err, CH_ERR_TABLE_NOT_FOUND)) {
+        const durationMs = Math.round(performance.now() - start);
+        log.error({ ...logCtx, durationMs, chNodes, err }, "MV query failed");
+        throw err;
       }
-      log.error({ ...logCtx, durationMs, chNodes, err }, "MV query failed");
-      throw err;
+      log.info(
+        { ...logCtx },
+        "discover MVs absent — provisioning and backfilling"
+      );
+      try {
+        await this.provisionDiscoverMVs(ctx);
+        ({ nameRows, attrRows, chNodes } = await this.readDiscoverMVs(ctx));
+      } catch (provisionErr) {
+        const durationMs = Math.round(performance.now() - start);
+        log.error(
+          { ...logCtx, durationMs, chNodes, err: provisionErr },
+          "discover MV provisioning failed"
+        );
+        throw provisionErr;
+      }
     }
     const queryMs = Math.round(performance.now() - start);
 

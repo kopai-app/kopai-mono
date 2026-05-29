@@ -50,7 +50,7 @@ function TraceSummariesView({
       rootSpanName: row.rootSpanName,
       serviceName: row.rootServiceName,
       durationMs: parseInt(row.durationNs, 10) / 1e6,
-      statusCode: row.errorCount > 0 ? "ERROR" : "OK",
+      statusCode: row.errorCount > 0 ? "Error" : "Ok",
       timestampMs: parseInt(row.startTimeNs, 10) / 1e6,
       spanCount: row.spanCount,
       services: row.services,

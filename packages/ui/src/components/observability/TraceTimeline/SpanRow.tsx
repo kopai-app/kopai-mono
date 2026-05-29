@@ -35,7 +35,7 @@ export const SpanRow = memo(function SpanRow({
   uiFind,
 }: SpanRowProps) {
   const hasChildren = span.children.length > 0;
-  const isError = span.status === "ERROR";
+  const isError = span.status === "Error";
   const serviceColor = getServiceColor(span.serviceName);
   const isDimmed = uiFind ? !spanMatchesSearch(span, uiFind) : false;
 

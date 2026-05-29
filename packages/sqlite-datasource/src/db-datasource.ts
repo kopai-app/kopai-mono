@@ -1271,7 +1271,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           CAST(MIN(Timestamp) AS TEXT) as startTimeNs,
           CAST(MAX(Timestamp + Duration) - MIN(Timestamp) AS TEXT) as durationNs,
           COUNT(*) as spanCount,
-          SUM(CASE WHEN StatusCode = 'STATUS_CODE_ERROR' THEN 1 ELSE 0 END) as errorCount
+          SUM(CASE WHEN StatusCode = 'Error' THEN 1 ELSE 0 END) as errorCount
         FROM otel_traces
         WHERE TraceId IN (${placeholders})
         GROUP BY TraceId
@@ -1291,7 +1291,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       // Step 3: Per-service breakdown (small result: ~traces × avg services)
       const svcSql = `
         SELECT TraceId, ServiceName, COUNT(*) as cnt,
-          MAX(CASE WHEN StatusCode = 'STATUS_CODE_ERROR' THEN 1 ELSE 0 END) as hasError
+          MAX(CASE WHEN StatusCode = 'Error' THEN 1 ELSE 0 END) as hasError
         FROM otel_traces
         WHERE TraceId IN (${placeholders})
         GROUP BY TraceId, ServiceName
@@ -1552,12 +1552,12 @@ function toLogRow(
 
 function spanKindToString(kind: otlp.SpanKind | undefined): string {
   if (kind === undefined) return "";
-  return otlp.SpanKind[kind] ?? "";
+  return kopaiQueryCompiler.spanKindName(kind);
 }
 
 function statusCodeToString(code: otlp.StatusCode | undefined): string {
   if (code === undefined) return "";
-  return otlp.StatusCode[code] ?? "";
+  return kopaiQueryCompiler.statusCodeName(code);
 }
 
 function toGaugeRow(

@@ -246,7 +246,7 @@ describe("unknown column rejection", () => {
       );
       kq.metrics.aggregate().where((f) =>
         // @ts-expect-error SpanKind is traces-only
-        f.eq("SpanKind", "SPAN_KIND_SERVER")
+        f.eq("SpanKind", "Server")
       );
     }
     expect(true).toBe(true);
@@ -406,7 +406,7 @@ describe("runtime: all-features aggregate", () => {
       .measure((m) => m.p95("Duration", "p95_dur"))
       .dimension("service.name")
       .dimension({ container: "SpanAttributes", key: "custom.tag" })
-      .where((f) => f.eq("SpanKind", "SPAN_KIND_SERVER"))
+      .where((f) => f.eq("SpanKind", "Server"))
       .where((f) => f.gt("Duration", 100))
       .having("requests", "gt", 0)
       .orderByMeasure("p95_dur", "desc")
@@ -431,7 +431,7 @@ describe("runtime: all-features aggregate", () => {
         {
           column: "SpanKind",
           op: "eq",
-          value: "SPAN_KIND_SERVER",
+          value: "Server",
         },
         { column: "Duration", op: "gt", value: 100 },
       ],
@@ -553,7 +553,7 @@ describe("runtime: filter coverage", () => {
     const q = kq.traces
       .aggregate()
       .measure((m) => m.count("c"))
-      .where((f) => f.in("SpanKind", ["SPAN_KIND_SERVER", "SPAN_KIND_CLIENT"]))
+      .where((f) => f.in("SpanKind", ["Server", "Client"]))
       .timeRelative("1h")
       .summary()
       .build();
@@ -565,7 +565,7 @@ describe("runtime: filter coverage", () => {
         {
           column: "SpanKind",
           op: "in",
-          values: ["SPAN_KIND_SERVER", "SPAN_KIND_CLIENT"],
+          values: ["Server", "Client"],
         },
       ],
       timeDimension: { type: "relative", lookback: "1h" },
@@ -668,8 +668,8 @@ describe("runtime: filter coverage", () => {
       .where((f) =>
         f.and(
           f.or(
-            f.and(f.eq("SpanKind", "SPAN_KIND_SERVER"), f.gt("Duration", 100)),
-            f.eq("StatusCode", "STATUS_CODE_ERROR")
+            f.and(f.eq("SpanKind", "Server"), f.gt("Duration", 100)),
+            f.eq("StatusCode", "Error")
           ),
           f.isNotNull("TraceId")
         )
@@ -691,7 +691,7 @@ describe("runtime: filter coverage", () => {
                     {
                       column: "SpanKind",
                       op: "eq",
-                      value: "SPAN_KIND_SERVER",
+                      value: "Server",
                     },
                     {
                       column: "Duration",
@@ -703,7 +703,7 @@ describe("runtime: filter coverage", () => {
                 {
                   column: "StatusCode",
                   op: "eq",
-                  value: "STATUS_CODE_ERROR",
+                  value: "Error",
                 },
               ],
             },
@@ -1172,7 +1172,7 @@ describe("runtime: immutability", () => {
     const q = kq.traces
       .aggregate()
       .measure((m) => m.count("c"))
-      .where((f) => f.eq("SpanKind", "SPAN_KIND_SERVER"))
+      .where((f) => f.eq("SpanKind", "Server"))
       .where((f) => f.gt("Duration", 100))
       .timeRelative("1h")
       .summary()
@@ -1185,7 +1185,7 @@ describe("runtime: immutability", () => {
         {
           column: "SpanKind",
           op: "eq",
-          value: "SPAN_KIND_SERVER",
+          value: "Server",
         },
         { column: "Duration", op: "gt", value: 100 },
       ],

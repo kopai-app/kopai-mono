@@ -57,9 +57,9 @@ describe("row shape guards", () => {
     SpanId: "s",
     TraceId: "t",
     SpanName: "GET /x",
-    SpanKind: "SERVER",
+    SpanKind: "Server",
     Duration: "5",
-    StatusCode: "OK",
+    StatusCode: "Ok",
   };
   const logRow = {
     Timestamp: "1",

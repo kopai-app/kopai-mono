@@ -453,14 +453,14 @@ describe("measure ops (sqlite)", () => {
     expect(sql).toContain(`COUNT(*) AS "c"`);
   });
 
-  it("compiles ERROR_RATE to AVG(CASE …) and binds STATUS_CODE_ERROR as a param", () => {
+  it("compiles ERROR_RATE to AVG(CASE …) and binds Error as a param", () => {
     const { sql, params } = buildKopaiSql(
       baseTraceAggregate({ measures: [{ op: "ERROR_RATE", as: "err" }] })
     );
     expect(sql).toContain(
       `AVG(CASE WHEN StatusCode = ? THEN 1.0 ELSE 0.0 END) AS "err"`
     );
-    expect(params).toContain("STATUS_CODE_ERROR");
+    expect(params).toContain("Error");
   });
 
   it("compiles THROUGHPUT to COUNT(*)/window for summary output", () => {

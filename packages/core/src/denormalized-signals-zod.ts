@@ -106,7 +106,7 @@ export const otelTracesSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Type of span (INTERNAL, SERVER, CLIENT, PRODUCER, CONSUMER). Used to identify relationships between spans."
+      "Type of span (Unspecified, Internal, Server, Client, Producer, Consumer). Used to identify relationships between spans."
     ),
   SpanName: z
     .string()
@@ -114,7 +114,7 @@ export const otelTracesSchema = z.object({
     .describe(
       "Description of the span's operation. E.g., qualified method name or file name with line number."
     ),
-  StatusCode: z.string().optional().describe("Status code (UNSET, OK, ERROR)."),
+  StatusCode: z.string().optional().describe("Status code (Unset, Ok, Error)."),
   StatusMessage: z
     .string()
     .optional()

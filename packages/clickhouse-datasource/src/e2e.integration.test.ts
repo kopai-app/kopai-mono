@@ -529,51 +529,25 @@ describe("E2E: OTEL Collector → ClickHouse → ReadDatasource", () => {
 
   describe("discoverMetrics", () => {
     beforeAll(async () => {
-      const schema = getDiscoverMVSchema(CH_DATABASE);
-
-      for (const stmt of schema.targetTables) {
-        await adminClient.command({ query: stmt });
+      // The OTel Collector contrib exporter creates the base metric tables but
+      // NOT these discovery MVs. Ensure they're absent so the first
+      // discoverMetrics call exercises the on-demand provisioning + backfill
+      // path against the data the collector already ingested.
+      const { materializedViews } = getDiscoverMVSchema(CH_DATABASE);
+      for (const stmt of materializedViews) {
+        const mvName = stmt.match(/MATERIALIZED VIEW IF NOT EXISTS (\S+)/)?.[1];
+        if (mvName) {
+          await adminClient.command({
+            query: `DROP TABLE IF EXISTS ${mvName}`,
+          });
+        }
       }
-      for (const stmt of schema.materializedViews) {
-        await adminClient.command({ query: stmt });
-      }
-
-      // Backfill MV target tables from data already ingested by OTEL collector
-      const metricTypes = [
-        { type: "Gauge", table: "otel_metrics_gauge" },
-        { type: "Sum", table: "otel_metrics_sum" },
-        { type: "Histogram", table: "otel_metrics_histogram" },
-        {
-          type: "ExponentialHistogram",
-          table: "otel_metrics_exponential_histogram",
-        },
-        { type: "Summary", table: "otel_metrics_summary" },
-      ];
-      for (const { type, table } of metricTypes) {
-        await adminClient.command({
-          query: `INSERT INTO ${CH_DATABASE}.${DISCOVER_NAMES_TABLE}
-SELECT MetricName, '${type}' AS MetricType, MetricDescription, MetricUnit
-FROM ${CH_DATABASE}.${table}`,
-        });
-        await adminClient.command({
-          query: `INSERT INTO ${CH_DATABASE}.${DISCOVER_ATTRS_TABLE}
-SELECT MetricName, '${type}' AS MetricType, 'attr' AS source, attr_key,
-    groupUniqArrayState(101)(Attributes[attr_key]) AS attr_values
-FROM ${CH_DATABASE}.${table}
-ARRAY JOIN mapKeys(Attributes) AS attr_key
-WHERE notEmpty(Attributes)
-GROUP BY MetricName, MetricType, source, attr_key`,
-        });
-        await adminClient.command({
-          query: `INSERT INTO ${CH_DATABASE}.${DISCOVER_ATTRS_TABLE}
-SELECT MetricName, '${type}' AS MetricType, 'res_attr' AS source, attr_key,
-    groupUniqArrayState(101)(ResourceAttributes[attr_key]) AS attr_values
-FROM ${CH_DATABASE}.${table}
-ARRAY JOIN mapKeys(ResourceAttributes) AS attr_key
-WHERE notEmpty(ResourceAttributes)
-GROUP BY MetricName, MetricType, source, attr_key`,
-        });
-      }
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${CH_DATABASE}.${DISCOVER_ATTRS_TABLE}`,
+      });
+      await adminClient.command({
+        query: `DROP TABLE IF EXISTS ${CH_DATABASE}.${DISCOVER_NAMES_TABLE}`,
+      });
     });
 
     it("discovers all 5 metric types", async () => {

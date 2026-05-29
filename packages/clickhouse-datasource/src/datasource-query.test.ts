@@ -86,7 +86,7 @@ function makeSpan(
     ScopeVersion: "",
     SpanAttributes: {},
     Duration: 1000000,
-    StatusCode: "OK",
+    StatusCode: "Ok",
     StatusMessage: "",
     "Events.Timestamp": [],
     "Events.Name": [],
@@ -186,7 +186,7 @@ async function seedTraces(client: ClickHouseClient) {
         ResourceAttributes: { "service.version": "2.0" },
         SpanAttributes: { "http.method": "POST", "http.status_code": "500" },
         Duration: 15000000,
-        StatusCode: "STATUS_CODE_ERROR",
+        StatusCode: "Error",
         StatusMessage: "Internal server error",
       }),
     ],
@@ -613,7 +613,7 @@ describe("ClickHouseReadDatasource.query — traces raw", () => {
         {
           column: "StatusCode",
           op: "eq",
-          value: "STATUS_CODE_ERROR",
+          value: "Error",
         },
       ],
       timeDimension: relativeWindow(),
@@ -1232,11 +1232,12 @@ describe("ClickHouseReadDatasource.query — traces aggregate", () => {
     expect(map.get("order-service")).toBe(1);
   });
 
-  it("ERROR_RATE > 0 when spans with STATUS_CODE_ERROR exist (literal regression)", async () => {
+  it("ERROR_RATE > 0 when spans with canonical 'Error' StatusCode exist (literal regression)", async () => {
     // Regression guard: the SQL literal must match the writer's stored
-    // StatusCode value ('STATUS_CODE_ERROR'). The seed inserts one span
-    // with that status — the rate over the matched span set must be
-    // strictly positive. Previous bug used 'ERROR' and produced 0.
+    // StatusCode value. The OTel Collector contrib exporter stores the
+    // canonical 'Error' (not 'ERROR'/'STATUS_CODE_ERROR'). The seed inserts
+    // one span with that status — the rate over the matched span set must be
+    // strictly positive. Previous bug compared against 'ERROR' and produced 0.
     const result = await ds.query({
       signal: "traces",
       mode: "aggregate",

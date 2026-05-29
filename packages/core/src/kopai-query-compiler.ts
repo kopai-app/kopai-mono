@@ -136,7 +136,33 @@ export function compileTimeWindow(
 // need. Keeping them here means a literal (StatusCode value, table
 // name, comparator map) lives in exactly one place.
 
-export const STATUS_CODE_ERROR_LITERAL = "STATUS_CODE_ERROR";
+// Canonical OTel string forms — the representation the OpenTelemetry
+// ClickHouse exporter writes (Go's `status.Code().String()` /
+// `span.Kind().String()`). This is the single source of truth for stored
+// StatusCode / SpanKind values across ALL backends; the sqlite write path
+// must emit these same forms so a KopaiQuery is portable across backends.
+// Indexed by the OTLP proto enum number.
+export const STATUS_CODE_NAMES = ["Unset", "Ok", "Error"] as const;
+export const SPAN_KIND_NAMES = [
+  "Unspecified",
+  "Internal",
+  "Server",
+  "Client",
+  "Producer",
+  "Consumer",
+] as const;
+
+/** Canonical stored StatusCode string for an OTLP status code number. */
+export function statusCodeName(code: number | undefined): string {
+  return code === undefined ? "" : (STATUS_CODE_NAMES[code] ?? "");
+}
+
+/** Canonical stored SpanKind string for an OTLP span kind number. */
+export function spanKindName(kind: number | undefined): string {
+  return kind === undefined ? "" : (SPAN_KIND_NAMES[kind] ?? "");
+}
+
+export const STATUS_CODE_ERROR_LITERAL = "Error";
 
 export function timeColumnForSignal(signal: Signal): "TimeUnix" | "Timestamp" {
   return signal === "metrics" ? "TimeUnix" : "Timestamp";

@@ -8,7 +8,7 @@ export const mockTraceSummaries: TraceSummary[] = [
     rootSpanName: "GET /api/users",
     serviceName: "api-gateway",
     durationMs: 320,
-    statusCode: "OK",
+    statusCode: "Ok",
     timestampMs: BASE_MS,
     spanCount: 8,
     services: [
@@ -24,7 +24,7 @@ export const mockTraceSummaries: TraceSummary[] = [
     rootSpanName: "POST /api/users",
     serviceName: "api-gateway",
     durationMs: 95,
-    statusCode: "ERROR",
+    statusCode: "Error",
     timestampMs: BASE_MS + 10_000,
     spanCount: 4,
     services: [
@@ -38,7 +38,7 @@ export const mockTraceSummaries: TraceSummary[] = [
     rootSpanName: "GET /api/products",
     serviceName: "api-gateway",
     durationMs: 450,
-    statusCode: "OK",
+    statusCode: "Ok",
     timestampMs: BASE_MS + 25_000,
     spanCount: 12,
     services: [
@@ -54,7 +54,7 @@ export const mockTraceSummaries: TraceSummary[] = [
     rootSpanName: "PUT /api/users/42",
     serviceName: "api-gateway",
     durationMs: 180,
-    statusCode: "OK",
+    statusCode: "Ok",
     timestampMs: BASE_MS + 42_000,
     spanCount: 6,
     services: [
@@ -69,7 +69,7 @@ export const mockTraceSummaries: TraceSummary[] = [
     rootSpanName: "DELETE /api/sessions",
     serviceName: "api-gateway",
     durationMs: 45,
-    statusCode: "OK",
+    statusCode: "Ok",
     timestampMs: BASE_MS + 60_000,
     spanCount: 3,
     services: [

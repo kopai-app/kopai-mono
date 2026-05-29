@@ -1,5 +1,10 @@
-import type { dataFilterSchemas } from "@kopai/core";
+import { kopaiQueryCompiler, type dataFilterSchemas } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
+
+// Canonical StatusCode value for errored spans (e.g. "Error" in the OTel
+// Collector contrib ClickHouse exporter schema). Sourced from @kopai/core so
+// trace-summary error counting stays consistent with the KopaiQuery compiler.
+const STATUS_CODE_ERROR = kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL;
 
 /** Default lookback for services/operations discovery (7 days in ms). */
 const DISCOVERY_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
@@ -151,7 +156,7 @@ SELECT
   toString(toUnixTimestamp64Nano(min(Timestamp))) as startTimeNs,
   toString(toUnixTimestamp64Nano(max(Timestamp + toIntervalNanosecond(Duration))) - toUnixTimestamp64Nano(min(Timestamp))) as durationNs,
   toUInt32(count()) as spanCount,
-  toUInt32(countIf(StatusCode = 'ERROR')) as errorCount,
+  toUInt32(countIf(StatusCode = {errorStatus:String})) as errorCount,
   groupArray(tuple(ServiceName, StatusCode)) as _serviceData
 FROM otel_traces
 ${whereClause}
@@ -160,6 +165,7 @@ ${havingClause}
 ORDER BY _startTime ${sortOrder}, TraceId ${sortOrder}
 LIMIT {limit:UInt32}`;
 
+  params.errorStatus = STATUS_CODE_ERROR;
   params.limit = limit + 1;
 
   return { query, params };
