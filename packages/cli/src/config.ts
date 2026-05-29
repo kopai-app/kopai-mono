@@ -1,42 +1,23 @@
 import { readFileSync, existsSync, writeFileSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  loadConfig,
+  DEFAULT_URL,
+  CONFIG_FILENAME,
+  type KopaiConfig,
+} from "@kopai/sdk/node";
 
-export interface Config {
-  url?: string;
-  token?: string;
-}
+// `.kopairc` reading lives in `@kopai/sdk/node` (the single source of truth for
+// the config format, shared with code-mode scripts). Re-export the reader and
+// constants; the write helpers below (used by `login`/`logout`) stay here.
+export { loadConfig, DEFAULT_URL, CONFIG_FILENAME };
+export type Config = KopaiConfig;
 
-export const CONFIG_FILENAME = ".kopairc";
 export const TOKEN_PREFIX_LENGTH = 10;
-export const DEFAULT_URL = "http://localhost:8000";
 
 /** Owner read+write only (rw-------). Used for files containing secrets. */
 const OWNER_READ_WRITE = 0o600;
-
-function loadConfigFile(path: string): Config | null {
-  if (!existsSync(path)) return null;
-  try {
-    const content = readFileSync(path, "utf-8");
-    return JSON.parse(content) as Config;
-  } catch {
-    return null;
-  }
-}
-
-export function loadConfig(configPath?: string): Config {
-  // Priority: --config flag > ./.kopairc > ~/.kopairc
-  const paths = configPath
-    ? [configPath]
-    : [join(process.cwd(), CONFIG_FILENAME), join(homedir(), CONFIG_FILENAME)];
-
-  for (const path of paths) {
-    const config = loadConfigFile(path);
-    if (config) return config;
-  }
-
-  return {};
-}
 
 export function resolveConfigPath(global: boolean): string {
   return global
