@@ -366,7 +366,6 @@ const METRIC_STRUCTURAL = [
   "Flags",
   "Scale",
   "ZeroCount",
-  "ZeroThreshold",
   "BucketCounts",
   "ExplicitBounds",
   "PositiveBucketCounts",
@@ -405,6 +404,12 @@ const METRIC_EXCLUDED = new Set<string>([
   "ScopeAttributes",
   "ServiceName",
   "ScopeDroppedAttrCount",
+  // ZeroThreshold lives in the SQLite storage schema but has no column in the
+  // ClickHouse OTel-collector schema (the CH exp-histogram table omits it, and
+  // ch-row-schemas coerces it to undefined). Excluding it from the query API
+  // keeps the unified KopaiQuery surface backend-consistent — neither backend
+  // can be filtered/grouped/projected on a column one of them doesn't store.
+  "ZeroThreshold",
   "Exemplars.FilteredAttributes",
   "Exemplars.SpanId",
   "Exemplars.TimeUnix",
@@ -1183,7 +1188,6 @@ export const NUMERIC_STRUCTURAL_COLUMNS: Record<Signal, ReadonlySet<string>> = {
     "Max",
     "Scale",
     "ZeroCount",
-    "ZeroThreshold",
     "PositiveOffset",
     "NegativeOffset",
     "IsMonotonic",

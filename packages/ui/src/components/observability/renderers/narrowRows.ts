@@ -27,6 +27,38 @@ export function narrowRows<T>(
   return rows;
 }
 
+// The polymorphic `query` dataSource can feed a renderer any of the six
+// KopaiQuery result shapes. When the rows don't match the raw shape a
+// signal-specific renderer draws — most commonly an *aggregate-mode* result
+// (dynamic dimension/measure keys, no `TimeUnix`/`Timestamp`), or a query for a
+// different signal — `narrowRows` returns null. Silently falling back to an
+// empty panel hides the misconfiguration; instead surface an explicit error so
+// the dashboard author sees the mismatch.
+//
+// A null/absent response or an empty result set is NOT a mismatch: there is
+// simply nothing to draw (the renderer's own loading/error props drive the UI),
+// so those return `{ rows: [] }` with no error.
+export function narrowQueryRows<T>(
+  response: { data?: unknown } | null | undefined,
+  guard: (v: unknown) => v is T,
+  signal: "trace" | "log" | "metric"
+): { rows: T[]; error?: Error } {
+  const rows = narrowRows(response, guard);
+  if (rows !== null) return { rows };
+  // narrowRows only returns null for a non-array `data` or a present row that
+  // failed the guard. A non-array (nothing fetched yet, or an upstream fetch
+  // error) is not a shape mismatch; a non-empty array of wrong-shaped rows is.
+  if (!Array.isArray(response?.data)) return { rows: [] };
+  return {
+    rows: [],
+    error: new Error(
+      `This panel displays raw ${signal} rows, but the query returned a different ` +
+        `row shape — typically an aggregate-mode query, or a query for another signal. ` +
+        `Use a raw ${signal} query, or a renderer that supports aggregate results.`
+    ),
+  };
+}
+
 // Narrows unknown to an indexable object via a type predicate, so the row
 // guards below can read properties without an `as Record<...>` cast.
 function isRecord(v: unknown): v is Record<string, unknown> {

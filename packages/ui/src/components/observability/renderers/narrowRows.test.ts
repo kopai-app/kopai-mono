@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   narrowRows,
+  narrowQueryRows,
   hasMetricRowShape,
   hasLogRowShape,
   hasTraceRowShape,
@@ -45,6 +46,62 @@ describe("narrowRows", () => {
 
   it("returns an empty array for empty data (valid, just no rows)", () => {
     expect(narrowRows({ data: [] }, hasMetricRowShape)).toEqual([]);
+  });
+});
+
+// narrowQueryRows turns a shape mismatch into an explicit error instead of an
+// empty panel: an aggregate-mode (or wrong-signal) result reaching a renderer
+// that only draws raw metric rows must be visible to the dashboard author.
+describe("narrowQueryRows", () => {
+  it("forwards matching rows with no error", () => {
+    const res = { data: [{ TimeUnix: "1", Value: 1 }] };
+    const out = narrowQueryRows(res, hasMetricRowShape, "metric");
+    expect(out.rows).toHaveLength(1);
+    expect(out.error).toBeUndefined();
+  });
+
+  it("surfaces an error when an aggregate-shaped result reaches a raw renderer", () => {
+    // KopaiAggregateRow: dynamic dimension/measure keys, no TimeUnix.
+    const res = { data: [{ "service.name": "api", p95_duration: 123 }] };
+    const out = narrowQueryRows(res, hasMetricRowShape, "metric");
+    expect(out.rows).toEqual([]);
+    expect(out.error).toBeInstanceOf(Error);
+    expect(out.error?.message).toContain("aggregate-mode");
+  });
+
+  it("surfaces an error for a wrong-signal raw result", () => {
+    const res = { data: [{ Timestamp: "1", Body: "hello" }] }; // log rows
+    const out = narrowQueryRows(res, hasMetricRowShape, "metric");
+    expect(out.rows).toEqual([]);
+    expect(out.error).toBeInstanceOf(Error);
+  });
+
+  it("does NOT error on an empty result set (nothing to draw)", () => {
+    const out = narrowQueryRows({ data: [] }, hasMetricRowShape, "metric");
+    expect(out.rows).toEqual([]);
+    expect(out.error).toBeUndefined();
+  });
+
+  it("does NOT error on a null/absent response (loading or upstream fetch error)", () => {
+    expect(
+      narrowQueryRows(null, hasMetricRowShape, "metric").error
+    ).toBeUndefined();
+    expect(
+      narrowQueryRows({ data: undefined }, hasMetricRowShape, "metric").error
+    ).toBeUndefined();
+  });
+
+  it("names the signal in the error message", () => {
+    const res = { data: [{ foo: "bar" }] };
+    expect(
+      narrowQueryRows(res, hasMetricRowShape, "metric").error?.message
+    ).toContain("raw metric rows");
+    expect(
+      narrowQueryRows(res, hasLogRowShape, "log").error?.message
+    ).toContain("raw log rows");
+    expect(
+      narrowQueryRows(res, hasTraceRowShape, "trace").error?.message
+    ).toContain("raw trace rows");
   });
 });
 

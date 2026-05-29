@@ -132,7 +132,9 @@ function metricFullColumns(metricType: string): string[] {
         "NegativeBucketCounts",
         "Min",
         "Max",
-        "ZeroThreshold",
+        // ZeroThreshold is intentionally omitted: it has no column in the
+        // ClickHouse OTel schema, so excluding it here keeps a raw
+        // ExponentialHistogram KopaiQuery shape-identical across both backends.
         "AggregationTemporality",
       ];
     case "Summary":
