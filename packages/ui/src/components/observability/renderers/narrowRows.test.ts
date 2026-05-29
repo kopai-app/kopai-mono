@@ -155,5 +155,10 @@ describe("row shape guards", () => {
     expect(hasTraceRowShape(metricRow)).toBe(false);
     // SpanId + TraceId alone (no span-only structural key) is not enough.
     expect(hasTraceRowShape({ SpanId: "s", TraceId: "t" })).toBe(false);
+    // Regression: span-like keys but no raw Timestamp (e.g. an aggregate row)
+    // must NOT pass now that a string Timestamp is required.
+    expect(hasTraceRowShape({ SpanId: "s", TraceId: "t", SpanName: "x" })).toBe(
+      false
+    );
   });
 });

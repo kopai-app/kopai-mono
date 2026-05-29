@@ -1263,6 +1263,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       const traceIds = pageTraceRows.map((r) => r.TraceId);
       const placeholders = traceIds.map(() => "?").join(",");
 
+      // Canonical error-status string, owned by the compiler (parity with the
+      // ClickHouse backend and the KopaiQuery builder) rather than hardcoded.
+      const errorStatus = kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL;
       const aggSql = `
         SELECT
           TraceId,
@@ -1271,7 +1274,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           CAST(MIN(Timestamp) AS TEXT) as startTimeNs,
           CAST(MAX(Timestamp + Duration) - MIN(Timestamp) AS TEXT) as durationNs,
           COUNT(*) as spanCount,
-          SUM(CASE WHEN StatusCode = 'Error' THEN 1 ELSE 0 END) as errorCount
+          SUM(CASE WHEN StatusCode = '${errorStatus}' THEN 1 ELSE 0 END) as errorCount
         FROM otel_traces
         WHERE TraceId IN (${placeholders})
         GROUP BY TraceId
@@ -1291,7 +1294,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       // Step 3: Per-service breakdown (small result: ~traces × avg services)
       const svcSql = `
         SELECT TraceId, ServiceName, COUNT(*) as cnt,
-          MAX(CASE WHEN StatusCode = 'Error' THEN 1 ELSE 0 END) as hasError
+          MAX(CASE WHEN StatusCode = '${errorStatus}' THEN 1 ELSE 0 END) as hasError
         FROM otel_traces
         WHERE TraceId IN (${placeholders})
         GROUP BY TraceId, ServiceName

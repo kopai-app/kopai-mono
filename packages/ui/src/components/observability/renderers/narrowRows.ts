@@ -104,9 +104,13 @@ export function hasLogRowShape(v: unknown): v is OtelLogsRow {
 
 export function hasTraceRowShape(v: unknown): v is OtelTracesRow {
   if (!isRecord(v)) return false;
-  // Traces require SpanId + TraceId, but so can a trace-correlated log; the
-  // presence of a span-only structural key distinguishes a real span row.
+  // Traces require a raw string Timestamp + SpanId + TraceId, but a
+  // trace-correlated log carries the IDs too; the presence of a span-only
+  // structural key (and no log-only key) distinguishes a real span row.
+  // Requiring Timestamp also keeps aggregate rows — dynamic dimension/measure
+  // keys with no raw timestamp column — from slipping through.
   return (
+    typeof v.Timestamp === "string" &&
     typeof v.SpanId === "string" &&
     typeof v.TraceId === "string" &&
     typeof v.TimeUnix !== "string" &&

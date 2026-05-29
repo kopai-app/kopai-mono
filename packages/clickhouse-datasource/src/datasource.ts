@@ -24,6 +24,7 @@ import {
   buildMetricsQuery,
   buildAggregatedMetricsQuery,
   buildDiscoverMetricsFromMV,
+  buildDiscoverMetricsQueries,
 } from "./query-metrics.js";
 import {
   parseChRow,
@@ -35,7 +36,6 @@ import {
 } from "./ch-row-schemas.js";
 import { buildKopaiSql } from "./query-kopai.js";
 import { dateTime64ToNanos } from "./timestamp.js";
-import { getDiscoverMVSchema } from "./discover-mv-schema.js";
 
 // Coerces a ClickHouse JSON cell into the KopaiAggregateRow value union.
 // Mirrors the sqlite backend's normalizeCellValue: a bigint outside the
@@ -185,56 +185,6 @@ export class ClickHouseReadDatasource
       http_headers: { "X-ClickHouse-Database": database },
       ...(clickhouseSettings && { clickhouse_settings: clickhouseSettings }),
     });
-  }
-
-  /**
-   * Run a statement that returns no result set (DDL / INSERT … SELECT).
-   * Used by discoverMetrics to provision + backfill the discover MVs.
-   */
-  private async clientCommand(
-    ctx: ClickHouseRequestContext,
-    query: string,
-    params: Record<string, unknown> = {}
-  ): Promise<void> {
-    const { username, password, database, clickhouseSettings } = ctx;
-    await this.client.command({
-      query,
-      query_params: params,
-      auth: { username, password },
-      http_headers: { "X-ClickHouse-Database": database },
-      ...(clickhouseSettings && { clickhouse_settings: clickhouseSettings }),
-    });
-  }
-
-  /**
-   * Idempotently provision the metrics-discovery materialized views and seed
-   * them with already-ingested base-table data.
-   *
-   * The OTel Collector contrib ClickHouse exporter creates the base metric
-   * tables but not these discovery MVs. A ClickHouse MV only captures rows
-   * inserted after its creation, so we (1) CREATE … IF NOT EXISTS the target
-   * tables + MVs and (2) backfill the existing base-table rows into the target
-   * tables. Re-running is safe: the target tables are ReplacingMergeTree /
-   * AggregatingMergeTree, and the discover read queries already use FINAL /
-   * groupUniqArrayMerge to collapse duplicates/partials.
-   */
-  private async provisionDiscoverMVs(
-    ctx: ClickHouseRequestContext
-  ): Promise<void> {
-    const { targetTables, materializedViews, backfill } = getDiscoverMVSchema(
-      ctx.database
-    );
-    // Target tables first, then MVs (which TO those tables), then backfill so
-    // the MVs already exist to capture any concurrent inserts.
-    for (const stmt of targetTables) {
-      await this.clientCommand(ctx, stmt);
-    }
-    for (const stmt of materializedViews) {
-      await this.clientCommand(ctx, stmt);
-    }
-    for (const stmt of backfill) {
-      await this.clientCommand(ctx, stmt);
-    }
   }
 
   async getTraces(
@@ -1043,12 +993,15 @@ export class ClickHouseReadDatasource
   }
 
   /** Read the discover MV target tables. Throws CH error code 60 if absent. */
-  private async readDiscoverMVs(ctx: ClickHouseRequestContext): Promise<{
+  private async runDiscoverQueries(
+    ctx: ClickHouseRequestContext,
+    queries: { namesQuery: string; attributesQuery: string }
+  ): Promise<{
     nameRows: z.infer<typeof chDiscoverNameRowSchema>[];
     attrRows: z.infer<typeof chDiscoverAttrRowSchema>[];
     chNodes: (string | undefined)[];
   }> {
-    const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
+    const { namesQuery, attributesQuery } = queries;
     const [namesRs, attrsRs] = await Promise.all([
       this.clientQuery(ctx, namesQuery),
       this.clientQuery(ctx, attributesQuery),
@@ -1071,40 +1024,33 @@ export class ClickHouseReadDatasource
     const logCtx = { database, username, method: "discoverMetrics" };
     const start = performance.now();
 
-    // Query MV tables directly — no system.tables detection needed.
-    // Reader users may lack access to system.tables, causing false negatives.
+    // Query the discover MV target tables directly — no system.tables
+    // detection needed (reader users may lack access, causing false negatives).
     let nameRows: z.infer<typeof chDiscoverNameRowSchema>[];
     let attrRows: z.infer<typeof chDiscoverAttrRowSchema>[];
     let chNodes: (string | undefined)[] = [];
     try {
-      ({ nameRows, attrRows, chNodes } = await this.readDiscoverMVs(ctx));
+      ({ nameRows, attrRows, chNodes } = await this.runDiscoverQueries(
+        ctx,
+        buildDiscoverMetricsFromMV()
+      ));
     } catch (err) {
       // ClickHouse error code 60 = TABLE_DOES_NOT_EXIST → the discover MVs
-      // haven't been provisioned in this database yet. The OTel Collector
-      // contrib exporter creates the base metric tables but not these MVs, so
-      // provision them on demand (idempotently) + backfill existing rows, then
-      // serve the query. Only a missing-table error triggers provisioning;
-      // anything else propagates.
+      // aren't provisioned in this database. They're an optional optimization
+      // (see discover-mv-schema.ts / getDiscoverMVSchema, provisioned out of
+      // band), so fall back to a full base-table scan — correct, just slower —
+      // rather than doing DDL/backfill on the request path. Any other error
+      // propagates.
       if (!isChError(err, CH_ERR_TABLE_NOT_FOUND)) {
         const durationMs = Math.round(performance.now() - start);
         log.error({ ...logCtx, durationMs, chNodes, err }, "MV query failed");
         throw err;
       }
-      log.info(
-        { ...logCtx },
-        "discover MVs absent — provisioning and backfilling"
-      );
-      try {
-        await this.provisionDiscoverMVs(ctx);
-        ({ nameRows, attrRows, chNodes } = await this.readDiscoverMVs(ctx));
-      } catch (provisionErr) {
-        const durationMs = Math.round(performance.now() - start);
-        log.error(
-          { ...logCtx, durationMs, chNodes, err: provisionErr },
-          "discover MV provisioning failed"
-        );
-        throw provisionErr;
-      }
+      log.info({ ...logCtx }, "discover MVs absent — scanning base tables");
+      ({ nameRows, attrRows, chNodes } = await this.runDiscoverQueries(
+        ctx,
+        buildDiscoverMetricsQueries()
+      ));
     }
     const queryMs = Math.round(performance.now() - start);
 

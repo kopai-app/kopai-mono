@@ -1611,10 +1611,11 @@ describe("ClickHouseReadDatasource", () => {
     });
   });
 
-  describe("discoverMetrics provisions MVs on demand", () => {
+  describe("discoverMetrics falls back to a base-table scan when MVs are absent", () => {
     // Each test drops the discover MV target tables first so we exercise the
-    // provisioning-on-demand path (the OTel contrib exporter creates the base
-    // metric tables but not these discovery MVs).
+    // table-scan fallback path. The MVs are an optional optimization
+    // provisioned out of band (getDiscoverMVSchema); the request path must NOT
+    // do DDL/backfill — it falls back to scanning the base tables instead.
     async function dropDiscoverMVs() {
       // Drop the MVs too so they don't dangle pointing at recreated targets.
       const { materializedViews } = getDiscoverMVSchema(TEST_DATABASE);
@@ -1636,13 +1637,13 @@ describe("ClickHouseReadDatasource", () => {
 
     beforeEach(dropDiscoverMVs);
 
-    it("provisions MVs and serves metrics when tables do not exist", async () => {
+    it("scans base tables and serves metrics when MVs are absent", async () => {
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
 
-      // Provisioning + backfill must surface the already-ingested metrics
-      // rather than 500ing because the discovery MVs were absent.
+      // The fallback scan must surface the already-ingested metrics rather than
+      // 500ing because the discovery MVs were absent.
       expect(result.metrics.length).toBe(8);
       const names = result.metrics.map((m) => m.name).sort();
       expect(names).toEqual([
@@ -1655,9 +1656,22 @@ describe("ClickHouseReadDatasource", () => {
         "test.multi.attr",
         "test.truncation.metric",
       ]);
+
+      // The request path must NOT provision: the discovery tables stay absent
+      // (it served the result via a base-table scan, not by creating MVs).
+      const tablesRs = await adminClient.query({
+        query: `SELECT name FROM system.tables WHERE database = {db:String}`,
+        query_params: { db: TEST_DATABASE },
+        format: "JSONEachRow",
+      });
+      const tableNames = new Set(
+        (await tablesRs.json<{ name: string }>()).map((r) => r.name)
+      );
+      expect(tableNames.has(DISCOVER_NAMES_TABLE)).toBe(false);
+      expect(tableNames.has(DISCOVER_ATTRS_TABLE)).toBe(false);
     });
 
-    it("backfill seeds attribute values from existing base-table rows", async () => {
+    it("scan surfaces attribute values from base-table rows", async () => {
       const result = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1674,8 +1688,8 @@ describe("ClickHouseReadDatasource", () => {
       const first = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
-      // Second call hits the fast path (MVs now exist) and must not double
-      // anything despite the backfill having run once.
+      // Both calls take the same fallback scan (no MVs are ever created), so
+      // neither doubles anything.
       const second = await ds.discoverMetrics({
         requestContext: requestContext(),
       });
@@ -1683,9 +1697,10 @@ describe("ClickHouseReadDatasource", () => {
       expect(second.metrics.length).toBe(8);
     });
 
-    it("provisions when only the names MV target table exists", async () => {
-      // Partial state: one target table present, the other missing. The
-      // CREATE … IF NOT EXISTS provisioning must heal it without error.
+    it("falls back to a scan when MV state is partial (only names table exists)", async () => {
+      // Partial state: one target table present, the other missing. The MV
+      // read errors on the missing table and the scan fallback still serves
+      // the full result without any DDL.
       const namesOnly = `CREATE TABLE IF NOT EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
 (MetricName String, MetricType LowCardinality(String), MetricDescription String, MetricUnit String)
 ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
