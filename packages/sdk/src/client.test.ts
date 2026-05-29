@@ -351,6 +351,48 @@ describe("KopaiClient", () => {
         expect(error.detail).toBe("No trace with that ID");
       }
     });
+
+    it("surfaces Problem Details `detail` in error.message (G4)", async () => {
+      const detail =
+        "Percentile measures (P50-P999) are not yet supported on the sqlite backend.";
+      server.use(
+        http.post(`${BASE_URL}/signals/query/metrics/aggregate`, () => {
+          return HttpResponse.json(
+            {
+              type: "https://docs.kopai.app/errors/signals-api-validation-error",
+              status: 400,
+              title: "Invalid query",
+              detail,
+            },
+            { status: 400 }
+          );
+        })
+      );
+
+      // Valid query (passes local validation) so it reaches the server,
+      // which rejects percentiles on the sqlite backend.
+      const send = () =>
+        client.queryMetricsAggregate({
+          signal: "metrics",
+          mode: "aggregate",
+          measures: [{ op: "P95", column: "Value", as: "p95" }],
+          filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+          timeDimension: { type: "relative", lookback: "1h" },
+          output: { type: "summary" },
+        });
+
+      await expect(send()).rejects.toThrow(KopaiError);
+
+      try {
+        await send();
+      } catch (e) {
+        const error = e as KopaiError;
+        expect(error.status).toBe(400);
+        expect(error.detail).toBe(detail);
+        expect(error.message).toContain("Percentile measures");
+        expect(error.message).toContain(detail);
+      }
+    });
   });
 
   describe("abort signal", () => {
