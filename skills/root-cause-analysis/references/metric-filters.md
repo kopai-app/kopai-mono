@@ -1,49 +1,80 @@
-# Metric Filters Reference
+# Metric query reference
 
-## Available Filters
+Columns, filters, and measures for `kq.metrics.aggregate()` / `kq.metrics.raw()` (and the
+`client.searchMetrics(...)` / `client.discoverMetrics()` shapes). Run a built query with the
+typed method: `client.queryMetricsAggregate(q)` or `client.queryMetricsRaw(q)` (prefer over
+the loosely-typed `client.query(q)`).
 
-| Filter          | Flag          | Example                          |
-| --------------- | ------------- | -------------------------------- |
-| Type (required) | `--type`      | `--type Gauge`                   |
-| Name            | `--name`      | `--name http_requests_total`     |
-| Service         | `--service`   | `--service payment-api`          |
-| Attributes      | `--attr`      | `--attr "endpoint=/api"`         |
-| Aggregate       | `--aggregate` | `--aggregate sum`                |
-| Group by (attr) | `--group-by`  | `--group-by signal` (repeatable) |
+> Dashboard tiles render **raw** rows: when feeding a metric tile via `dataSource:{method:"query"}`,
+> build it with `kq.metrics.raw()` (not `.aggregate()`) — see the `create-dashboard` skill.
 
-## Metric Types
+## Discover first
 
-| Type      | Description            | Use Case                         |
-| --------- | ---------------------- | -------------------------------- |
-| Gauge     | Point-in-time value    | Current memory, CPU, connections |
-| Sum       | Cumulative counter     | Request counts, error counts     |
-| Histogram | Distribution of values | Latency percentiles              |
+`const { metrics } = await client.discoverMetrics();` — each entry is
+`{ name, type, unit, description, attributes, resourceAttributes }`. Use it to pick a
+metric's exact `name` and `type` before querying.
 
-## Common Metrics
+## The MetricType pin (required)
 
-| Metric                        | Type      | Description         |
-| ----------------------------- | --------- | ------------------- |
-| http_requests_total           | Sum       | Total HTTP requests |
-| http_server_errors_total      | Sum       | HTTP 5xx errors     |
-| http_server_duration          | Histogram | Request latency     |
-| process_cpu_seconds           | Sum       | CPU usage           |
-| process_resident_memory_bytes | Gauge     | Memory usage        |
+Every metric query **must filter exactly one `MetricType`** at the top-level AND — it
+cannot sit inside an `or()`, and only one type per query is allowed. This is because each
+type stores its value in different structural columns.
 
-## Output Options
+```ts
+.where(f => f.eq("MetricType", "Gauge"))   // required on every metric query
+.where(f => f.eq("MetricName", "system.cpu.utilization"))
+```
 
-| Flag       | Description            |
-| ---------- | ---------------------- |
-| `--json`   | JSON output            |
-| `--table`  | Table output           |
-| `--fields` | Select specific fields |
-| `--limit`  | Max results            |
+| Type                   | Value column(s)                                                | Use case                                  |
+| ---------------------- | -------------------------------------------------------------- | ----------------------------------------- |
+| `Gauge`                | `Value`                                                        | Point-in-time: CPU, memory, connections   |
+| `Sum`                  | `Value`                                                        | Cumulative counters: request/error counts |
+| `Histogram`            | `Count`, `Sum`, `Min`, `Max`, `BucketCounts`, `ExplicitBounds` | Latency distributions                     |
+| `ExponentialHistogram` | `Count`, `Sum`, `Positive/NegativeBucketCounts`, …             | Distributions                             |
+| `Summary`              | `Count`, `Sum`, `ValueAtQuantiles.*`                           | Pre-computed quantiles                    |
 
-## Commands
+For Gauge/Sum, aggregate over `Value` (`avg`/`sum`/`max`). For Histogram, aggregate over
+`Count`/`Sum`/`Max`.
+
+## Structural columns
+
+`MetricName`, `MetricType`, `MetricUnit`, `MetricDescription`, `TimeUnix`,
+`StartTimeUnix`, `Value`, `Count`, `Sum`, `Min`, `Max`, `BucketCounts`, `ExplicitBounds`,
+`ScopeName`, `ScopeVersion`. Containers for metric attributes: **`Attributes`**
+(data-point), **`ResourceAttributes`**, **`ScopeAttributes`**.
+
+## Example
+
+```ts
+// avg CPU by host over the last hour, bucketed every minute
+kq.metrics
+  .aggregate()
+  .measure((m) => m.avg("Value", "avg_cpu"))
+  .where((f) => f.eq("MetricType", "Gauge"))
+  .where((f) => f.eq("MetricName", "system.cpu.utilization"))
+  .dimension("host.name")
+  .timeRelative("1h")
+  .timeSeries("1m")
+  .build();
+```
+
+Percentiles (`p50`–`p999`) are **ClickHouse-only**; on SQLite use `avg`/`max`.
+
+## CLI fallback (quick lookups)
+
+| Filter                     | Flag          | Example                             |
+| -------------------------- | ------------- | ----------------------------------- |
+| Type (required)            | `--type`      | `--type Gauge`                      |
+| Name                       | `--name`      | `--name system.cpu.utilization`     |
+| Service                    | `--service`   | `--service payment`                 |
+| Attribute                  | `--attr`      | `--attr "host.name=web-1"`          |
+| Aggregate (Gauge/Sum only) | `--aggregate` | `--aggregate sum`                   |
+| Group by                   | `--group-by`  | `--group-by host.name` (repeatable) |
 
 ```bash
-# Discover all metrics
-kopai metrics discover --json
-
-# Search specific metric
-kopai metrics search --type TYPE [--name NAME] [--service NAME] --json
+npx @kopai/cli metrics discover --json
+npx @kopai/cli metrics search --type Gauge --name system.cpu.utilization --json
 ```
+
+`client.searchMetrics({ metricType, metricName, serviceName, attributes, aggregate, groupBy, limit })`
+mirrors these (`metricType` required; `aggregate` is Gauge/Sum-only and `groupBy` requires `aggregate`; limit caps at 1000).
