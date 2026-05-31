@@ -34,7 +34,14 @@ describe("build return-type equality", () => {
       .timeRelative("1h")
       .summary()
       .build();
-    expectTypeOf(q).toEqualTypeOf<kopaiQuery.TraceAggregateQuery>();
+    // build() now additively brands the return with a type-only `__aggRow`
+    // phantom; the query body is otherwise unchanged, so the built
+    // value is still assignable to TraceAggregateQuery and stripping the
+    // phantom recovers exact equality.
+    expectTypeOf(q).toExtend<kopaiQuery.TraceAggregateQuery>();
+    expectTypeOf<
+      Omit<typeof q, "__aggRow">
+    >().toEqualTypeOf<kopaiQuery.TraceAggregateQuery>();
   });
 
   it("traces.raw -> TraceRawQuery", () => {
@@ -49,7 +56,10 @@ describe("build return-type equality", () => {
       .timeRelative("1h")
       .summary()
       .build();
-    expectTypeOf(q).toEqualTypeOf<kopaiQuery.LogAggregateQuery>();
+    expectTypeOf(q).toExtend<kopaiQuery.LogAggregateQuery>();
+    expectTypeOf<
+      Omit<typeof q, "__aggRow">
+    >().toEqualTypeOf<kopaiQuery.LogAggregateQuery>();
   });
 
   it("logs.raw -> LogRawQuery", () => {
@@ -58,40 +68,41 @@ describe("build return-type equality", () => {
   });
 
   it("metrics.aggregate -> MetricAggregateQuery", () => {
-    const q = kq.metrics
+    const q = kq
+      .metrics("Gauge")
       .aggregate()
       .measure((m) => m.count("c"))
-      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .summary()
       .build();
-    expectTypeOf(q).toEqualTypeOf<kopaiQuery.MetricAggregateQuery>();
+    expectTypeOf(q).toExtend<kopaiQuery.MetricAggregateQuery>();
+    expectTypeOf<
+      Omit<typeof q, "__aggRow">
+    >().toEqualTypeOf<kopaiQuery.MetricAggregateQuery>();
   });
 
-  it("metrics.aggregate without a MetricType filter throws KopaiQueryBuildError (M1)", () => {
-    // validateKopaiQuery requires a top-level MetricType filter on metric
-    // queries; the builder must surface that locally instead of producing a
-    // query the server rejects with 400.
-    let caught: unknown;
-    try {
-      kq.metrics
-        .aggregate()
-        .measure((m) => m.count("c"))
-        .timeRelative("1h")
-        .summary()
-        .build();
-    } catch (e) {
-      caught = e;
-    }
-    assertBuildError(caught);
-    expect(caught.message).toContain("MetricType");
+  it("metrics.aggregate auto-emits the MetricType pin so build() succeeds without a manual .where", () => {
+    // kq.metrics(type) makes the MetricType pin a builder
+    // argument — the pin filter is auto-emitted, so no manual
+    // .where(eq("MetricType", …)) is required for build()/validateKopaiQuery.
+    const q = kq
+      .metrics("Gauge")
+      .aggregate()
+      .measure((m) => m.count("c"))
+      .timeRelative("1h")
+      .summary()
+      .build();
+    expect(q.filters).toEqual([
+      { column: "MetricType", op: "eq", value: "Gauge" },
+    ]);
+    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
   });
 
   it("metrics.raw -> MetricRawQuery", () => {
-    const q = kq.metrics
+    const q = kq
+      .metrics("Gauge")
       .raw()
       .dimension("MetricName")
-      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .build();
     expectTypeOf(q).toEqualTypeOf<kopaiQuery.MetricRawQuery>();
@@ -179,11 +190,11 @@ describe("cross-signal measure rejection", () => {
         .aggregate()
         // @ts-expect-error throughput trace-only
         .measure((m) => m.throughput("tp"));
-      kq.metrics
+      kq.metrics("Gauge")
         .aggregate()
         // @ts-expect-error errorRate trace-only
         .measure((m) => m.errorRate("er"));
-      kq.metrics
+      kq.metrics("Gauge")
         .aggregate()
         // @ts-expect-error throughput trace-only
         .measure((m) => m.throughput("tp"));
@@ -222,7 +233,7 @@ describe("unknown column rejection", () => {
       // @ts-expect-error MetricUnit is metrics-only
       kq.traces.aggregate().dimension("MetricUnit");
       // @ts-expect-error SpanKind is traces-only
-      kq.metrics.aggregate().dimension("SpanKind");
+      kq.metrics("Gauge").aggregate().dimension("SpanKind");
     }
     expect(true).toBe(true);
   });
@@ -244,10 +255,12 @@ describe("unknown column rejection", () => {
         // @ts-expect-error Duration is traces-only
         f.gt("Duration", 100)
       );
-      kq.metrics.aggregate().where((f) =>
-        // @ts-expect-error SpanKind is traces-only
-        f.eq("SpanKind", "Server")
-      );
+      kq.metrics("Gauge")
+        .aggregate()
+        .where((f) =>
+          // @ts-expect-error SpanKind is traces-only
+          f.eq("SpanKind", "Server")
+        );
     }
     expect(true).toBe(true);
   });
@@ -258,10 +271,259 @@ describe("unknown column rejection", () => {
       kq.traces.aggregate().dimension({ container: "LogAttributes", key: "k" });
       // @ts-expect-error SpanAttributes is traces-only
       kq.logs.aggregate().dimension({ container: "SpanAttributes", key: "k" });
-      kq.metrics
+      kq.metrics("Gauge")
         .aggregate()
         // @ts-expect-error LogAttributes is logs-only
         .dimension({ container: "LogAttributes", key: "k" });
+    }
+    expect(true).toBe(true);
+  });
+});
+
+// ============================================================
+// Literal-union overloads for enum-valued columns
+// ============================================================
+describe("enum column literal-union overloads", () => {
+  it("rejects wrong-cased / bogus enum values; accepts correct ones", () => {
+    if (false as boolean) {
+      kq.traces.aggregate().where((f) =>
+        // @ts-expect-error wrong casing — StatusCode is "Error" not "ERROR"
+        f.eq("StatusCode", "ERROR")
+      );
+      kq.traces.aggregate().where((f) =>
+        // @ts-expect-error wrong casing inside in()
+        f.in("StatusCode", ["ERROR"])
+      );
+      kq.traces.aggregate().where((f) =>
+        // @ts-expect-error wrong casing — SpanKind is "Server" not "SERVER"
+        f.eq("SpanKind", "SERVER")
+      );
+      kq.metrics("Gauge")
+        .aggregate()
+        .where((f) =>
+          // @ts-expect-error MetricType is "Gauge" not "gauge"
+          f.eq("MetricType", "gauge")
+        );
+    }
+    kq.traces.aggregate().where((f) => f.eq("StatusCode", "Error"));
+    kq.traces.aggregate().where((f) => f.in("StatusCode", ["Ok", "Error"]));
+    kq.traces.aggregate().where((f) => f.eq("SpanKind", "Server")); // real SPAN_KIND value
+    kq.metrics("Gauge")
+      .aggregate()
+      .where((f) => f.eq("MetricType", "Gauge"));
+    expect(true).toBe(true);
+  });
+
+  it("non-enum columns keep the wide value surface", () => {
+    kq.traces.aggregate().where((f) => f.eq("SpanName", "anything"));
+    kq.traces.aggregate().where((f) => f.eq("Duration", 123));
+    expect(true).toBe(true);
+  });
+
+  it("a string-typed value is rejected for an enum column (type)", () => {
+    if (false as boolean) {
+      const code: string = "Error";
+      kq.traces.aggregate().where((f) =>
+        // @ts-expect-error a wide `string` is not a StatusCodeValue
+        f.eq("StatusCode", code)
+      );
+    }
+    expect(true).toBe(true);
+  });
+});
+
+// The first argument type of the trace filter DSL — used for type-level
+// assertions without constructing a full builder.
+type TraceFilterDsl = Parameters<
+  Parameters<ReturnType<typeof kq.traces.aggregate>["where"]>[0]
+>[0];
+
+// ============================================================
+// MetricType as a builder argument
+// ============================================================
+describe("MetricType as a builder argument", () => {
+  it("build() contains the auto-emitted MetricType pin and validates", () => {
+    const q = kq
+      .metrics("Gauge")
+      .aggregate()
+      .measure((m) => m.avg("Value", "v"))
+      .timeRelative("1h")
+      .summary()
+      .build();
+    expect(q.filters).toContainEqual({
+      column: "MetricType",
+      op: "eq",
+      value: "Gauge",
+    });
+    // No manual MetricType .where was needed — validateKopaiQuery passes via
+    // the round-trip parse below (build() already ran it without throwing).
+    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
+  });
+
+  it("Histogram exposes Count/Sum/Min/Max; build validates", () => {
+    const q = kq
+      .metrics("Histogram")
+      .aggregate()
+      .measure((m) => m.max("Max", "mx"))
+      .measure((m) => m.min("Min", "mn"))
+      .measure((m) => m.sum("Sum", "s"))
+      .timeRelative("1h")
+      .summary()
+      .build();
+    expect(q.filters).toContainEqual({
+      column: "MetricType",
+      op: "eq",
+      value: "Histogram",
+    });
+    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
+  });
+
+  it("rejects a Histogram-only column on a Gauge builder (compile error)", () => {
+    if (false as boolean) {
+      kq.metrics("Gauge")
+        .aggregate()
+        // @ts-expect-error "Min" is Histogram-only; not on Gauge
+        .measure((m) => m.min("Min", "mn"));
+      kq.metrics("Gauge")
+        .aggregate()
+        // @ts-expect-error "Count" is not a Gauge value column
+        .measure((m) => m.sum("Count", "c"));
+    }
+    // Inverse: "Value" is invalid on Histogram.
+    if (false as boolean) {
+      kq.metrics("Histogram")
+        .aggregate()
+        // @ts-expect-error "Value" is Gauge/Sum-only; not on Histogram
+        .measure((m) => m.avg("Value", "v"));
+    }
+    expect(true).toBe(true);
+  });
+
+  it("Gauge accepts Value; Histogram accepts Count/Sum/Min/Max (positive)", () => {
+    kq.metrics("Gauge")
+      .aggregate()
+      .measure((m) => m.avg("Value", "v"));
+    kq.metrics("Histogram")
+      .aggregate()
+      .measure((m) => m.max("Max", "mx"));
+    expect(true).toBe(true);
+  });
+
+  it("errorRate/throughput stay trace-only on metric builders (compile error)", () => {
+    if (false as boolean) {
+      kq.metrics("Gauge")
+        .aggregate()
+        // @ts-expect-error errorRate trace-only
+        .measure((m) => m.errorRate("er"));
+      kq.metrics("Sum")
+        .aggregate()
+        // @ts-expect-error throughput trace-only
+        .measure((m) => m.throughput("tp"));
+    }
+    expect(true).toBe(true);
+  });
+
+  it("the auto-emitted SDK per-type column literals match core (no drift)", () => {
+    // Source of truth: METRIC_STRUCTURAL_COLUMNS_BY_TYPE. The SDK narrows the
+    // column surface using hand-written literal unions; assert each type's
+    // structural value columns exist in the core set so drift fails CI.
+    const byType = kopaiQuery.METRIC_STRUCTURAL_COLUMNS_BY_TYPE;
+    expect(byType.Gauge.has("Value")).toBe(true);
+    expect(byType.Sum.has("Value")).toBe(true);
+    expect(byType.Sum.has("IsMonotonic")).toBe(true);
+    for (const c of ["Count", "Sum", "Min", "Max"]) {
+      expect(byType.Histogram.has(c)).toBe(true);
+      expect(byType.ExponentialHistogram.has(c)).toBe(true);
+    }
+    expect(byType.Summary.has("Count")).toBe(true);
+    expect(byType.Summary.has("Sum")).toBe(true);
+    // Cross-type exclusions the SDK type narrowing relies on:
+    expect(byType.Gauge.has("Min")).toBe(false);
+    expect(byType.Gauge.has("Count")).toBe(false);
+    expect(byType.Histogram.has("Value")).toBe(false);
+    expect(byType.Summary.has("Min")).toBe(false);
+  });
+});
+
+// ============================================================
+// Duration filters accept human durations
+// ============================================================
+describe("Duration filters accept human durations", () => {
+  it('gt("Duration","1s") compiles and the compiled value is 1_000_000_000', () => {
+    const q = kq.traces
+      .raw()
+      .where((f) => f.gt("Duration", "1s"))
+      .timeRelative("1h")
+      .build();
+    expect(q.filters).toEqual([
+      { column: "Duration", op: "gt", value: 1_000_000_000 },
+    ]);
+    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
+  });
+
+  it("a raw nanosecond number still works", () => {
+    const q = kq.traces
+      .raw()
+      .where((f) => f.gte("Duration", 500))
+      .timeRelative("1h")
+      .build();
+    expect(q.filters).toEqual([{ column: "Duration", op: "gte", value: 500 }]);
+    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
+  });
+
+  it("other duration units transform too (2h, 30m)", () => {
+    const q = kq.traces
+      .raw()
+      .where((f) => f.lt("Duration", "2h"))
+      .where((f) => f.gt("Duration", "30m"))
+      .timeRelative("1d")
+      .build();
+    expect(q.filters).toEqual([
+      { column: "Duration", op: "lt", value: 2 * 60 * 60 * 1_000_000_000 },
+      { column: "Duration", op: "gt", value: 30 * 60 * 1_000_000_000 },
+    ]);
+    expect(kopaiQuery.KopaiQuery.parse(q)).toEqual(q);
+  });
+
+  it("a type-valid but runtime-invalid duration ('0s') is rejected at build (KopaiQueryBuildError)", () => {
+    // The template-literal DurationString accepts "0s" (a number + unit), but
+    // the runtime schema/regex rejects zero. durationStringToNanos passes it
+    // through unchanged, so the numeric value schema surfaces a clear
+    // KopaiQueryBuildError at build — the runtime backstop for the cases the
+    // type can't express (zero, non-integer magnitudes, JS callers).
+    let err: unknown;
+    try {
+      kq.traces
+        .raw()
+        .where((f) => f.gt("Duration", "0s"))
+        .timeRelative("1h")
+        .build();
+    } catch (e) {
+      err = e;
+    }
+    assertBuildError(err);
+    expect(err.issues.some((i) => i.path.includes("filters"))).toBe(true);
+  });
+
+  it("accepts a number or a DurationString literal; rejects a wide/malformed string", () => {
+    type GtValue = Parameters<TraceFilterDsl["gt"]>[1];
+    // A number (ns) and a valid duration-string literal are accepted.
+    expectTypeOf<number>().toExtend<GtValue>();
+    expectTypeOf<"1s">().toExtend<GtValue>();
+    expectTypeOf<"2h">().toExtend<GtValue>();
+    // The template-literal DurationString rejects a wide `string` and
+    // unit-less / wrong-unit literals at compile time (was loosely `string`).
+    expectTypeOf<string>().not.toExtend<GtValue>();
+    expectTypeOf<"5">().not.toExtend<GtValue>();
+    expectTypeOf<"250ms">().not.toExtend<GtValue>();
+  });
+
+  it("rejects a non-duration value type for gt (type)", () => {
+    if (false as boolean) {
+      kq.traces.raw().where((f) =>
+        // @ts-expect-error a boolean is not a DurationValue
+        f.gt("Duration", true)
+      );
     }
     expect(true).toBe(true);
   });
@@ -358,10 +620,11 @@ describe("runtime: happy paths — minimum-valid per variant", () => {
   });
 
   it("metrics.aggregate minimum-valid", () => {
-    const q = kq.metrics
+    // MetricType pin auto-emitted by kq.metrics("Gauge").
+    const q = kq
+      .metrics("Gauge")
       .aggregate()
       .measure((m) => m.count("c"))
-      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .summary()
       .build();
@@ -377,10 +640,10 @@ describe("runtime: happy paths — minimum-valid per variant", () => {
   });
 
   it("metrics.raw minimum-valid", () => {
-    const q = kq.metrics
+    const q = kq
+      .metrics("Gauge")
       .raw()
       .dimension("MetricName")
-      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .build();
     expect(q).toEqual({
@@ -476,11 +739,11 @@ describe("runtime: all-features aggregate", () => {
   });
 
   it("metrics with all features", () => {
-    const q = kq.metrics
+    const q = kq
+      .metrics("Gauge")
       .aggregate()
       .measure((m) => m.avg("Value", "avg_v"))
       .dimension("MetricName")
-      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("30m")
       .timeSeries("1m")
       .build();
@@ -619,11 +882,12 @@ describe("runtime: filter coverage", () => {
   });
 
   it("boolean filter", () => {
-    // IsMonotonic exists only on the Sum metric type, so pin MetricType=Sum.
-    const q = kq.metrics
+    // IsMonotonic exists only on the Sum metric type; kq.metrics("Sum")
+    // pins it and exposes IsMonotonic in the column surface.
+    const q = kq
+      .metrics("Sum")
       .aggregate()
       .measure((m) => m.count("c"))
-      .where((f) => f.eq("MetricType", "Sum"))
       .where((f) => f.eq("IsMonotonic", true))
       .timeRelative("1h")
       .summary()
@@ -887,11 +1151,11 @@ describe("runtime: measure ops per signal", () => {
 
   it("metrics: numeric ops", () => {
     // Value exists on the Gauge metric type.
-    const q = kq.metrics
+    const q = kq
+      .metrics("Gauge")
       .aggregate()
       .measure((m) => m.count("c"))
       .measure((m) => m.sum("Value", "s"))
-      .where((f) => f.eq("MetricType", "Gauge"))
       .timeRelative("1h")
       .summary()
       .build();
@@ -1028,12 +1292,15 @@ describe("runtime: validation errors", () => {
 
   it("empty .in([]) -> validation error on values", () => {
     let err: unknown;
+    // SpanName keeps the wide string[] overload (SpanKind would require the
+    // SpanKindValue literal union). The empty-array rejection is what
+    // is under test here, independent of column.
     const emptyValues: string[] = [];
     try {
       kq.traces
         .aggregate()
         .measure((m) => m.count("c"))
-        .where((f) => f.in("SpanKind", emptyValues))
+        .where((f) => f.in("SpanName", emptyValues))
         .timeRelative("1h")
         .summary()
         .build();
@@ -1274,10 +1541,10 @@ describe("runtime: round-trip parse", () => {
         },
       },
       {
-        q: kq.metrics
+        q: kq
+          .metrics("Gauge")
           .aggregate()
           .measure((m) => m.count("c"))
-          .where((f) => f.eq("MetricType", "Gauge"))
           .timeRelative("1h")
           .summary()
           .build(),
@@ -1291,10 +1558,10 @@ describe("runtime: round-trip parse", () => {
         },
       },
       {
-        q: kq.metrics
+        q: kq
+          .metrics("Gauge")
           .raw()
           .dimension("MetricName")
-          .where((f) => f.eq("MetricType", "Gauge"))
           .timeRelative("1h")
           .build(),
         expected: {

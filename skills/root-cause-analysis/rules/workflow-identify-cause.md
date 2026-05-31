@@ -38,7 +38,7 @@ the investigation.
 
 Include three evidence tiles:
 
-1. **The anomaly** — `MetricTimeSeries` (trend) or `MetricStat` (KPI) for the metric that spiked during the incident (error rate, latency, resource exhaustion). Pin one `MetricType`; build the tile query with `kq.metrics.raw()` (metric tiles render raw `Value` rows).
+1. **The anomaly** — `MetricTimeSeries` (trend) or `MetricStat` (KPI) for the metric that spiked during the incident (error rate, latency, resource exhaustion). Build the tile query with `kq.metrics("<Type>").raw()` (metric tiles render raw `Value` rows; the builder arg auto-pins the `MetricType`).
 2. **Affected logs** — `LogTimeline` fed by error-level logs (`SeverityNumber >= 17`), scoped to the affected service.
 3. **Representative trace** — `TraceDetail` for one error trace from the incident.
 
@@ -53,10 +53,10 @@ const TRACE_ID = "<representative error traceId>";
 
 try {
   // 1. Anomaly — Gauge metric that spiked (use discoverMetrics() for name/type/unit).
-  // Metric tiles render raw rows, so build with kq.metrics.raw() (not .aggregate()).
-  const anomaly = kq.metrics
+  // Metric tiles render raw rows, so build with kq.metrics("Type").raw() (not .aggregate()).
+  const anomaly = kq
+    .metrics("Gauge") // MetricType is the builder arg — auto-pins it; no manual filter needed.
     .raw()
-    .where((f) => f.eq("MetricType", "Gauge")) // metrics MUST pin one MetricType
     .where((f) => f.eq("MetricName", "process.runtime.memory"))
     .where((f) => f.eq("service.name", SERVICE))
     .timeRelative("3h")

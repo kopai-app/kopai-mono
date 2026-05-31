@@ -1,6 +1,6 @@
 {
   "name": "kopai/create-dashboard",
-  "version": "1.3.0",
+  "version": "1.4.1",
   "private": false,
   "summary": "Build Kopai observability dashboards from OpenTelemetry metrics, logs, and traces by composing tiles — time-series charts, stat/KPI numbers, histograms, log timelines, and trace-detail views — into a dashboard via the Kopai SDK. Use this skill whenever the user wants to visualize, chart, monitor, or 'keep an eye on' telemetry — e.g. 'make a dashboard', 'monitoring view', 'KPI panel', 'chart request latency and throughput', 'an incident board with error logs and a trace viewer' — even if they don't say the word 'dashboard' — and when another workflow needs to present telemetry visually (e.g. after a root-cause analysis). This creates Kopai dashboards specifically. Do NOT use it to investigate or root-cause an issue (use root-cause-analysis), to add instrumentation (use otel-instrumentation), to build Grafana/Prometheus dashboards, or to code React/UI chart components.",
   "skills": {

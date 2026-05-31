@@ -14,8 +14,7 @@ endpoints by error rate, then drill into one trace and correlate its error logs.
 Run: `npx tsx http-errors.mts`. Assumes the SKILL.md bootstrap
 (`const client = clientFromConfig()`, `import { kq, KopaiQueryBuildError } from "@kopai/sdk"`).
 
-**1. Rank failing endpoints** — `errorRate` counts `"Error"` spans server-side, so you
-never guess the `StatusCode` casing:
+**1. Rank failing endpoints** — `errorRate` counts `"Error"` spans server-side:
 
 ```ts
 try {
@@ -25,12 +24,12 @@ try {
     .measure((m) => m.count("n"))
     .dimension("http.route")
     .dimension("service.name")
-    .where((f) => f.eq("StatusCode", "Error")) // title case — never "ERROR"
+    .where((f) => f.eq("StatusCode", "Error")) // "Unset" | "Ok" | "Error"
     .timeRelative("1h")
     .summary()
     .orderByMeasure("error_rate", "desc")
     .build();
-  const { data } = await client.queryTracesAggregate(q); // typed rows
+  const { data } = await client.query(q); // typed rows
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   if (e instanceof KopaiQueryBuildError) console.error(e.issues);
@@ -64,7 +63,7 @@ const logs = kq.logs
   .where((f) => f.gte("SeverityNumber", 17))
   .timeRelative("1h")
   .build();
-const { data } = await client.queryLogsRaw(logs); // raw → { data, nextCursor }
+const { data } = await client.query(logs); // raw query → { data, nextCursor }
 ```
 
 For a known signature, body-substring instead: `.where((f) => f.contains("Body", "connection refused"))`.

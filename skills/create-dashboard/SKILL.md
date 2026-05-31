@@ -4,7 +4,7 @@ description: Build Kopai observability dashboards from OpenTelemetry metrics, lo
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.3.0"
+  version: "1.4.1"
 ---
 
 # Create Dashboard with Kopai
@@ -36,13 +36,18 @@ of the project's module type. Requires `@kopai/sdk` installed (`npm i @kopai/sdk
 **Output** — `console.log(dash.id)` so the new dashboard id lands on stdout. Wrap the
 build + create in try/catch.
 
+**Typed results** — `discoverMetrics()` and `client.query(q)` return fully typed values
+(metric `name`/`type`/`unit`, aggregate measure values as `number`, etc.). When you
+probe/verify data, iterate the results directly — **don't cast to `any`/`any[]`**.
+
 ## Two rules that will save you a broken dashboard
 
-1. **Feed data tiles with a RAW query** — `kq.<signal>.raw()…build()`, not `.aggregate()`.
+1. **Feed data tiles with a RAW query** — `kq.metrics("<Type>").raw()…build()`, not `.aggregate()`.
    The tile renderers (MetricStat/MetricTimeSeries/MetricHistogram/MetricTable, LogTimeline,
    TraceDetail) plot **raw rows**; an aggregate/`summary`/`timeSeries` query is rejected
-   at render with _"this panel displays raw metric rows … use a raw metric query"_. Pin
-   `MetricType` (+ usually `MetricName`) and a time window on metric tiles.
+   at render with _"this panel displays raw metric rows … use a raw metric query"_. Choose the
+   `MetricType` up front via `kq.metrics("Gauge")` (auto-pinned), add a `MetricName` filter and
+   a time window on metric tiles.
 2. **Set every declared prop — use `null` for unused ones.** The render-time schema
    requires nullable props to be _present_, not omitted. Omitting them passes
    `createDashboard` but fails at render with _"invalid layout: …props.description:
@@ -53,16 +58,16 @@ unit }`, etc.
 ## Backend caveats
 
 - **Every tile query needs a time window** — `.timeRelative("1h")` / `.timeAbsolute(startISO, endISO)`.
-- **Metric queries must pin one `MetricType`**: `.where(f => f.eq("MetricType", "Gauge"))`. Use the type from `discoverMetrics()`. Types: `Gauge | Sum | Histogram | ExponentialHistogram | Summary`.
+- **Choose the `MetricType` up front via `kq.metrics("Gauge")`** — it's auto-pinned, no manual `.where("MetricType", …)` needed. Use the type from `discoverMetrics()`. Types: `Gauge | Sum | Histogram | ExponentialHistogram | Summary`.
 - The SDK field is **`uiTreeVersion`** (the CLI flag is `--tree-version`). Current tree version: **`0.14.0`**.
 
 ## Workflow
 
 1. **Discover metrics** — `const { metrics } = await client.discoverMetrics();` Each entry
-   is `{ name, type, unit, description, attributes, resourceAttributes }`. Match a tile's
-   `MetricType` filter to the metric's `type`, and set the tile `unit` prop from `unit`.
-2. **Build each tile's query with `kq.<signal>.raw()`** — returns a `KopaiQuery` object;
-   hold it in a variable.
+   is `{ name, type, unit, description, attributes, resourceAttributes }`. Pass the metric's
+   `type` to `kq.metrics("<Type>")`, and set the tile `unit` prop from `unit`.
+2. **Build each tile's query with `kq.metrics("<Type>").raw()`** (or `kq.logs.raw()` /
+   `kq.traces.raw()`) — returns a `KopaiQuery` object; hold it in a variable.
 3. **Assemble the `uiTree`** — embed the built query into the tile:
    `dataSource: { method: "query", params: <builtQuery> }`. Set every prop (null for unused).
 4. **Create** —
@@ -88,9 +93,9 @@ import { clientFromConfig } from "@kopai/sdk/node";
 const client = clientFromConfig();
 
 // Tile data: a RAW metric query (tiles render raw rows, not aggregates).
-const cpuSeries = kq.metrics
+const cpuSeries = kq
+  .metrics("Gauge") // MetricType chosen up front, auto-pinned
   .raw()
-  .where((f) => f.eq("MetricType", "Gauge")) // metrics MUST pin one MetricType
   .where((f) => f.eq("MetricName", "system.cpu.utilization"))
   .timeRelative("1h")
   .limit(500)
@@ -141,14 +146,14 @@ Layout (have children, no `dataSource`): **Stack**, **Grid**, **Card**. Static:
 Data tiles — feed each with a **raw** `kq` query via `method: "query"` (legacy methods
 still work, listed for fallback):
 
-| Component        | Best for        | Metric types                    | dataSource methods                                      | `kq` params example (RAW)                                                                                                           |
-| ---------------- | --------------- | ------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| MetricStat       | KPI number      | Sum, Gauge                      | `searchMetricsPage`, `searchAggregatedMetrics`, `query` | `kq.metrics.raw().where(f=>f.eq("MetricType","Sum")).where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()`       |
-| MetricTimeSeries | Trend chart     | Sum, Gauge, Histogram           | `searchMetricsPage`, `query`                            | `kq.metrics.raw().where(f=>f.eq("MetricType","Gauge")).where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()`     |
-| MetricHistogram  | Distribution    | Histogram, ExponentialHistogram | `searchMetricsPage`, `query`                            | `kq.metrics.raw().where(f=>f.eq("MetricType","Histogram")).where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()` |
-| MetricTable      | Tabular         | any                             | `searchMetricsPage`, `query`                            | `kq.metrics.raw().where(f=>f.eq("MetricType","Gauge")).where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()`     |
-| LogTimeline      | Log stream      | n/a                             | `searchLogsPage`, `query`                               | `kq.logs.raw().where(f=>f.gte("SeverityNumber",17)).timeRelative("1h").limit(100).build()`                                          |
-| TraceDetail      | Trace inspector | n/a                             | `searchTracesPage`, `searchTraceSummariesPage`, `query` | `kq.traces.raw().where(f=>f.eq("StatusCode","Error")).timeRelative("1h").limit(50).build()`                                         |
+| Component        | Best for        | Metric types                    | dataSource methods                                      | `kq` params example (RAW)                                                                               |
+| ---------------- | --------------- | ------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| MetricStat       | KPI number      | Sum, Gauge                      | `searchMetricsPage`, `searchAggregatedMetrics`, `query` | `kq.metrics("Sum").raw().where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()`       |
+| MetricTimeSeries | Trend chart     | Sum, Gauge, Histogram           | `searchMetricsPage`, `query`                            | `kq.metrics("Gauge").raw().where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()`     |
+| MetricHistogram  | Distribution    | Histogram, ExponentialHistogram | `searchMetricsPage`, `query`                            | `kq.metrics("Histogram").raw().where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()` |
+| MetricTable      | Tabular         | any                             | `searchMetricsPage`, `query`                            | `kq.metrics("Gauge").raw().where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()`     |
+| LogTimeline      | Log stream      | n/a                             | `searchLogsPage`, `query`                               | `kq.logs.raw().where(f=>f.gte("SeverityNumber",17)).timeRelative("1h").limit(100).build()`              |
+| TraceDetail      | Trace inspector | n/a                             | `searchTracesPage`, `searchTraceSummariesPage`, `query` | `kq.traces.raw().where(f=>f.eq("StatusCode","Error")).timeRelative("1h").limit(50).build()`             |
 
 Sizing/props: set `height: 300` on MetricTimeSeries/MetricHistogram, `height: 600` on
 LogTimeline (smaller collapses it to a count badge); MetricStat needs no height. Set

@@ -58,13 +58,11 @@ const aggregateResponseSchema = z.object({
 });
 
 // Aggregate result shape keyed off the query's `output.type`: timeSeries rows
-// carry an extra `bucket_start` ISO string. Mirrors core's KopaiQueryResult so
-// the narrow query*Aggregate methods stay consistent with query().
-type AggregateResultFor<Q extends { output: { type: string } }> = Q extends {
-  output: { type: "timeSeries" };
-}
-  ? { data: (kopaiQuery.KopaiAggregateRow & { bucket_start: string })[] }
-  : { data: kopaiQuery.KopaiAggregateRow[] };
+// carry an extra `bucket_start` ISO string. Re-exported from core (single
+// source of truth) so the narrow query*Aggregate methods stay consistent with
+// the polymorphic query() and core's KopaiQueryResult.
+type AggregateResultFor<Q extends { output: { type: string } }> =
+  kopaiQuery.AggregateResultFor<Q>;
 
 // Concrete union of every result shape `query()` can return. Use this when
 // consuming a query response without a statically-known query type (the

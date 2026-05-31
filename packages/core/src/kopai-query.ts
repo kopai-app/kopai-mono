@@ -14,15 +14,54 @@ import {
 // Primitives
 // ============================================================
 
+const DURATION_STRING_RE = /^[1-9]\d*[smhdw]$/;
+
 const DurationString = z
   .string()
-  .regex(/^[1-9]\d*[smhdw]$/, {
+  .regex(DURATION_STRING_RE, {
     error:
       'Duration must be a positive integer > 0 + unit (s,m,h,d,w) — e.g. "30s", "2h", "7d".',
   })
   .describe(
     'Duration string: positive integer > 0 + unit suffix. Units: s=seconds, m=minutes, h=hours, d=days, w=weeks. Examples: "30s", "30m", "2h", "7d", "2w".'
   );
+
+/**
+ * Human-readable duration string, e.g. "30s", "2h", "7d": a positive-integer
+ * magnitude + unit suffix (s,m,h,d,w). The template-literal type rejects
+ * unit-less ("5") and wrong-unit ("250ms") strings at COMPILE time. It cannot
+ * express the "positive, integer, no leading zero" constraint, so the runtime
+ * schema / `isDurationString` still backstop edge cases ("0s", "1.5h").
+ */
+export type DurationString = `${number}${"s" | "m" | "h" | "d" | "w"}`;
+
+// Nanosecond multiplier per duration unit. Kept local to avoid a circular
+// import with kopai-query-compiler.ts (which imports this module).
+const DURATION_UNIT_TO_NANOS: Record<string, number> = {
+  s: 1_000_000_000,
+  m: 60 * 1_000_000_000,
+  h: 60 * 60 * 1_000_000_000,
+  d: 24 * 60 * 60 * 1_000_000_000,
+  w: 7 * 24 * 60 * 60 * 1_000_000_000,
+};
+
+/** True if `s` is a valid DurationString ("1s", "2h", …). */
+export function isDurationString(s: string): boolean {
+  return DURATION_STRING_RE.test(s);
+}
+
+/**
+ * Parses a DurationString ("1s", "2h", …) into nanoseconds. Used by the SDK
+ * builder to normalize human-readable duration comparison values.
+ * Returns the input unchanged when it is not a valid duration string, so the
+ * downstream numeric schema surfaces a clear validation error.
+ */
+export function durationStringToNanos(s: string): number | string {
+  if (!DURATION_STRING_RE.test(s)) return s;
+  const value = Number(s.slice(0, -1));
+  const unit = s.slice(-1);
+  return value * (DURATION_UNIT_TO_NANOS[unit] ?? 0);
+}
 
 const ISODateString = z
   .string()
@@ -1261,6 +1300,42 @@ export {
 
 export type KopaiAggregateRow = Record<string, string | number | null>;
 
+// Aggregate-mode result keyed off the query's `output.type`. A built
+// aggregate query's `output` is itself the `summary | timeSeries` union,
+// so the discrimination must happen *inside* an `extends { mode:
+// "aggregate" }` guard — discriminating on `output.type` at the top level
+// (as a sibling of the raw branches) makes a union `output` match neither
+// literal and collapse to `never`. timeSeries rows carry an extra
+// `bucket_start` ISO string; summary rows do not.
+//
+// Fully-typed aggregate rows. The SDK builder's `.build()` brands
+// its return type with a TYPE-ONLY phantom `__aggRow` (never a runtime
+// property): `{ [measureAlias]: number } & { [dimensionCol]: string|number
+// |null }`. When present, the row type is that branded shape so consumers
+// read `data[0].error_rate` as `number` with no cast. The branded shape is
+// EXACT — no index signature — so only the listed aliases/dimensions are
+// typed (a typo on an alias is a compile error); columns from attr-ref
+// dimensions are not named on it. The branding lives entirely in the SDK's TS
+// types — core only structurally reads `{ __aggRow?: infer R }`, so there is
+// no runtime dependency on the SDK.
+// A plain (un-branded) aggregate query — e.g. the general `KopaiQuery` or a
+// `TraceAggregateQuery` without the phantom — has no usable `__aggRow`
+// (inference yields `unknown`), so it falls back to the wide
+// `KopaiAggregateRow`. Non-breaking: existing callers keep the wide row.
+type AggRowFor<Q> = Q extends { __aggRow?: infer R }
+  ? // An optional property is satisfied by absence, so an un-branded Q still
+    // matches and infers R = unknown. The `extends object` guard rejects
+    // that, falling back to the wide row; a real branded shape passes.
+    [R] extends [object]
+    ? R
+    : KopaiAggregateRow
+  : KopaiAggregateRow;
+
+export type AggregateResultFor<Q extends { output: { type: string } }> =
+  Q extends { output: { type: "timeSeries" } }
+    ? { data: (AggRowFor<Q> & { bucket_start: string })[] }
+    : { data: AggRowFor<Q>[] };
+
 export type KopaiQueryResult<Q extends KopaiQuery = KopaiQuery> = Q extends {
   signal: "traces";
   mode: "raw";
@@ -1270,11 +1345,9 @@ export type KopaiQueryResult<Q extends KopaiQuery = KopaiQuery> = Q extends {
     ? { data: OtelLogsRow[]; nextCursor: string | null }
     : Q extends { signal: "metrics"; mode: "raw" }
       ? { data: OtelMetricsRow[]; nextCursor: string | null }
-      : Q extends { mode: "aggregate"; output: { type: "summary" } }
-        ? { data: KopaiAggregateRow[] }
-        : Q extends { mode: "aggregate"; output: { type: "timeSeries" } }
-          ? { data: (KopaiAggregateRow & { bucket_start: string })[] }
-          : never;
+      : Q extends { mode: "aggregate"; output: { type: string } }
+        ? AggregateResultFor<Q>
+        : never;
 
 // Concrete, non-generic union of every KopaiQuery result shape. This is the
 // "collapsed" form of KopaiQueryResult, for callers that handle a query

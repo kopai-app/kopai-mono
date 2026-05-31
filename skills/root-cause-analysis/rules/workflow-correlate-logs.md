@@ -16,7 +16,7 @@ const q = kq.logs
   .where((f) => f.eq("TraceId", traceId))
   .timeRelative("1h")
   .build();
-const { data } = await client.queryLogsRaw(q);
+const { data } = await client.query(q);
 console.log(JSON.stringify(data, null, 2));
 ```
 

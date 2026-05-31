@@ -1,15 +1,12 @@
 # Trace query reference
 
 Columns, filters, and measures for `kq.traces.aggregate()` / `kq.traces.raw()` (and the
-`client.searchTraces(...)` filter shape). Build with `kq`, run with the typed method:
-`client.queryTracesAggregate(q)` (→ `{ data }`) or `client.queryTracesRaw(q)`
-(→ `{ data, nextCursor }`). The polymorphic `client.query(q)` works too but its result is
-loosely typed — prefer the narrow method to keep typed rows.
+`client.searchTraces(...)` filter shape). Build with `kq`, run with `client.query(q)` —
+fully typed: aggregate → `{ data }`, raw → `{ data, nextCursor }`.
 
-> Gotcha: a wrong column or value casing (e.g. `StatusCode: "ERROR"` instead of `"Error"`,
-> or the non-column `ServiceName` instead of `service.name`) **compiles and returns zero
-> rows** — never a real error. An empty result on a busy system usually means a wrong
-> column/value, not real absence.
+> Gotcha: enum columns (`StatusCode`, `SpanKind`) and column names are type-checked — a
+> wrong value (e.g. `StatusCode: "ERROR"` instead of `"Error"`) or the non-column
+> `ServiceName` instead of the dotted `"service.name"` attribute is a **compile error**.
 
 ## How columns work
 
@@ -23,16 +20,16 @@ Containers for traces: **`SpanAttributes`** (span-specific) and **`ResourceAttri
 
 ## Structural columns
 
-| Column                                    | Notes                                                                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `TraceId`, `SpanId`, `ParentSpanId`       | IDs; `ParentSpanId` empty on root spans (call chain)                                                       |
-| `SpanName`                                | Operation name                                                                                             |
-| `SpanKind`                                | `INTERNAL` \| `SERVER` \| `CLIENT` \| `PRODUCER` \| `CONSUMER`                                             |
-| `StatusCode`                              | **`"Unset"` \| `"Ok"` \| `"Error"`** (title case — not `"ERROR"`). Successful spans are usually `"Unset"`. |
-| `StatusMessage`                           | Error detail / exception summary                                                                           |
-| `Duration`                                | **Nanoseconds** (1ms = 1e6, 1s = 1e9)                                                                      |
-| `Timestamp`                               | Span start time                                                                                            |
-| `TraceState`, `ScopeName`, `ScopeVersion` | Scope/trace metadata                                                                                       |
+| Column                                    | Notes                                                                                                |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `TraceId`, `SpanId`, `ParentSpanId`       | IDs; `ParentSpanId` empty on root spans (call chain)                                                 |
+| `SpanName`                                | Operation name                                                                                       |
+| `SpanKind`                                | `Internal` \| `Server` \| `Client` \| `Producer` \| `Consumer`                                       |
+| `StatusCode`                              | **`"Unset"` \| `"Ok"` \| `"Error"`** (type-checked literal). Successful spans are usually `"Unset"`. |
+| `StatusMessage`                           | Error detail / exception summary                                                                     |
+| `Duration`                                | Filter with duration strings (`"1s"`, `"2h"`); **result rows report nanoseconds**                    |
+| `Timestamp`                               | Span start time                                                                                      |
+| `TraceState`, `ScopeName`, `ScopeVersion` | Scope/trace metadata                                                                                 |
 
 > `ServiceName` is **not** a structural column — reference the service via the dotted
 > `"service.name"` attribute (resolves to `ResourceAttributes`).
@@ -56,9 +53,9 @@ must be all-strings or all-numbers.
 
 ```ts
 .where(f => f.eq("StatusCode", "Error"))
-.where(f => f.gt("Duration", 1_000_000_000))            // > 1s
+.where(f => f.gt("Duration", "1s"))                     // units s/m/h/d/w (sub-second: ns number)
 .where(f => f.eq("http.response.status_code", 500))
-.where(f => f.eq("SpanKind", "CLIENT"))                 // external calls (DB, APIs)
+.where(f => f.eq("SpanKind", "Client"))                 // external calls (DB, APIs)
 ```
 
 ## Measure ops (aggregate mode)
@@ -71,8 +68,8 @@ must be all-strings or all-numbers.
 ```ts
 .measure(m => m.errorRate("error_rate"))   // fraction of Error spans, server-side
 .measure(m => m.throughput("rps"))         // spans/sec
-.measure(m => m.avg("Duration", "avg_ns")) // portable latency
-.measure(m => m.max("Duration", "max_ns"))
+.measure(m => m.avg("Duration", "avg_ns")) // portable latency (returns nanoseconds)
+.measure(m => m.max("Duration", "max_ns")) // returns nanoseconds
 ```
 
 Shape the query with `.dimension(col)` (GROUP BY, repeatable), `.having(alias, op, value)`
@@ -89,7 +86,7 @@ The CLI has no aggregation; use it for a single search. **Pass `Error` (not `ERR
 | Service            | `--service`       | `--service payment`                    |
 | Span name          | `--span-name`     | `--span-name "POST /checkout"`         |
 | Status             | `--status-code`   | `--status-code Error`                  |
-| Span kind          | `--span-kind`     | `--span-kind CLIENT`                   |
+| Span kind          | `--span-kind`     | `--span-kind Client`                   |
 | Min duration (ns)  | `--duration-min`  | `--duration-min 1000000000`            |
 | Span attribute     | `--span-attr`     | `--span-attr "http.route=/cart"`       |
 | Resource attribute | `--resource-attr` | `--resource-attr "k8s.pod.name=web-1"` |

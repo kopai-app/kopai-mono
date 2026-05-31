@@ -26,7 +26,7 @@ const slowest = [...spans].sort(
 
 // Earliest Error in the chain = usually closest to root cause.
 const firstError = [...spans]
-  .filter((s) => s.StatusCode === "Error") // literal "Error", NOT "ERROR"
+  .filter((s) => s.StatusCode === "Error") // "Unset" | "Ok" | "Error"
   .sort((a, b) => Number(a.Timestamp) - Number(b.Timestamp))[0];
 
 console.log(JSON.stringify({ slowest, firstError }, null, 2));

@@ -11,6 +11,7 @@ import {
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 import { kopaiQuery } from "@kopai/core";
+import { kq } from "./kopai-query-builder.js";
 import { KopaiClient } from "./client.js";
 import { KopaiError, KopaiTimeoutError } from "./errors.js";
 import type {
@@ -1106,5 +1107,178 @@ describe("KopaiClient.query polymorphic types", () => {
       void client.query({ dimensions: ["SpanId"] });
     }
     expect(true).toBe(true);
+  });
+
+  // A query built via `kq.<signal>.aggregate()...build()` carries a
+  // union `output` (the builder's static type does not narrow output.type).
+  // Previously `client.query(built).data` errored TS2339 'data does not
+  // exist on never'. The result must now be fully typed: `.data` exists and
+  // is an aggregate-row array — no `never`, no `as any`.
+  it("built aggregate query result is fully typed — .data is not never", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const built = kq.traces
+      .aggregate()
+      .measure((m) => m.count("c"))
+      .timeRelative("1h")
+      .summary()
+      .build();
+    if (false as boolean) {
+      const res = await client.query(built);
+      // Would error TS2339 ('data' does not exist on 'never') before the fix.
+      expectTypeOf(res).toMatchTypeOf<{
+        data: kopaiQuery.KopaiAggregateRow[];
+      }>();
+      expectTypeOf(res.data).toMatchTypeOf<kopaiQuery.KopaiAggregateRow[]>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("timeSeries-narrowed aggregate query result adds bucket_start", async () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    // The builder does not statically narrow output.type, so use a
+    // timeSeries-narrowed query type (same pattern as the summary cases
+    // above) to assert the bucket_start branch resolves.
+    type Q = kopaiQuery.TraceAggregateQuery & {
+      output: { type: "timeSeries" };
+    };
+    type R = Awaited<ReturnType<typeof _client.query<Q>>>;
+    expectTypeOf<R>().toEqualTypeOf<{
+      data: (kopaiQuery.KopaiAggregateRow & { bucket_start: string })[];
+    }>();
+    expect(true).toBe(true);
+  });
+
+  it("built raw query result is { data; nextCursor }", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const built = kq.traces
+      .raw()
+      .dimension("SpanId")
+      .timeRelative("1h")
+      .build();
+    if (false as boolean) {
+      const res = await client.query(built);
+      expectTypeOf(res).toMatchTypeOf<{ nextCursor: string | null }>();
+      expectTypeOf(res.data).toMatchTypeOf<OtelTracesRow[]>();
+    }
+    expect(true).toBe(true);
+  });
+});
+
+// ============================================================
+// Type-only: fully-typed aggregate result rows
+// ============================================================
+// The builder brands `.build()`'s return with a type-only `__aggRow`
+// phantom carrying each measure alias (→ number) and each string-literal
+// dimension (→ string|number|null). `client.query()` flows the query type
+// through core's AggregateResultFor, which reads the phantom — so result
+// rows are fully typed and consumers no longer cast.
+describe("KopaiClient.query aggregate result rows are fully typed", () => {
+  it("summary: measure aliases are number; dimension stays wide; no cast", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      const { data } = await client.query(
+        kq.traces
+          .aggregate()
+          .measure((m) => m.errorRate("er"))
+          .measure((m) => m.count("n"))
+          .dimension("service.name")
+          .timeRelative("1h")
+          .summary()
+          .build()
+      );
+      // Row element type (avoid noUncheckedIndexedAccess `T | undefined`).
+      type Row = (typeof data)[number];
+      // Measure aliases resolve to number.
+      expectTypeOf<Row["er"]>().toEqualTypeOf<number>();
+      expectTypeOf<Row["n"]>().toEqualTypeOf<number>();
+      // Arithmetic compiles with no `as any` / cast.
+      const row = data[0] as Row;
+      const _scaled: number = row.n * 100;
+      void _scaled;
+      // Dimension is a group-by key — kept wide, not over-narrowed.
+      expectTypeOf<Row["service.name"]>().toExtend<string | number | null>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("timeSeries: rows additionally carry bucket_start: string", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      const { data } = await client.query(
+        kq.traces
+          .aggregate()
+          .measure((m) => m.count("n"))
+          .dimension("service.name")
+          .timeRelative("1h")
+          .timeSeries("5m")
+          .build()
+      );
+      type Row = (typeof data)[number];
+      expectTypeOf(data).toExtend<Row[]>();
+      expectTypeOf<Row["n"]>().toEqualTypeOf<number>();
+      expectTypeOf<Row["bucket_start"]>().toEqualTypeOf<string>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("metrics: avg(Value,'v') alias resolves to number", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      const { data } = await client.query(
+        kq
+          .metrics("Gauge")
+          .aggregate()
+          .measure((m) => m.avg("Value", "v"))
+          .timeRelative("1h")
+          .summary()
+          .build()
+      );
+      type Row = (typeof data)[number];
+      expectTypeOf(data).toExtend<Row[]>();
+      expectTypeOf<Row["v"]>().toEqualTypeOf<number>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("logs: multiple measures each resolve to number", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      const { data } = await client.query(
+        kq.logs
+          .aggregate()
+          .measure((m) => m.count("total"))
+          .measure((m) => m.countDistinct("service.name", "svcs"))
+          .timeRelative("1h")
+          .summary()
+          .build()
+      );
+      type Row = (typeof data)[number];
+      expectTypeOf(data).toExtend<Row[]>();
+      expectTypeOf<Row["total"]>().toEqualTypeOf<number>();
+      expectTypeOf<Row["svcs"]>().toEqualTypeOf<number>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("fallback: an un-branded (widened) aggregate query keeps KopaiAggregateRow", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    // A query typed as the general aggregate type (no `__aggRow` phantom)
+    // must still resolve to the wide row — non-breaking.
+    type Q = kopaiQuery.TraceAggregateQuery & { output: { type: "summary" } };
+    type R = Awaited<ReturnType<typeof _client.query<Q>>>;
+    expectTypeOf<R>().toEqualTypeOf<{ data: kopaiQuery.KopaiAggregateRow[] }>();
+    expect(true).toBe(true);
+  });
+
+  it("the built runtime object carries NO __aggRow property (type-only phantom)", () => {
+    const built = kq.traces
+      .aggregate()
+      .measure((m) => m.count("n"))
+      .timeRelative("1h")
+      .summary()
+      .build();
+    expect("__aggRow" in built).toBe(false);
+    // Still a valid KopaiQuery at runtime (phantom never serialized).
+    expect(kopaiQuery.KopaiQuery.parse(built)).toEqual(built);
   });
 });

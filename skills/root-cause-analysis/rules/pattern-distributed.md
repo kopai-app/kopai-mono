@@ -12,7 +12,7 @@ the failing hop, then drill into one trace's call chain.
 ### Code mode (recommended)
 
 **1. Find the failing hop** — rank services by error rate. `errorRate` counts `Error`
-spans server-side, so you never touch the `StatusCode` casing trap:
+spans server-side, so you never have to filter on `StatusCode` yourself:
 
 ```ts
 // rca-distributed.mts — run: npx tsx rca-distributed.mts
@@ -31,7 +31,7 @@ try {
     .summary()
     .orderByMeasure("error_rate", "desc")
     .build();
-  const { data } = await client.queryTracesAggregate(q);
+  const { data } = await client.query(q);
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   if (e instanceof KopaiQueryBuildError) console.error(e.issues);
@@ -55,12 +55,12 @@ const q = kq.traces
 
 **3. Trace the call chain** — pick a failing `TraceId` from a span query, then pull the
 full trace and walk `ParentSpanId` / `SpanKind` to see where the failure originates.
-`SpanKind === "CLIENT"` spans are the cross-service / external calls:
+`SpanKind === "Client"` spans are the cross-service / external calls:
 
 ```ts
 const spans = await client.getTrace(traceId);
 // ParentSpanId empty == root span. Follow ParentSpanId up the chain;
-// the earliest Error span (SpanKind CLIENT calling a failing SERVER) is the failing hop.
+// the earliest Error span (SpanKind Client calling a failing Server) is the failing hop.
 const chain = spans.map((s) => ({
   span: s.SpanName,
   kind: s.SpanKind,
@@ -77,8 +77,8 @@ console.log(JSON.stringify(chain, null, 2));
 2. **Do failures cascade from upstream** — use the step-2 `timeSeries("5m")`; the
    service whose error rate climbs first is upstream of the rest.
 3. **Common root cause / shared dependency** — if many services spike together, look for
-   a shared `CLIENT` target (DB, external API). Add `.dimension("SpanKind")` or filter
-   `f.eq("SpanKind", "CLIENT")` to isolate dependency calls.
+   a shared `Client` target (DB, external API). Add `.dimension("SpanKind")` or filter
+   `f.eq("SpanKind", "Client")` to isolate dependency calls.
 4. **Infra issues** — group on resource attributes (`k8s.pod.name`, `k8s.namespace.name`,
    `host.name`, `cloud.region`) to spot a single bad node/region.
 
@@ -88,7 +88,7 @@ console.log(JSON.stringify(chain, null, 2));
 | -------------- | ------------------------------------------------------------- |
 | `service.name` | Which service (dotted attr → `ResourceAttributes`)            |
 | `ParentSpanId` | Call chain — empty on root; follow up to find the failing hop |
-| `SpanKind`     | `CLIENT` (outbound dep call) / `SERVER` / `INTERNAL`          |
+| `SpanKind`     | `Client` (outbound dep call) / `Server` / `Internal`          |
 
 ### CLI fallback (quick one-offs)
 

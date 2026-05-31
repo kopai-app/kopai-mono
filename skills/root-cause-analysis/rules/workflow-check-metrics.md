@@ -14,8 +14,8 @@ turns a flat "it's broken" into a precise onset and a per-service spread.
 
 Traces already carry error rate and latency — no metric discovery needed. Bucket over a
 window wide enough to bracket the onset (`3h`), at a granularity fine enough to spot the
-inflection (`5m`). `errorRate` counts errors server-side (dodges the `"Error"`-casing
-trap); `Duration` is **nanoseconds** so `avg`/`max` come back in ns.
+inflection (`5m`). `errorRate` counts errors server-side; result rows still report
+`Duration` in **nanoseconds**, so `avg`/`max` come back in ns.
 
 ```ts
 import { kq, KopaiQueryBuildError } from "@kopai/sdk";
@@ -32,7 +32,7 @@ try {
     .timeSeries("5m")
     .orderByMeasure("error_rate", "desc")
     .build();
-  const { data } = await client.queryTracesAggregate(q);
+  const { data } = await client.query(q);
   console.log(JSON.stringify(data, null, 2)); // each row: bucket + service + measures
 } catch (e) {
   if (e instanceof KopaiQueryBuildError) console.error(e.issues);
@@ -57,7 +57,7 @@ try {
     .timeRelative("3h")
     .timeSeries("5m")
     .build();
-  const { data } = await client.queryTracesAggregate(q);
+  const { data } = await client.query(q);
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   console.error("percentiles need ClickHouse; fall back to avg/max:", e);
@@ -76,25 +76,26 @@ const { metrics } = await client.discoverMetrics();
 console.log(metrics.map((m) => `${m.name} (${m.type}, ${m.unit})`));
 ```
 
-### (c) Metric aggregate over time (MetricType pin required)
+### (c) Metric aggregate over time
 
-Every metric query **must pin exactly one `MetricType`** at the top-level AND (it cannot
-sit inside an `or()`, and only one type per query). Aggregate over `"Value"` for
-`Gauge`/`Sum`; over `Count`/`Sum`/`Max` for `Histogram`. Bucket with `.timeSeries()` to
-align the metric's onset against the trace onset from (a).
+The MetricType is a **builder argument**: `kq.metrics("<Type>")` auto-pins it, where the
+type is one of `"Gauge"`/`"Sum"`/`"Histogram"`/`"ExponentialHistogram"`/`"Summary"`. Value
+columns are typed per type: `"Value"` for `Gauge`/`Sum`; `Count`/`Sum`/`Min`/`Max` for
+`Histogram`/`ExponentialHistogram`; `Count`/`Sum` for `Summary`. Bucket with
+`.timeSeries()` to align the metric's onset against the trace onset from (a).
 
 ```ts
 const NAME = "http.server.errors"; // from discoverMetrics()
 try {
-  const q = kq.metrics
+  const q = kq
+    .metrics("Sum")
     .aggregate()
     .measure((m) => m.avg("Value", "v"))
-    .where((f) => f.eq("MetricType", "Sum")) // pin exactly one type
     .where((f) => f.eq("MetricName", NAME))
     .timeRelative("1h")
     .timeSeries("1m")
     .build();
-  const { data } = await client.queryMetricsAggregate(q);
+  const { data } = await client.query(q);
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   if (e instanceof KopaiQueryBuildError) console.error(e.issues);
@@ -105,11 +106,12 @@ try {
 ### Which signal to read
 
 - **Error rate / counts** → trace `errorRate` measure (a), or a `Sum` metric like
-  `http.server.errors` (c). Pin `MetricType "Sum"`, aggregate `Value`.
+  `http.server.errors` (c). Use `kq.metrics("Sum")`, aggregate `Value`.
 - **Latency** → trace `avg`/`max` of `Duration` (portable); `p95`/`p99` only on
-  ClickHouse. For a metric-side view use a `Histogram` and aggregate `Count`/`Sum`/`Max`.
-- **Resource saturation** (CPU, memory, connections) → point-in-time `Gauge`. Pin
-  `MetricType "Gauge"`, aggregate `Value` (`avg`/`max`), `.dimension("host.name")` for
+  ClickHouse. For a metric-side view use `kq.metrics("Histogram")` and aggregate
+  `Count`/`Sum`/`Max`.
+- **Resource saturation** (CPU, memory, connections) → point-in-time `Gauge`. Use
+  `kq.metrics("Gauge")`, aggregate `Value` (`avg`/`max`), `.dimension("host.name")` for
   per-host spread.
 
 Whatever the signal, `.timeSeries(granularity)` is what reveals **onset** — a `.summary()`
@@ -117,7 +119,7 @@ only confirms the issue exists.
 
 ### Reference
 
-See references/metric-filters.md (MetricType pin, value columns, aggregations) and
+See references/metric-filters.md (MetricType builder arg, value columns, aggregations) and
 references/trace-filters.md (Duration units, measure ops).
 
 ## CLI fallback (quick one-offs)

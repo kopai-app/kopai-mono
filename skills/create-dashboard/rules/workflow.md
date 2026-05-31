@@ -10,8 +10,8 @@ Code mode: build each leaf tile's data with `kq`, embed it as `dataSource: { met
 
 ## Steps
 
-1. **Discover metrics** — `const { metrics } = await client.discoverMetrics();` Each entry is `{ name, type, unit, description, attributes, resourceAttributes }`. Match a tile's `MetricType` filter to the metric's `type`; set the tile `unit` prop from the metric's `unit`.
-2. **Build each tile's query** — data tiles render **raw rows**, so build with `kq.<signal>.raw()…build()` → a `KopaiQuery` held in a variable. Every query needs a time window (`.timeRelative("1h")` / `.timeAbsolute(startISO, endISO)`). (Aggregates — `.aggregate()…summary()`/`.timeSeries(granularity)` — are for analysis, not tile data; tile renderers reject aggregate/summary/timeSeries rows.)
+1. **Discover metrics** — `const { metrics } = await client.discoverMetrics();` Each entry is `{ name, type, unit, description, attributes, resourceAttributes }`. Pass the metric's `type` as the `kq.metrics("<Type>")` builder argument; set the tile `unit` prop from the metric's `unit`.
+2. **Build each tile's query** — data tiles render **raw rows**, so build with `kq.<signal>.raw()…build()` → a `KopaiQuery` held in a variable (metrics: `kq.metrics("<Type>").raw()…build()`). Every query needs a time window (`.timeRelative("1h")` / `.timeAbsolute(startISO, endISO)`). (Aggregates — `.aggregate()…summary()`/`.timeSeries(granularity)` — are for analysis, not tile data; tile renderers reject aggregate/summary/timeSeries rows.)
 3. **Assemble the `uiTree`** — embed the built query: `dataSource: { method: "query", params: builtQuery }`.
 4. **Create** — wrap in try/catch:
 
@@ -22,10 +22,10 @@ Code mode: build each leaf tile's data with `kq`, embed it as `dataSource: { met
 
    const { metrics } = await client.discoverMetrics();
 
-   // Leaf tile data — RAW query; pin exactly one MetricType for metric queries.
-   const cpuSeries = kq.metrics
+   // Leaf tile data — RAW query; MetricType is the builder arg (auto-pins it).
+   const cpuSeries = kq
+     .metrics("Gauge")
      .raw()
-     .where((f) => f.eq("MetricType", "Gauge"))
      .where((f) => f.eq("MetricName", "system.cpu.utilization"))
      .timeRelative("1h")
      .limit(500)
@@ -90,7 +90,7 @@ Code mode: build each leaf tile's data with `kq`, embed it as `dataSource: { met
 - `dataSource.method` must be valid. Prefer **`"query"`** with a built `kq` query as `params`. Legacy methods still work as fallback: `searchMetricsPage`, `searchAggregatedMetrics`, `searchLogsPage`, `searchTracesPage`.
 - `dataSource.params` must match the method: a `kq` `KopaiQuery` for `"query"`, or the method's own param schema for legacy methods.
 - Data tiles render **raw rows** — build their `kq` query with `kq.<signal>.raw()…build()`, **not** `.aggregate()`. The renderers reject aggregate/`summary`/`timeSeries` rows (_"this panel displays raw metric rows … use a raw metric query"_).
-- For metric tiles the raw `kq` query MUST pin exactly one `MetricType`: `.where(f => f.eq("MetricType", "Gauge"))`. Use the exact `type` from `discoverMetrics()` (`Gauge | Sum | Histogram | ExponentialHistogram | Summary`); also pin `MetricName` to a real name from discover. Add a time window and `.limit(...)`.
+- For metric tiles pass the `MetricType` as the builder argument — `kq.metrics("Gauge").raw()` — which auto-pins it. Use the exact `type` from `discoverMetrics()` (`Gauge | Sum | Histogram | ExponentialHistogram | Summary`); also pin `MetricName` to a real name from discover. Add a time window and `.limit(...)`.
 
 ## Required Fields
 
@@ -120,7 +120,7 @@ Code mode: build each leaf tile's data with `kq`, embed it as `dataSource: { met
 
 - **MetricStat** — **Sum** and **Gauge** only. Does NOT work with Histogram (shows "--").
 - **MetricStat single value** — feed it a RAW metric query (the renderer reduces the raw rows itself), e.g.
-  `kq.metrics.raw().where(f => f.eq("MetricType", "Sum")).where(f => f.eq("MetricName", NAME)).timeRelative("1h").limit(500).build()`
+  `kq.metrics("Sum").raw().where(f => f.eq("MetricName", NAME)).timeRelative("1h").limit(500).build()`
   — or legacy `method: "searchAggregatedMetrics"` with `aggregate: "sum"` (also `"avg"`/`"min"`/`"max"`/`"count"`). Do NOT group by a dimension with MetricStat (use MetricTable for grouped results).
 - **MetricTimeSeries** — **Sum**, **Gauge**, and **Histogram** (renders mean over time).
 - **MetricHistogram** — **Histogram** and **ExponentialHistogram** only.
@@ -143,7 +143,7 @@ If `discoverMetrics()` returns an empty `metrics` array, telemetry hasn't reache
 
 Wrap the create in try/catch. On `KopaiValidationError`/`KopaiError`, re-run `discoverMetrics()` to recheck names and types, fix the tree, and retry. `KopaiQueryBuildError` means the `kq` query is malformed — fix it before reassembling the tree. Common messages:
 
-- **"Invalid metric type"** — the pinned `MetricType` doesn't match the actual `type` from `discoverMetrics()`. Use the exact `type` value.
+- **"Invalid metric type"** — the `kq.metrics("<Type>")` builder argument doesn't match the actual `type` from `discoverMetrics()`. Use the exact `type` value.
 - **"Unknown element type"** — component type not in schema. Re-check the component schema (`npx @kopai/cli dashboards schema`).
 - **"Orphan element"** — an element's `parentKey` references a non-existent key. Verify all parent-child relationships.
 - **"Root key not found"** — `root` doesn't match any key in `elements`.
@@ -164,7 +164,7 @@ Display the URL to the user:
 Common pitfalls:
 
 - **LogTimeline with severity filter** — avoid filtering by severity unless the user explicitly asks for error logs. Many services only emit info-level logs, so filtering to error level returns empty results. Default to showing all logs. (When error logs ARE requested, filter `SeverityNumber >= 17`: `kq.logs.raw().where(f => f.gte("SeverityNumber", 17)).timeRelative("1h").limit(100).build()`.)
-- **Trace error tiles** — StatusCode value is the literal `"Error"` (also `"Unset"`/`"Ok"`), never `"ERROR"`; successful spans are usually `"Unset"`.
+- **Trace error tiles** — StatusCode value is the literal `"Error"` (also `"Unset"`/`"Ok"`); successful spans are usually `"Unset"`.
 - **Percentiles** (`p50`–`p999`) are ClickHouse-only and hard-fail on SQLite at query time. Lead latency tiles with `avg`/`max` of `Duration` (nanoseconds: 1ms = 1e6, 1s = 1e9).
 
 ## CLI fallback (one-off create)

@@ -1,12 +1,11 @@
 # Metric query reference
 
-Columns, filters, and measures for `kq.metrics.aggregate()` / `kq.metrics.raw()` (and the
-`client.searchMetrics(...)` / `client.discoverMetrics()` shapes). Run a built query with the
-typed method: `client.queryMetricsAggregate(q)` or `client.queryMetricsRaw(q)` (prefer over
-the loosely-typed `client.query(q)`).
+Columns, filters, and measures for `kq.metrics("<Type>").aggregate()` / `kq.metrics("<Type>").raw()`
+(and the `client.searchMetrics(...)` / `client.discoverMetrics()` shapes). Run a built query with
+`client.query(q)` (fully typed: returns `{ data }` for aggregate, `{ data, nextCursor }` for raw).
 
 > Dashboard tiles render **raw** rows: when feeding a metric tile via `dataSource:{method:"query"}`,
-> build it with `kq.metrics.raw()` (not `.aggregate()`) — see the `create-dashboard` skill.
+> build it with `kq.metrics("<Type>").raw()` (not `.aggregate()`) — see the `create-dashboard` skill.
 
 ## Discover first
 
@@ -14,15 +13,17 @@ the loosely-typed `client.query(q)`).
 `{ name, type, unit, description, attributes, resourceAttributes }`. Use it to pick a
 metric's exact `name` and `type` before querying.
 
-## The MetricType pin (required)
+## Choose the MetricType (builder arg)
 
-Every metric query **must filter exactly one `MetricType`** at the top-level AND — it
-cannot sit inside an `or()`, and only one type per query is allowed. This is because each
-type stores its value in different structural columns.
+Choose the `MetricType` as the builder argument: `kq.metrics("Gauge")…` auto-pins it (type
+∈ `"Gauge"` | `"Sum"` | `"Histogram"` | `"ExponentialHistogram"` | `"Summary"`). No manual
+`MetricType` filter is needed. Value columns are typed per type, since each type stores its
+value in different structural columns.
 
 ```ts
-.where(f => f.eq("MetricType", "Gauge"))   // required on every metric query
-.where(f => f.eq("MetricName", "system.cpu.utilization"))
+kq.metrics("Gauge") // auto-pins MetricType: "Gauge"
+  .aggregate()
+  .where((f) => f.eq("MetricName", "system.cpu.utilization"));
 ```
 
 | Type                   | Value column(s)                                                | Use case                                  |
@@ -47,10 +48,9 @@ For Gauge/Sum, aggregate over `Value` (`avg`/`sum`/`max`). For Histogram, aggreg
 
 ```ts
 // avg CPU by host over the last hour, bucketed every minute
-kq.metrics
+kq.metrics("Gauge")
   .aggregate()
   .measure((m) => m.avg("Value", "avg_cpu"))
-  .where((f) => f.eq("MetricType", "Gauge"))
   .where((f) => f.eq("MetricName", "system.cpu.utilization"))
   .dimension("host.name")
   .timeRelative("1h")

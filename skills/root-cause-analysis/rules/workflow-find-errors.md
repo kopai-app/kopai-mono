@@ -14,7 +14,7 @@ Run with `npx tsx find-errors.mts` (**`.mts`** = ESM, so top-level `await` works
 ### 1a. Rank services by error rate (start here)
 
 Don't grep for errors blind — let the backend tell you _which_ service is failing.
-`errorRate` counts `Error` spans server-side, dodging the `StatusCode` casing trap:
+`errorRate` counts `Error` spans server-side:
 
 ```ts
 const q = kq.traces
@@ -27,7 +27,7 @@ const q = kq.traces
   .summary()
   .orderByMeasure("error_rate", "desc")
   .build();
-const { data } = await client.queryTracesAggregate(q);
+const { data } = await client.query(q);
 console.log(JSON.stringify(data, null, 2));
 ```
 
@@ -35,7 +35,7 @@ console.log(JSON.stringify(data, null, 2));
 
 Top-ranked service in hand, fetch its failing traces. Use the `errorRate` measure to
 _find_ errors; filter raw `StatusCode` only to _list_ them. The value is the literal
-`"Error"` (title case — never `"ERROR"`):
+`"Error"` (one of `"Unset" | "Ok" | "Error"`):
 
 ```ts
 const q = kq.traces
@@ -44,7 +44,7 @@ const q = kq.traces
   .timeRelative("1h")
   .limit(20)
   .build();
-const { data, nextCursor } = await client.queryTracesRaw(q);
+const { data, nextCursor } = await client.query(q);
 ```
 
 Or skip the builder for a quick list — `client.searchTraces({ statusCode: "Error", limit: 20 })` is an
@@ -65,7 +65,7 @@ const q = kq.logs
   .timeRelative("1h")
   .limit(50)
   .build();
-const { data, nextCursor } = await client.queryLogsRaw(q);
+const { data, nextCursor } = await client.query(q);
 ```
 
 | SeverityNumber | Level |
@@ -91,7 +91,7 @@ for (const term of ["error", "exception", "failed"]) {
     .timeRelative("1h")
     .limit(20)
     .build();
-  const { data } = await client.queryLogsRaw(q);
+  const { data } = await client.query(q);
   console.log(term, data.length);
 }
 ```
@@ -114,10 +114,10 @@ Do NOT stop — continue exploring:
      .summary()
      .orderByMeasure("n", "desc")
      .build();
-   const { data } = await client.queryLogsAggregate(q);
+   const { data } = await client.query(q);
    ```
 
-2. **Raise the limit or paginate** via `nextCursor` (from `queryLogsRaw`) to ensure you're not missing
+2. **Raise the limit or paginate** via `nextCursor` (from the raw `client.query(q)`) to ensure you're not missing
    app-level errors hidden behind a noisy service.
 3. **Always run the hidden-error `Body` searches (1d)** — real app errors are often
    logged at INFO severity or only appear in body text.

@@ -7,7 +7,7 @@
 **Impact:** HIGH
 
 Diagnose slow request latency. Lead with the SDK: rank operations by latency, then drill
-into the slow span chain. `Duration` is **nanoseconds**.
+into the slow span chain. Result rows report `Duration` in **nanoseconds** (avg/max return ns).
 
 ### 1. Rank operations by latency (SQLite-safe)
 
@@ -32,7 +32,7 @@ try {
     .orderByMeasure("max_ns", "desc")
     .build();
 
-  const { data } = await client.queryTracesAggregate(q);
+  const { data } = await client.query(q);
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   if (e instanceof KopaiQueryBuildError) console.error(e.issues);
@@ -58,7 +58,7 @@ try {
     .summary()
     .orderByMeasure("p99_ns", "desc")
     .build();
-  const { data } = await client.queryTracesAggregate(q);
+  const { data } = await client.query(q);
   console.log(JSON.stringify(data, null, 2));
 } catch {
   // SQLite: percentiles unsupported — fall back to the avg/max query above.
@@ -70,22 +70,22 @@ try {
 Find the slow traces, then inspect the span breakdown:
 
 ```ts
-// Slow traces only (> 1s).
+// Slow traces only (> 1s). Duration filters accept duration strings (s/m/h/d/w).
 const slow = kq.traces
   .raw()
-  .where((f) => f.gt("Duration", 1_000_000_000))
+  .where((f) => f.gt("Duration", "1s"))
   .timeRelative("1h")
   .limit(50)
   .build();
 
-// Bottleneck spans = external CLIENT calls (DB, APIs).
+// Bottleneck spans = external Client calls (DB, APIs).
 const clientSpans = kq.traces
   .aggregate()
   .measure((m) => m.avg("Duration", "avg_ns"))
   .measure((m) => m.max("Duration", "max_ns"))
   .measure((m) => m.count("n"))
   .dimension("SpanName")
-  .where((f) => f.eq("SpanKind", "CLIENT"))
+  .where((f) => f.eq("SpanKind", "Client"))
   .timeRelative("1h")
   .summary()
   .orderByMeasure("max_ns", "desc")
@@ -106,8 +106,8 @@ to find which child span dominates.
 
 ### Common Bottlenecks
 
-- Database queries (`SpanKind` CLIENT)
-- External API calls (`SpanKind` CLIENT)
+- Database queries (`SpanKind` Client)
+- External API calls (`SpanKind` Client)
 - Message queue operations
 - File I/O operations
 
@@ -120,6 +120,6 @@ No aggregation in the CLI — use it for a single lookup. Durations are nanoseco
 npx @kopai/cli traces search --duration-min 1000000000 --json
 # Span breakdown for one trace
 npx @kopai/cli traces get <traceId> --fields SpanName,Duration,ParentSpanId --json
-# External CLIENT calls in a trace
-npx @kopai/cli traces search --trace-id <traceId> --span-kind CLIENT --json
+# External Client calls in a trace
+npx @kopai/cli traces search --trace-id <traceId> --span-kind Client --json
 ```

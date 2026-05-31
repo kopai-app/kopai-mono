@@ -4,7 +4,7 @@ description: Investigate and root-cause production issues from live OpenTelemetr
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.3.0"
+  version: "1.4.1"
 ---
 
 # Root Cause Analysis with Kopai
@@ -34,22 +34,24 @@ const client = clientFromConfig();
 top-level `await` works without depending on the host project's `package.json` `"type"`.
 (If `tsx` is missing: `node --experimental-strip-types rca.mts`.)
 
-**Build a query with `kq`, run it with the matching typed method.** Pair each builder
-with its `client.query…` method so results are fully typed (rows autocomplete, typos are
-compile errors):
+**Build a query with `kq`, run it with `client.query(q)`.** `client.query(q)` is the
+single clean way to run any built query and is **fully typed** — rows autocomplete and
+typos are compile errors. Aggregate queries return `{ data }`; raw queries return
+`{ data, nextCursor }`. **Result rows are fully typed — iterate `data` directly and never
+cast to `any`/`any[]`.** Aggregate measure values are `number` (so `row.error_rate * 100`
+just works — no `String(...)`/cast), grouped dimensions are present (`row["service.name"]`),
+and `.timeSeries()` rows add `bucket_start`:
 
-| Builder                  | Run with                          | Result                 |
-| ------------------------ | --------------------------------- | ---------------------- |
-| `kq.traces.aggregate()`  | `client.queryTracesAggregate(q)`  | `{ data }`             |
-| `kq.traces.raw()`        | `client.queryTracesRaw(q)`        | `{ data, nextCursor }` |
-| `kq.logs.aggregate()`    | `client.queryLogsAggregate(q)`    | `{ data }`             |
-| `kq.logs.raw()`          | `client.queryLogsRaw(q)`          | `{ data, nextCursor }` |
-| `kq.metrics.aggregate()` | `client.queryMetricsAggregate(q)` | `{ data }`             |
-| `kq.metrics.raw()`       | `client.queryMetricsRaw(q)`       | `{ data, nextCursor }` |
-
-> The polymorphic `client.query(q)` also runs any built query, but its result is
-> **loosely typed** (it usually infers as `never`, forcing a cast). Prefer the narrow
-> method above so you keep type-checking on result rows.
+```ts
+const { data } = await client.query(q); // typed rows — do NOT write `data as any[]`
+for (const row of data) {
+  console.log(
+    row["service.name"],
+    `${(row.error_rate * 100).toFixed(1)}%`,
+    row.rps
+  );
+}
+```
 
 **Output** — stdout is your result. End with `console.log(JSON.stringify(data, null, 2))`,
 and wrap `.build()` + the query call in try/catch:
@@ -60,7 +62,7 @@ try {
   const q = kq.traces
     .aggregate() /* … */
     .build();
-  const { data } = await client.queryTracesAggregate(q);
+  const { data } = await client.query(q);
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   if (e instanceof KopaiQueryBuildError)
@@ -72,11 +74,12 @@ try {
 ## Backend caveats & gotchas (read before querying)
 
 - **Every query needs a time window** — `.timeRelative("1h")` or `.timeAbsolute(startISO, endISO)`. Lookback/granularity match `^[1-9]\d*[smhdw]$` (`"30s"`, `"15m"`, `"2h"`, `"7d"`).
-- **`StatusCode` is exactly `"Unset" | "Ok" | "Error"`** (title case — **not** `"ERROR"`). Successful spans are usually `"Unset"`, not `"Ok"`. The builder accepts any string, so the wrong casing **compiles and silently returns zero rows**. Prefer the `errorRate` measure (counts errors server-side) over filtering the raw value.
+- **`StatusCode` is exactly `"Unset" | "Ok" | "Error"`** (title case). Successful spans are usually `"Unset"`, not `"Ok"`. This enum is type-checked: a wrong value like `"ERROR"` is a **compile error**, so the casing trap is caught for you. Prefer the `errorRate` measure (counts errors server-side) over filtering the raw value anyway.
 - **Use `service.name` (dotted), never `ServiceName`.** `ServiceName` is not a queryable column — filtering on it silently matches nothing. (In result rows the value comes back keyed as you grouped it, e.g. `row["service.name"]`.)
 - **Empty result on a busy system ≈ a wrong column/value, not real absence.** Before concluding "no errors / no data", re-check the column name and value casing — silent empties are the #1 way to reach a false "all healthy" conclusion.
 - **Percentiles (`p50`–`p999`) are ClickHouse-only.** On SQLite they fail at query time (`KopaiError: Percentile measures … not yet supported on the sqlite backend`). Lead latency with `avg`/`max` of `Duration`; treat percentiles as a ClickHouse upgrade in try/catch.
-- **`Duration` is nanoseconds** (1ms = 1e6, 1s = 1e9). **Metric queries must pin one `MetricType`** at the top-level AND (`.where(f => f.eq("MetricType", "Sum"))`).
+- **`Duration` filters accept duration strings** with units `s`/`m`/`h`/`d`/`w` — `f.gt("Duration", "1s")`, `f.lte("Duration", "2h")` (also `gte`/`lt`). No sub-second units; for sub-second thresholds pass a nanosecond number. (Result rows still report `Duration` in nanoseconds — `avg`/`max` of `Duration` come back in ns: 1ms = 1e6, 1s = 1e9.)
+- **Metric queries choose the type up front:** `kq.metrics("Gauge")…`, `kq.metrics("Sum")…` (type ∈ `"Gauge" | "Sum" | "Histogram" | "ExponentialHistogram" | "Summary"`). The builder arg **auto-pins** the `MetricType`, so no manual `.where(f => f.eq("MetricType", …))`. Value columns are typed per type: Gauge/Sum → `"Value"`; Histogram/ExponentialHistogram → `"Count" | "Sum" | "Min" | "Max"`; Summary → `"Count" | "Sum"`.
 - **`searchTraces`/`searchLogs`/`searchMetrics` are async iterables** (auto-paginate) — consume with `for await (const row of client.searchLogs({ … })) { … }`, do **not** `await` them as an array. For a single page use `searchTracesPage`/`searchLogsPage`/`searchMetricsPage` → `{ data, nextCursor }`. Limits: `kq` `.limit()` caps at 10000; `search*` filters cap at 1000.
 
 ## RCA Workflow
@@ -95,12 +98,12 @@ try {
      .summary()
      .orderByMeasure("error_rate", "desc")
      .build();
-   const { data } = await client.queryTracesAggregate(q);
+   const { data } = await client.query(q);
    ```
 
    For log-first triage, pull error-level logs by **`SeverityNumber >= 17`** (catches
    ERROR/FATAL regardless of text casing):
-   `client.queryLogsRaw(kq.logs.raw().where(f => f.gte("SeverityNumber", 17)).timeRelative("1h").limit(50).build())`.
+   `client.query(kq.logs.raw().where(f => f.gte("SeverityNumber", 17)).timeRelative("1h").limit(50).build())`.
    See `workflow-find-errors`.
 
 2. **Get full trace context** — `const spans = await client.getTrace(traceId)`. Inspect
@@ -108,7 +111,7 @@ try {
    See `workflow-get-context`.
 
 3. **Correlate logs to the trace** —
-   `client.queryLogsRaw(kq.logs.raw().where(f => f.eq("TraceId", traceId)).timeRelative("1h").build())`
+   `client.query(kq.logs.raw().where(f => f.eq("TraceId", traceId)).timeRelative("1h").build())`
    (or iterate `client.searchLogs({ traceId })`). Look for the earliest error and its
    stack trace. See `workflow-correlate-logs`.
 
@@ -128,7 +131,22 @@ try {
      .timeSeries("5m")
      .orderByMeasure("error_rate", "desc")
      .build();
-   const { data } = await client.queryTracesAggregate(q);
+   const { data } = await client.query(q);
+   ```
+
+   When the signal is a metric rather than a trace, choose the type up front and let it
+   auto-pin `MetricType` — e.g. bucket a Gauge over time:
+
+   ```ts
+   const q = kq
+     .metrics("Gauge")
+     .aggregate()
+     .measure((m) => m.avg("Value", "avg_value"))
+     .where((f) => f.eq("MetricName", "process.cpu.utilization"))
+     .timeRelative("3h")
+     .timeSeries("5m")
+     .build();
+   const { data } = await client.query(q);
    ```
 
    See `workflow-check-metrics`.
@@ -159,7 +177,7 @@ try {
     .orderByMeasure("error_rate", "desc")
     .build();
 
-  const { data } = await client.queryTracesAggregate(q); // typed rows
+  const { data } = await client.query(q); // typed rows
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   if (e instanceof KopaiQueryBuildError) console.error(e.issues);
@@ -189,11 +207,11 @@ Read `rules/<rule-name>.md` for details.
 ## Tips
 
 1. Start from the aggregate (error rate / latency by service), then drill into one trace.
-2. Prefer the `errorRate` measure over filtering `StatusCode` — it dodges the `"Error"` casing trap.
-3. Pair each `kq.<signal>.<mode>()` with `client.query<Signal><Mode>()` for typed result rows.
-4. `Duration` is nanoseconds. The earliest error in a trace chain is usually closest to root cause.
+2. Prefer the `errorRate` measure over filtering `StatusCode` (counted server-side).
+3. Run any built query with `client.query(q)` — it is fully typed (rows autocomplete, typos compile-error).
+4. Filter `Duration` with strings (`f.gt("Duration", "1s")`); result rows still report `Duration` in nanoseconds. The earliest error in a trace chain is usually closest to root cause.
 5. Use `.timeSeries(granularity)` to find _when_ a regression started — and don't mistake the retention floor for the onset.
-6. A surprising empty result usually means a wrong column/value (casing), not real absence — re-check before concluding "none".
+6. For metrics, pick the type up front — `kq.metrics("Gauge")…` (auto-pins `MetricType`, types the value columns).
 7. On SQLite, latency = `avg`/`max` of `Duration`; switch to `p95`/`p99` on ClickHouse.
 
 ## CLI fallback (quick one-offs)

@@ -30,9 +30,7 @@ try {
     .summary()
     .orderByMeasure("n", "desc")
     .build();
-  console.log(
-    JSON.stringify((await client.queryLogsAggregate(volume)).data, null, 2)
-  );
+  console.log(JSON.stringify((await client.query(volume)).data, null, 2));
 
   // 2. Drill into the actual error rows to read messages + grab a TraceId
   const rows = kq.logs
@@ -41,7 +39,7 @@ try {
     .timeRelative("1h")
     .limit(20)
     .build();
-  const { data: logs } = await client.queryLogsRaw(rows);
+  const { data: logs } = await client.query(rows);
   console.log(JSON.stringify(logs, null, 2));
 
   // 3. Bridge to traces: TraceId is the join key from a log to its full trace

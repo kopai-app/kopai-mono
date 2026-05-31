@@ -1,9 +1,9 @@
 # Log query reference
 
 Columns, filters, and measures for `kq.logs.aggregate()` / `kq.logs.raw()` (and the
-`client.searchLogs(...)` filter shape). Run a built query with the typed method:
-`client.queryLogsAggregate(q)` or `client.queryLogsRaw(q)` (prefer these over the
-loosely-typed `client.query(q)`).
+`client.searchLogs(...)` filter shape). Run a built query with `client.query(q)` — it is
+fully typed (`const { data } = await client.query(q)` for aggregate; `{ data, nextCursor }`
+for raw).
 
 ## How columns work
 
