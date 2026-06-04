@@ -63,11 +63,11 @@
     "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@tapjs/tsx": "^3.4.8",
-    "@types/node": "^25.8.0",
+    "@types/node": "^25.9.1",
     "jest": "^30.4.2",
     "tap": "^21.7.4",
-    "ts-jest": "^29.4.9",
-    "tsdown": "^0.22.0",
-    "tsx": "^4.22.0"
+    "ts-jest": "^29.4.11",
+    "tsdown": "^0.22.1",
+    "tsx": "^4.22.3"
   }
 }
