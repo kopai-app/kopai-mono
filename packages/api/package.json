@@ -43,8 +43,8 @@
   },
   "devDependencies": {
     "@fastify/swagger": "^9.7.0",
-    "@fastify/swagger-ui": "^5.2.6",
+    "@fastify/swagger-ui": "^6.0.0",
     "@kopai/tsconfig": "workspace:*",
-    "tsdown": "^0.22.1"
+    "tsdown": "^0.22.2"
   }
 }
