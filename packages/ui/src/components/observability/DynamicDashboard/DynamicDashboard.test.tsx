@@ -36,6 +36,7 @@ function createMockClient(): MockClient {
     searchTraceSummariesPage: vi
       .fn()
       .mockResolvedValue({ data: [], nextCursor: null }),
+    execute: vi.fn().mockResolvedValue({ rows: [], cursor: null }),
   };
 }
 

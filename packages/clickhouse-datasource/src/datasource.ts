@@ -735,4 +735,25 @@ export class ClickHouseReadDatasource
     );
     return { metrics };
   }
+
+  // Stubbed until a ClickHouse-side KopaiQuery translator lands. Throws with
+  // `code = NOT_IMPLEMENTED` so the API error-handler maps to RFC-7807 501.
+  async executeTracesQuery(): Promise<datasource.KopaiQueryResult> {
+    throw notImplemented("executeTracesQuery");
+  }
+
+  async executeLogsQuery(): Promise<datasource.KopaiQueryResult> {
+    throw notImplemented("executeLogsQuery");
+  }
+
+  async executeMetricsQuery(): Promise<datasource.KopaiQueryResult> {
+    throw notImplemented("executeMetricsQuery");
+  }
+}
+
+function notImplemented(method: string): Error {
+  return Object.assign(
+    new Error(`${method} is not implemented by ClickHouseReadDatasource yet`),
+    { code: "NOT_IMPLEMENTED" as const }
+  );
 }

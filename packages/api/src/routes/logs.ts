@@ -3,9 +3,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import {
   dataFilterSchemas,
   denormalizedSignals,
+  logsKopaiQuerySchema,
   type datasource,
 } from "@kopai/core";
 import { problemDetailsSchema } from "./error-schema-zod.js";
+import { registerQueryRoute } from "./query-route.js";
 
 export const logsRoutes: FastifyPluginAsyncZod<{
   readLogsDatasource: datasource.ReadLogsDatasource;
@@ -35,4 +37,8 @@ export const logsRoutes: FastifyPluginAsyncZod<{
       res.send(result);
     },
   });
+
+  registerQueryRoute(fastify, "logs", logsKopaiQuerySchema, (body) =>
+    opts.readLogsDatasource.executeLogsQuery(body)
+  );
 };

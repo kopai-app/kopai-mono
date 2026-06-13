@@ -2,6 +2,9 @@ import {
   dataFilterSchemas,
   denormalizedSignals,
   dashboardDatasource,
+  type TracesKopaiQuery,
+  type LogsKopaiQuery,
+  type MetricsKopaiQuery,
 } from "@kopai/core";
 import z from "zod";
 import { request } from "./request.js";
@@ -25,9 +28,28 @@ import type {
   TraceSummaryRow,
 } from "./types.js";
 
+/**
+ * Conditional result shape for `client.execute`. Aggregated queries
+ * (any `AggExpr` in the select map) return only `rows`; non-aggregated
+ * queries return `rows` plus a pagination `cursor` (null when
+ * exhausted).
+ */
+export type ExecuteResult<R, IsAgg extends boolean> = IsAgg extends true
+  ? { rows: R[] }
+  : { rows: R[]; cursor: string | null };
+
+/**
+ * Query object accepted by `client.execute`. Built via the SDK
+ * `QueryBuilder.toQuery()`; the phantom `__row` / `__isAgg` fields are
+ * type-only and absent at runtime.
+ */
+type ExecutableQuery<R, IsAgg extends boolean> = {
+  __row: R;
+  __isAgg: IsAgg;
+} & (TracesKopaiQuery | LogsKopaiQuery | MetricsKopaiQuery);
+
 const DEFAULT_TIMEOUT = 30_000;
 
-// Response schemas
 const tracesResponseSchema = z.object({
   data: z.array(denormalizedSignals.otelTracesSchema),
   nextCursor: z.string().nullable(),
@@ -66,6 +88,11 @@ const operationsResponseSchema = z.object({
 const traceSummariesResponseSchema = z.object({
   data: z.array(dataFilterSchemas.traceSummaryRowSchema),
   nextCursor: z.string().nullable(),
+});
+
+const executeResponseSchema = z.object({
+  rows: z.array(z.unknown()),
+  cursor: z.string().nullable().optional(),
 });
 
 const metricsDiscoverySchema = z.object({
@@ -416,6 +443,33 @@ export class KopaiClient {
       {
         method: "POST",
         body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Execute a type-safe KopaiQuery (built via the fluent `QueryBuilder`)
+   * against `POST /signals/{traces,logs,metrics}/query`.
+   *
+   * The result shape is conditional on whether `q` carries an
+   * aggregation: aggregated queries return `{ rows }`, non-aggregated
+   * queries return `{ rows, cursor }`. Phantom `__row` / `__isAgg`
+   * fields on `q` are type-only and stripped at JSON serialization.
+   */
+  async execute<R, IsAgg extends boolean>(
+    q: ExecutableQuery<R, IsAgg>,
+    opts?: RequestOptions
+  ): Promise<ExecuteResult<R, IsAgg>> {
+    return request(
+      `${this.baseUrl}/signals/${q.signal}/query`,
+      executeResponseSchema as unknown as z.ZodType<ExecuteResult<R, IsAgg>>,
+      {
+        method: "POST",
+        body: q,
         ...opts,
         baseHeaders: this.baseHeaders,
         fetchFn: this.fetchFn,

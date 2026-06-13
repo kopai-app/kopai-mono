@@ -5,6 +5,9 @@ import type {
   TraceSummariesFilter,
   TraceSummaryRow,
 } from "./data-filters-zod.js";
+import type { TracesKopaiQuery } from "./traces-kopai-query-zod.js";
+import type { LogsKopaiQuery } from "./logs-kopai-query-zod.js";
+import type { MetricsKopaiQuery } from "./metrics-kopai-query-zod.js";
 import {
   otelLogsSchema,
   otelMetricsSchema,
@@ -45,6 +48,19 @@ export interface WriteTracesDatasource {
   writeTraces(tracesData: TracesData): Promise<TracesPartialSuccess>;
 }
 
+/**
+ * Result shape returned by `execute*Query` methods.
+ *
+ * `cursor` is non-null only for non-aggregated queries with more pages
+ * remaining. `isAgg` lets the API route omit `cursor` from the wire envelope
+ * for aggregated queries without re-inspecting the input.
+ */
+export interface KopaiQueryResult {
+  rows: Record<string, unknown>[];
+  cursor: string | null;
+  isAgg: boolean;
+}
+
 export interface ReadTracesDatasource {
   getTraces(
     filter: z.infer<typeof tracesDataFilterSchema> & {
@@ -54,6 +70,7 @@ export interface ReadTracesDatasource {
     data: z.infer<typeof otelTracesSchema>[];
     nextCursor: string | null;
   }>;
+  executeTracesQuery(query: TracesKopaiQuery): Promise<KopaiQueryResult>;
 }
 
 export interface ReadLogsDatasource {
@@ -65,6 +82,7 @@ export interface ReadLogsDatasource {
     data: z.infer<typeof otelLogsSchema>[];
     nextCursor: string | null;
   }>;
+  executeLogsQuery(query: LogsKopaiQuery): Promise<KopaiQueryResult>;
 }
 
 export type MetricType =
@@ -112,6 +130,7 @@ export interface ReadMetricsDatasource {
   discoverMetrics(options?: {
     requestContext?: unknown;
   }): Promise<MetricsDiscoveryResult>;
+  executeMetricsQuery(query: MetricsKopaiQuery): Promise<KopaiQueryResult>;
 }
 
 export interface LogsPartialSuccess {

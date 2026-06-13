@@ -26,6 +26,110 @@ describe("schemas", () => {
         limit: 3,
       },
     } satisfies DataSource;
+
+    // executeTracesQuery — positive
+    const _testDataSource3 = {
+      method: "executeTracesQuery",
+      params: {
+        query: {
+          signal: "traces",
+          select: { id: { kind: "col", name: "traceId" } },
+        },
+      },
+    } satisfies DataSource;
+
+    // executeTracesQuery — missing params.query
+    const _testDataSource3MissingQuery = {
+      method: "executeTracesQuery",
+      params: {},
+    } as const;
+    // @ts-expect-error - missing required params.query
+    const _testDataSource3MissingQueryCheck: DataSource =
+      _testDataSource3MissingQuery;
+
+    // executeTracesQuery — wrong signal in query body
+    const _testDataSource3WrongSignal = {
+      method: "executeTracesQuery",
+      params: {
+        query: {
+          signal: "logs",
+          select: { id: { kind: "col", name: "traceId" } },
+        },
+      },
+    } as const;
+    // @ts-expect-error - signal must be 'traces' for executeTracesQuery
+    const _testDataSource3WrongSignalCheck: DataSource =
+      _testDataSource3WrongSignal;
+
+    // executeLogsQuery — positive
+    const _testDataSource4 = {
+      method: "executeLogsQuery",
+      params: {
+        query: {
+          signal: "logs",
+          select: { ts: { kind: "col", name: "timestamp" } },
+        },
+      },
+    } satisfies DataSource;
+
+    // executeLogsQuery — missing params.query
+    const _testDataSource4MissingQuery = {
+      method: "executeLogsQuery",
+      params: {},
+    } as const;
+    // @ts-expect-error - missing required params.query
+    const _testDataSource4MissingQueryCheck: DataSource =
+      _testDataSource4MissingQuery;
+
+    // executeLogsQuery — wrong signal in query body
+    const _testDataSource4WrongSignal = {
+      method: "executeLogsQuery",
+      params: {
+        query: {
+          signal: "traces",
+          select: { ts: { kind: "col", name: "timestamp" } },
+        },
+      },
+    } as const;
+    // @ts-expect-error - signal must be 'logs' for executeLogsQuery
+    const _testDataSource4WrongSignalCheck: DataSource =
+      _testDataSource4WrongSignal;
+
+    // executeMetricsQuery — positive
+    const _testDataSource5 = {
+      method: "executeMetricsQuery",
+      params: {
+        query: {
+          signal: "metrics",
+          metricType: "gauge",
+          select: { name: { kind: "col", name: "metricName" } },
+        },
+      },
+    } satisfies DataSource;
+
+    // executeMetricsQuery — missing params.query
+    const _testDataSource5MissingQuery = {
+      method: "executeMetricsQuery",
+      params: {},
+    } as const;
+    // @ts-expect-error - missing required params.query
+    const _testDataSource5MissingQueryCheck: DataSource =
+      _testDataSource5MissingQuery;
+
+    // executeMetricsQuery — wrong signal in query body
+    const _testDataSource5WrongSignal = {
+      method: "executeMetricsQuery",
+      params: {
+        query: {
+          signal: "traces",
+          metricType: "gauge",
+          select: { name: { kind: "col", name: "metricName" } },
+        },
+      },
+    } as const;
+    // @ts-expect-error - signal must be 'metrics' for executeMetricsQuery
+    const _testDataSource5WrongSignalCheck: DataSource =
+      _testDataSource5WrongSignal;
   });
 
   describe("createCatalog", () => {
