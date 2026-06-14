@@ -18,8 +18,10 @@ const ts = (offsetMs: number) =>
 const createMockClient = () => ({
   searchTracesPage: vi.fn(),
   searchLogsPage: vi.fn(),
+  searchLogsAggregate: vi.fn(),
   searchMetricsPage: vi.fn(),
   searchAggregatedMetrics: vi.fn(),
+  searchMetricsTimeSeries: vi.fn(),
   getTrace: vi.fn(),
   discoverMetrics: vi.fn(),
   getDashboard: vi.fn(),

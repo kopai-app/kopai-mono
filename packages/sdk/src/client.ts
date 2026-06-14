@@ -17,6 +17,8 @@ import type {
   OtelLogsRow,
   OtelMetricsRow,
   AggregatedMetricRow,
+  AggregatedLogRow,
+  TimeseriesMetricRow,
   MetricsDiscoveryResult,
   Dashboard,
   CreateDashboardParams,
@@ -45,6 +47,16 @@ const metricsResponseSchema = z.object({
 
 const aggregatedMetricsResponseSchema = z.object({
   data: z.array(denormalizedSignals.aggregatedMetricSchema),
+  nextCursor: z.null(),
+});
+
+const aggregatedLogsResponseSchema = z.object({
+  data: z.array(denormalizedSignals.aggregatedLogSchema),
+  nextCursor: z.null(),
+});
+
+const timeseriesMetricsResponseSchema = z.object({
+  data: z.array(denormalizedSignals.timeseriesMetricSchema),
   nextCursor: z.null(),
 });
 
@@ -209,6 +221,39 @@ export class KopaiClient {
   }
 
   /**
+   * Search aggregated logs (requires aggregate + groupBy in filter).
+   * Returns grouped count values instead of raw log rows.
+   *
+   * Posts to the dedicated `/signals/logs/aggregate` endpoint.
+   *
+   * Note: the server enforces a hard cap of 1000 result groups; pagination
+   * is not supported for aggregated queries (nextCursor is always null).
+   */
+  async searchLogsAggregate(
+    filter: LogsDataFilter & {
+      aggregate: NonNullable<LogsDataFilter["aggregate"]>;
+      groupBy: NonNullable<LogsDataFilter["groupBy"]>;
+    },
+    opts?: RequestOptions
+  ): Promise<{ data: AggregatedLogRow[]; nextCursor: null }> {
+    const validatedFilter =
+      dataFilterSchemas.logsDataFilterSchema.parse(filter);
+
+    return request(
+      `${this.baseUrl}/signals/logs/aggregate`,
+      aggregatedLogsResponseSchema,
+      {
+        method: "POST",
+        body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
    * Search metrics with auto-pagination.
    * Yields individual metric rows.
    */
@@ -265,6 +310,38 @@ export class KopaiClient {
     return request(
       `${this.baseUrl}/signals/metrics/search`,
       aggregatedMetricsResponseSchema,
+      {
+        method: "POST",
+        body: validatedFilter,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Search metrics time-bucketed timeseries (requires aggregate + groupBy + timeBucket).
+   * Returns one row per (group, bucket) combination.
+   *
+   * Note: the server enforces a hard cap of 10000 result rows; pagination
+   * is not supported for timeseries queries (nextCursor is always null).
+   */
+  async searchMetricsTimeSeries(
+    filter: MetricsDataFilter & {
+      aggregate: NonNullable<MetricsDataFilter["aggregate"]>;
+      groupBy: NonNullable<MetricsDataFilter["groupBy"]>;
+      timeBucket: NonNullable<MetricsDataFilter["timeBucket"]>;
+    },
+    opts?: RequestOptions
+  ): Promise<{ data: TimeseriesMetricRow[]; nextCursor: null }> {
+    const validatedFilter =
+      dataFilterSchemas.metricsDataFilterSchema.parse(filter);
+
+    return request(
+      `${this.baseUrl}/signals/metrics/timeseries`,
+      timeseriesMetricsResponseSchema,
       {
         method: "POST",
         body: validatedFilter,

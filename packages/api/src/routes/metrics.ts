@@ -20,6 +20,19 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
     nextCursor: z.null(),
   });
 
+  const timeseriesResponseSchema = z.object({
+    data: z.array(denormalizedSignals.timeseriesMetricSchema),
+    nextCursor: z.null(),
+  });
+
+  const timeseriesBodySchema = dataFilterSchemas.metricsDataFilterSchema.refine(
+    (d) => d.timeBucket !== undefined,
+    {
+      message: "timeBucket is required for /timeseries endpoint",
+      path: ["timeBucket"],
+    }
+  );
+
   fastify.route({
     method: "POST",
     url: "/signals/metrics/search",
@@ -37,6 +50,27 @@ export const metricsRoutes: FastifyPluginAsyncZod<{
       const result = req.body.aggregate
         ? await opts.readMetricsDatasource.getAggregatedMetrics(params)
         : await opts.readMetricsDatasource.getMetrics(params);
+      res.send(result);
+    },
+  });
+
+  fastify.route({
+    method: "POST",
+    url: "/signals/metrics/timeseries",
+    schema: {
+      description:
+        "Search metrics time-bucketed timeseries (requires aggregate + groupBy + timeBucket)",
+      body: timeseriesBodySchema,
+      response: {
+        200: timeseriesResponseSchema,
+        "4xx": problemDetailsSchema,
+        "5xx": problemDetailsSchema,
+      },
+    },
+    handler: async (req, res) => {
+      const params = { ...req.body, requestContext: req.requestContext };
+      const result =
+        await opts.readMetricsDatasource.getMetricsTimeSeries(params);
       res.send(result);
     },
   });

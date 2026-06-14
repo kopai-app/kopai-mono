@@ -319,6 +319,169 @@ LIMIT {limit:UInt32}`;
   return { query, params };
 }
 
+const TIME_BUCKET_INTERVAL_MAP: Record<
+  NonNullable<dataFilterSchemas.MetricsDataFilter["timeBucket"]>,
+  string
+> = {
+  "1m": "INTERVAL 1 MINUTE",
+  "5m": "INTERVAL 5 MINUTE",
+  "1h": "INTERVAL 1 HOUR",
+  "1d": "INTERVAL 1 DAY",
+};
+
+/**
+ * Build a timeseries metrics query: same shape as `buildAggregatedMetricsQuery`
+ * but with an extra `timeBucketNs` dimension added to both SELECT and GROUP BY.
+ *
+ * Returns one row per (group, time bucket) combination. `timeBucketNs` is the
+ * start of the bucket as a stringified bigint of nanoseconds since the UNIX
+ * epoch (matching the TimeUnix convention used elsewhere). Generated via
+ * `toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL <bucket>)) * 1e9`.
+ * `toStartOfInterval` on a `DateTime64` returns a plain `DateTime` (no sub-
+ * second precision), so we can't use `toUnixTimestamp64Nano` directly. Since
+ * the smallest supported bucket is 1 minute, dropping sub-second precision is
+ * lossless.
+ *
+ * `LIMIT 10000` caps cardinality (groups × buckets); enough for a typical
+ * dashboard panel rendering days of data across a handful of series.
+ */
+export function buildMetricsTimeSeriesQuery(
+  filter: dataFilterSchemas.MetricsDataFilter
+): { query: string; params: Record<string, unknown> } {
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = {};
+  const limit = filter.limit ?? 10000;
+  const metricType: datasource.MetricType = filter.metricType;
+  if (metricType !== "Gauge" && metricType !== "Sum") {
+    throw new Error(`timeBucket is not supported for ${metricType}`);
+  }
+  const table = TABLE_MAP[metricType];
+
+  const aggKey = filter.aggregate ?? "sum";
+  const aggFn = AGGREGATE_FN_MAP[aggKey];
+  if (!aggFn) {
+    throw new Error(`Unknown aggregate function: ${aggKey}`);
+  }
+
+  const timeBucket = filter.timeBucket;
+  if (!timeBucket) {
+    throw new Error("buildMetricsTimeSeriesQuery requires filter.timeBucket");
+  }
+  const interval = TIME_BUCKET_INTERVAL_MAP[timeBucket];
+
+  // Build SELECT columns: group-by extractions + bucket + aggregation
+  const selectCols: string[] = [];
+  const groupByCols: string[] = [];
+
+  if (filter.groupBy) {
+    for (const [i, groupKey] of filter.groupBy.entries()) {
+      const alias = `group_${String(i)}`;
+      selectCols.push(
+        `Attributes[{groupByKey${String(i)}:String}] AS ${alias}`
+      );
+      groupByCols.push(alias);
+      params[`groupByKey${String(i)}`] = groupKey;
+    }
+  }
+
+  // `toStartOfInterval(DateTime64, INTERVAL X)` returns plain `DateTime` (no
+  // sub-second precision), so we convert via `toUnixTimestamp(...) * 1e9` to
+  // nanoseconds. Buckets are at most minute-resolution, so dropping sub-
+  // second precision here is lossless. The explicit `toInt64()` cast is for
+  // self-documentation: ClickHouse already auto-promotes the UInt32 result
+  // of `toUnixTimestamp()` to UInt64 during the multiplication, but the
+  // cast makes the resulting type unambiguous for future readers and
+  // guards against accidental overflow if upstream types change.
+  selectCols.push(
+    `toInt64(toUnixTimestamp(toStartOfInterval(TimeUnix, ${interval}))) * 1000000000 AS timeBucketNs`
+  );
+  groupByCols.push("timeBucketNs");
+
+  selectCols.push(`${aggFn}(Value) AS value`);
+
+  // Exact match filters
+  if (filter.metricName) {
+    conditions.push("MetricName = {metricName:String}");
+    params.metricName = filter.metricName;
+  }
+  if (filter.serviceName) {
+    conditions.push("ServiceName = {serviceName:String}");
+    params.serviceName = filter.serviceName;
+  }
+  if (filter.scopeName) {
+    conditions.push("ScopeName = {scopeName:String}");
+    params.scopeName = filter.scopeName;
+  }
+
+  // Implicit Delta filter for Sum
+  if (metricType === "Sum") {
+    conditions.push("AggregationTemporality = 1");
+  }
+
+  // Time range
+  if (filter.timeUnixMin != null) {
+    conditions.push("TimeUnix >= {tsMin:DateTime64(9)}");
+    params.tsMin = nanosToDateTime64(filter.timeUnixMin);
+  }
+  if (filter.timeUnixMax != null) {
+    conditions.push("TimeUnix <= {tsMax:DateTime64(9)}");
+    params.tsMax = nanosToDateTime64(filter.timeUnixMax);
+  }
+
+  // Attribute filters
+  if (filter.attributes) {
+    let i = 0;
+    for (const [key, value] of Object.entries(filter.attributes)) {
+      conditions.push(
+        `Attributes[{attrKey${String(i)}:String}] = {attrVal${String(i)}:String}`
+      );
+      params[`attrKey${String(i)}`] = key;
+      params[`attrVal${String(i)}`] = value;
+      i++;
+    }
+  }
+  if (filter.resourceAttributes) {
+    let i = 0;
+    for (const [key, value] of Object.entries(filter.resourceAttributes)) {
+      conditions.push(
+        `ResourceAttributes[{resAttrKey${String(i)}:String}] = {resAttrVal${String(i)}:String}`
+      );
+      params[`resAttrKey${String(i)}`] = key;
+      params[`resAttrVal${String(i)}`] = value;
+      i++;
+    }
+  }
+  if (filter.scopeAttributes) {
+    let i = 0;
+    for (const [key, value] of Object.entries(filter.scopeAttributes)) {
+      conditions.push(
+        `ScopeAttributes[{scopeAttrKey${String(i)}:String}] = {scopeAttrVal${String(i)}:String}`
+      );
+      params[`scopeAttrKey${String(i)}`] = key;
+      params[`scopeAttrVal${String(i)}`] = value;
+      i++;
+    }
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const groupByClause = `GROUP BY ${groupByCols.join(", ")}`;
+
+  const query = `
+SELECT
+  ${selectCols.join(",\n  ")}
+FROM ${table}
+${whereClause}
+${groupByClause}
+ORDER BY timeBucketNs ASC, value DESC
+LIMIT {limit:UInt32}`;
+
+  params.limit = limit;
+
+  return { query, params };
+}
+
 // ---------------------------------------------------------------------------
 // Materialized-view target table names for metrics discovery.
 // When these tables exist, discoverMetrics uses them for near-instant results.

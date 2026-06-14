@@ -20,6 +20,8 @@ export type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 export type OtelLogsRow = denormalizedSignals.OtelLogsRow;
 export type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
 export type AggregatedMetricRow = denormalizedSignals.AggregatedMetricRow;
+export type AggregatedLogRow = denormalizedSignals.AggregatedLogRow;
+export type TimeseriesMetricRow = denormalizedSignals.TimeseriesMetricRow;
 
 export type MetricsDiscoveryResult = datasource.MetricsDiscoveryResult;
 export type DiscoveredMetric = datasource.DiscoveredMetric;

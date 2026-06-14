@@ -51,6 +51,15 @@ export type { MetricStatProps, ThresholdConfig } from "./MetricStat/index.js";
 export { MetricTable } from "./MetricTable/index.js";
 export type { MetricTableProps } from "./MetricTable/index.js";
 
+export { MetricBarChart } from "./MetricBarChart/index.js";
+export type { MetricBarChartProps } from "./MetricBarChart/index.js";
+
+export { MetricDonutChart } from "./MetricDonutChart/index.js";
+export type { MetricDonutChartProps } from "./MetricDonutChart/index.js";
+
+export { MetricLeaderboard } from "./MetricLeaderboard/index.js";
+export type { MetricLeaderboardProps } from "./MetricLeaderboard/index.js";
+
 export { RawDataTable } from "./RawDataTable/index.js";
 export type { RawDataTableProps } from "./RawDataTable/index.js";
 

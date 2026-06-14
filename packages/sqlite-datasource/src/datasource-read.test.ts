@@ -1184,6 +1184,304 @@ describe("OptimizedDatasource", () => {
     });
   });
 
+  describe("getAggregatedLogs", () => {
+    let testConnection: DatabaseSync;
+    let ds: OptimizedDatasource;
+    let readDs: datasource.ReadTelemetryDatasource;
+    let insertLog: ReturnType<typeof createInsertLog>;
+
+    beforeEach(async () => {
+      testConnection = initializeDatabase(":memory:");
+      ds = createOptimizedDatasource(testConnection);
+      readDs = ds;
+      insertLog = createInsertLog(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    // CRITICAL regression: SQLite json_extract on JSON string values must
+    // return the raw string ("Bash"), NOT a double-quoted literal ('"Bash"').
+    // The quote-strip (if needed) lives in the datasource layer.
+    it("returns groupBy string values without surrounding double quotes", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash", decision: "accept" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash", decision: "reject" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        eventName: "tool_decision",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.groups.tool_name).toBe("Bash");
+      expect(row0.groups.tool_name).not.toBe('"Bash"');
+      expect(row0.value).toBe(2);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("groups by multiple attributes", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash", decision: "accept" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash", decision: "reject" },
+      });
+      await insertLog({
+        timeNanos: "3000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Read", decision: "accept" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name", "decision"],
+        eventName: "tool_decision",
+      });
+
+      expect(result.data).toHaveLength(3);
+      for (const row of result.data) {
+        expect(row.groups).toHaveProperty("tool_name");
+        expect(row.groups).toHaveProperty("decision");
+        expect(row.value).toBe(1);
+      }
+    });
+
+    it("orders results by value DESC", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash" },
+      });
+      await insertLog({
+        timeNanos: "3000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash" },
+      });
+      await insertLog({
+        timeNanos: "4000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Read" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        eventName: "tool_decision",
+      });
+
+      expect(result.data).toHaveLength(2);
+      const first = result.data[0];
+      const second = result.data[1];
+      assertDefined(first);
+      assertDefined(second);
+      expect(first.value).toBe(3);
+      expect(first.groups.tool_name).toBe("Bash");
+      expect(second.value).toBe(1);
+      expect(second.groups.tool_name).toBe("Read");
+    });
+
+    it("applies timestampMin/Max range filter", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        logAttributes: { tool_name: "Bash" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        logAttributes: { tool_name: "Bash" },
+      });
+      await insertLog({
+        timeNanos: "3000000000000000",
+        logAttributes: { tool_name: "Bash" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        timestampMin: "1500000000000000",
+        timestampMax: "2500000000000000",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(1);
+    });
+
+    it("filters by serviceName (no leakage from other services)", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        serviceName: "target-service",
+        logAttributes: { tool_name: "Bash" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        serviceName: "other-service",
+        logAttributes: { tool_name: "Bash" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        serviceName: "target-service",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(1);
+    });
+
+    it("filters by logAttributes", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash", decision: "accept" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        eventName: "tool_decision",
+        logAttributes: { tool_name: "Bash", decision: "reject" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        eventName: "tool_decision",
+        logAttributes: { decision: "accept" },
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(1);
+    });
+
+    it("filters by scopeName", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        scopeName: "scope-a",
+        logAttributes: { tool_name: "Bash" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        scopeName: "scope-b",
+        logAttributes: { tool_name: "Bash" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        scopeName: "scope-a",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(1);
+    });
+
+    it("filters by severityText", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        severityText: "ERROR",
+        logAttributes: { tool_name: "Bash" },
+      });
+      await insertLog({
+        timeNanos: "2000000000000000",
+        severityText: "INFO",
+        logAttributes: { tool_name: "Bash" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        severityText: "ERROR",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(1);
+    });
+
+    it("returns nextCursor === null", async () => {
+      await insertLog({
+        timeNanos: "1000000000000000",
+        logAttributes: { tool_name: "Bash" },
+      });
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+      });
+
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("aggregates count without groupBy", async () => {
+      await insertLog({ timeNanos: "1000000000000000" });
+      await insertLog({ timeNanos: "2000000000000000" });
+      await insertLog({ timeNanos: "3000000000000000" });
+
+      const result = await readDs.getAggregatedLogs({ aggregate: "count" });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.groups).toEqual({});
+      expect(row0.value).toBe(3);
+    });
+
+    it("caps result count at 1000 (LIMIT)", async () => {
+      // Seed 1010 unique groups via unique tool_name values.
+      // Skipped from default suite if slow; use sparingly.
+      for (let i = 0; i < 1010; i++) {
+        await insertLog({
+          timeNanos: `${(i + 1) * 1000000000000}`,
+          logAttributes: { tool_name: `tool_${String(i)}` },
+        });
+      }
+
+      const result = await readDs.getAggregatedLogs({
+        aggregate: "count",
+        groupBy: ["tool_name"],
+      });
+
+      expect(result.data).toHaveLength(1000);
+    });
+
+    it("throws SqliteDatasourceQueryError on DB error", async () => {
+      const badConnection = initializeDatabase(":memory:");
+      const badDs = createOptimizedDatasource(badConnection);
+      badConnection.close();
+
+      await expect(
+        badDs.getAggregatedLogs({ aggregate: "count" })
+      ).rejects.toThrow(SqliteDatasourceQueryError);
+    });
+  });
+
   describe("getMetrics", () => {
     let testConnection: DatabaseSync;
     let ds: OptimizedDatasource;
@@ -2011,6 +2309,385 @@ describe("OptimizedDatasource", () => {
       const row0 = result.data[0];
       assertDefined(row0);
       expect(row0.value).toBe(77);
+    });
+  });
+
+  describe("getMetricsTimeSeries", () => {
+    let testConnection: DatabaseSync;
+    let ds: OptimizedDatasource;
+    let readDs: datasource.ReadTelemetryDatasource;
+    let insertSum: ReturnType<typeof createInsertSum>;
+
+    // Reference nanosecond timestamps used across tests.
+    // 2024-01-01T00:00:00Z = 1704067200 s.
+    const NS_PER_SEC = 1_000_000_000n;
+    const t = (iso: string): string =>
+      String(BigInt(Math.trunc(Date.parse(iso) / 1000)) * NS_PER_SEC);
+
+    beforeEach(async () => {
+      testConnection = initializeDatabase(":memory:");
+      ds = createOptimizedDatasource(testConnection);
+      readDs = ds;
+      insertSum = createInsertSum(ds);
+    });
+
+    afterEach(() => {
+      testConnection.close();
+    });
+
+    it("buckets by 1d, groups by model, returns ascending timeBucketNs", async () => {
+      // Day 1, two opus events (3 + 4) and one sonnet (2)
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T00:30:00Z"),
+        value: 3,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T12:00:00Z"),
+        value: 4,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T15:00:00Z"),
+        value: 2,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "sonnet" },
+      });
+      // Day 2, opus 5
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-02T06:00:00Z"),
+        value: 5,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+
+      const result = await readDs.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+      });
+
+      expect(result.nextCursor).toBeNull();
+      expect(result.data).toHaveLength(3);
+
+      const day1Ns = t("2024-01-01T00:00:00Z");
+      const day2Ns = t("2024-01-02T00:00:00Z");
+
+      // Ascending by timeBucketNs
+      for (let i = 1; i < result.data.length; i++) {
+        const prev = result.data[i - 1];
+        const cur = result.data[i];
+        assertDefined(prev);
+        assertDefined(cur);
+        expect(BigInt(prev.timeBucketNs) <= BigInt(cur.timeBucketNs)).toBe(
+          true
+        );
+      }
+
+      // Every row matches the schema shape
+      for (const row of result.data) {
+        expect(typeof row.timeBucketNs).toBe("string");
+        expect(typeof row.value).toBe("number");
+        expect(row.groups).toBeDefined();
+      }
+
+      // Find specific rows
+      const day1Opus = result.data.find(
+        (r) => r.timeBucketNs === day1Ns && r.groups.model === "opus"
+      );
+      const day1Sonnet = result.data.find(
+        (r) => r.timeBucketNs === day1Ns && r.groups.model === "sonnet"
+      );
+      const day2Opus = result.data.find(
+        (r) => r.timeBucketNs === day2Ns && r.groups.model === "opus"
+      );
+      assertDefined(day1Opus);
+      assertDefined(day1Sonnet);
+      assertDefined(day2Opus);
+      expect(day1Opus.value).toBe(7);
+      expect(day1Sonnet.value).toBe(2);
+      expect(day2Opus.value).toBe(5);
+    });
+
+    it("buckets by 1h", async () => {
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:05:00Z"),
+        value: 1,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:55:00Z"),
+        value: 2,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T11:00:00Z"),
+        value: 4,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+
+      const result = await readDs.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1h",
+      });
+
+      expect(result.data).toHaveLength(2);
+      const h10 = result.data.find(
+        (r) => r.timeBucketNs === t("2024-01-01T10:00:00Z")
+      );
+      const h11 = result.data.find(
+        (r) => r.timeBucketNs === t("2024-01-01T11:00:00Z")
+      );
+      assertDefined(h10);
+      assertDefined(h11);
+      expect(h10.value).toBe(3);
+      expect(h11.value).toBe(4);
+    });
+
+    it("buckets by 5m", async () => {
+      // Both 12:01:30 and 12:03:00 fall in the 12:00 - 12:05 bucket
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T12:01:30Z"),
+        value: 1,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T12:03:00Z"),
+        value: 2,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      // Next bucket 12:05 - 12:10
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T12:07:00Z"),
+        value: 10,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+
+      const result = await readDs.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "5m",
+      });
+
+      expect(result.data).toHaveLength(2);
+      const b1 = result.data.find(
+        (r) => r.timeBucketNs === t("2024-01-01T12:00:00Z")
+      );
+      const b2 = result.data.find(
+        (r) => r.timeBucketNs === t("2024-01-01T12:05:00Z")
+      );
+      assertDefined(b1);
+      assertDefined(b2);
+      expect(b1.value).toBe(3);
+      expect(b2.value).toBe(10);
+    });
+
+    it("buckets by 1m", async () => {
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T12:01:30Z"),
+        value: 1,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T12:01:45Z"),
+        value: 2,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T12:02:10Z"),
+        value: 5,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+
+      const result = await readDs.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1m",
+      });
+
+      expect(result.data).toHaveLength(2);
+      const m1 = result.data.find(
+        (r) => r.timeBucketNs === t("2024-01-01T12:01:00Z")
+      );
+      const m2 = result.data.find(
+        (r) => r.timeBucketNs === t("2024-01-01T12:02:00Z")
+      );
+      assertDefined(m1);
+      assertDefined(m2);
+      expect(m1.value).toBe(3);
+      expect(m2.value).toBe(5);
+    });
+
+    it("groups by multiple keys", async () => {
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:00:00Z"),
+        value: 1,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus", effort: "high" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:30:00Z"),
+        value: 2,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus", effort: "high" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:30:00Z"),
+        value: 4,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus", effort: "low" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:45:00Z"),
+        value: 8,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "sonnet", effort: "low" },
+      });
+
+      const result = await readDs.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model", "effort"],
+        timeBucket: "1h",
+      });
+
+      expect(result.data).toHaveLength(3);
+      const hourBucket = t("2024-01-01T10:00:00Z");
+      const opusHigh = result.data.find(
+        (r) =>
+          r.timeBucketNs === hourBucket &&
+          r.groups.model === "opus" &&
+          r.groups.effort === "high"
+      );
+      const opusLow = result.data.find(
+        (r) =>
+          r.timeBucketNs === hourBucket &&
+          r.groups.model === "opus" &&
+          r.groups.effort === "low"
+      );
+      const sonnetLow = result.data.find(
+        (r) =>
+          r.timeBucketNs === hourBucket &&
+          r.groups.model === "sonnet" &&
+          r.groups.effort === "low"
+      );
+      assertDefined(opusHigh);
+      assertDefined(opusLow);
+      assertDefined(sonnetLow);
+      expect(opusHigh.value).toBe(3);
+      expect(opusLow.value).toBe(4);
+      expect(sonnetLow.value).toBe(8);
+    });
+
+    it("applies time range filter", async () => {
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:00:00Z"),
+        value: 100,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-02T10:00:00Z"),
+        value: 200,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-03T10:00:00Z"),
+        value: 400,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        attributes: { model: "opus" },
+      });
+
+      const result = await readDs.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+        timeUnixMin: t("2024-01-02T00:00:00Z"),
+        timeUnixMax: t("2024-01-02T23:59:59Z"),
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.timeBucketNs).toBe(t("2024-01-02T00:00:00Z"));
+      expect(row0.value).toBe(200);
+    });
+
+    it("applies serviceName filter", async () => {
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:00:00Z"),
+        value: 10,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        serviceName: "svc-a",
+        attributes: { model: "opus" },
+      });
+      await insertSum({
+        metricName: "claude_code.cost.usage",
+        timeUnixNano: t("2024-01-01T10:00:00Z"),
+        value: 99,
+        aggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+        serviceName: "svc-b",
+        attributes: { model: "opus" },
+      });
+
+      const result = await readDs.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+        serviceName: "svc-a",
+      });
+
+      expect(result.data).toHaveLength(1);
+      const row0 = result.data[0];
+      assertDefined(row0);
+      expect(row0.value).toBe(10);
     });
   });
 
@@ -3310,6 +3987,7 @@ function createInsertLog(
     scopeName?: string;
     severityText?: string;
     severityNumber?: number;
+    eventName?: string;
     body?: string;
     bodyValue?: otlp.AnyValue;
     logAttributes?: Record<string, string>;
@@ -3351,6 +4029,7 @@ function createInsertLog(
                   spanId: opts.spanId,
                   severityText: opts.severityText,
                   severityNumber: opts.severityNumber,
+                  eventName: opts.eventName,
                   body:
                     opts.bodyValue ??
                     (opts.body ? { stringValue: opts.body } : undefined),

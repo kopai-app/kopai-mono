@@ -24,6 +24,7 @@ interface MetricsSearchOptions extends ClientOptions {
   sort?: string;
   aggregate?: string;
   groupBy?: string[];
+  timeBucket?: string;
 }
 
 interface MetricsDiscoverOptions extends ClientOptions {
@@ -81,12 +82,32 @@ export function createMetricsCommand(): Command {
         collect,
         []
       )
+      .option(
+        "--time-bucket <interval>",
+        "Bucket interval for timeseries output (1m|5m|1h|1d). Requires --aggregate and --group-by. Server caps results at 10000 rows; --limit is ignored."
+      )
   ).action(async (opts: MetricsSearchOptions) => {
     const format = detectFormat(opts.json, opts.table);
     const fields = parseFields(opts.fields);
     try {
       const client = createClient(opts);
       const limit = opts.limit ? parseInt(opts.limit, 10) : undefined;
+      const aggregate = toAggregateFn(opts.aggregate);
+      const groupBy =
+        opts.groupBy && opts.groupBy.length > 0 ? opts.groupBy : undefined;
+      const timeBucket = toTimeBucket(opts.timeBucket);
+
+      if (timeBucket && !aggregate) {
+        throw new InvalidArgumentError("--time-bucket requires --aggregate");
+      }
+      if (timeBucket && !groupBy) {
+        throw new InvalidArgumentError(
+          "--time-bucket requires at least one --group-by"
+        );
+      }
+      if (groupBy && !aggregate) {
+        throw new InvalidArgumentError("--group-by requires --aggregate");
+      }
 
       const filter = {
         metricType: opts.type as
@@ -105,18 +126,28 @@ export function createMetricsCommand(): Command {
         scopeAttributes: parseAttributes(opts.scopeAttr),
         limit,
         sortOrder: opts.sort as "ASC" | "DESC" | undefined,
-        aggregate: toAggregateFn(opts.aggregate),
-        groupBy:
-          opts.groupBy && opts.groupBy.length > 0 ? opts.groupBy : undefined,
+        aggregate,
+        groupBy,
       };
 
-      const result = filter.aggregate
-        ? await client.searchAggregatedMetrics({
-            ...filter,
-            aggregate: filter.aggregate,
-          })
-        : await client.searchMetricsPage(filter);
-      output(result.data, { format, fields });
+      if (timeBucket && aggregate && groupBy) {
+        const result = await client.searchMetricsTimeSeries({
+          ...filter,
+          aggregate,
+          groupBy,
+          timeBucket,
+        });
+        output(formatTimeseriesRows(result.data), { format, fields });
+      } else if (aggregate) {
+        const result = await client.searchAggregatedMetrics({
+          ...filter,
+          aggregate,
+        });
+        output(result.data, { format, fields });
+      } else {
+        const result = await client.searchMetricsPage(filter);
+        output(result.data, { format, fields });
+      }
     } catch (err) {
       outputError(err, format === "json");
       process.exit(1);
@@ -166,4 +197,35 @@ function toAggregateFn(value: string | undefined): AggregateFn | undefined {
   if (value === undefined) return undefined;
   if (isAggregateFn(value)) return value;
   throw new InvalidArgumentError(`Invalid aggregate function: ${value}`);
+}
+
+type TimeBucket = "1m" | "5m" | "1h" | "1d";
+
+function isTimeBucket(value: string): value is TimeBucket {
+  return value === "1m" || value === "5m" || value === "1h" || value === "1d";
+}
+
+function toTimeBucket(value: string | undefined): TimeBucket | undefined {
+  if (value === undefined) return undefined;
+  if (isTimeBucket(value)) return value;
+  throw new InvalidArgumentError(
+    `Invalid time bucket: ${value}. Allowed: 1m, 5m, 1h, 1d.`
+  );
+}
+
+// Flatten { groups: { k1: v1 }, timeBucketNs, value } -> { k1, timeBucketNs, value }
+// so that `--table` output renders one column per group key followed by
+// `timeBucketNs` and `value`.
+function formatTimeseriesRows(
+  rows: Array<{
+    groups: Record<string, unknown>;
+    timeBucketNs: string;
+    value: number;
+  }>
+): Array<Record<string, unknown>> {
+  return rows.map((row) => ({
+    ...row.groups,
+    timeBucketNs: row.timeBucketNs,
+    value: row.value,
+  }));
 }

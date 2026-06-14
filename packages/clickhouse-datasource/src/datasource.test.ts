@@ -169,10 +169,12 @@ beforeAll(async () => {
   await seedTraces(dbClient);
   await seedLogs(dbClient);
   await seedDuplicateTimestampLogs(dbClient);
+  await seedToolDecisionLogs(dbClient);
   await seedMetrics(dbClient);
   await seedDuplicateTimestampMetrics(dbClient);
   await seedTruncationMetric(dbClient);
   await seedMultiAttrMetric(dbClient);
+  await seedTimeseriesSumMetric(dbClient);
 
   await dbClient.close();
 
@@ -720,6 +722,49 @@ async function seedDuplicateTimestampLogs(client: ClickHouseClient) {
   });
 }
 
+async function seedToolDecisionLogs(client: ClickHouseClient) {
+  // Seed Claude Code tool_decision events for getAggregatedLogs tests.
+  // Expected counts when grouped by tool_name:
+  //   Bash:  3 (2 accept + 1 reject)
+  //   Edit:  2 (1 accept + 1 reject)
+  //   Read:  1 (1 accept)
+  // Total: 6 rows.
+  const rows = [
+    { tool_name: "Bash", decision: "accept" },
+    { tool_name: "Bash", decision: "accept" },
+    { tool_name: "Bash", decision: "reject" },
+    { tool_name: "Edit", decision: "accept" },
+    { tool_name: "Edit", decision: "reject" },
+    { tool_name: "Read", decision: "accept" },
+  ];
+  await client.insert({
+    table: "otel_logs",
+    values: rows.map((r, i) => ({
+      // 2024-02-01 00:00:0X — distinct from existing log seeds (2024-01-01)
+      Timestamp: `2024-02-01 00:00:0${String(i)}.000000000`,
+      TraceId: "",
+      SpanId: "",
+      TraceFlags: 0,
+      SeverityText: "INFO",
+      SeverityNumber: 9,
+      ServiceName: "claude-code",
+      Body: `tool ${r.tool_name} ${r.decision}`,
+      ResourceSchemaUrl: "",
+      ResourceAttributes: {},
+      ScopeSchemaUrl: "",
+      ScopeName: "",
+      ScopeVersion: "",
+      ScopeAttributes: {},
+      LogAttributes: {
+        "event.name": "tool_decision",
+        tool_name: r.tool_name,
+        decision: r.decision,
+      },
+    })),
+    format: "JSONEachRow",
+  });
+}
+
 async function seedMetrics(client: ClickHouseClient) {
   await client.insert({
     table: "otel_metrics_gauge",
@@ -1008,6 +1053,71 @@ async function seedDuplicateTimestampMetrics(client: ClickHouseClient) {
  * if the query calls arrayJoin(mapKeys(Attributes)) twice in the same SELECT,
  * a row with N attribute keys produces N*N rows instead of N.
  */
+/**
+ * Seed Sum metrics with Delta temporality across multiple TimeUnix days and
+ * `model` attribute values. Used by getMetricsTimeSeries integration tests.
+ *
+ * Layout (10 rows total):
+ *   2024-02-01: opus=1, sonnet=2, opus=3            (sums: opus=4, sonnet=2)
+ *   2024-02-02: opus=10, sonnet=20, sonnet=30       (sums: opus=10, sonnet=50)
+ *   2024-02-03: opus=100, opus=200, sonnet=300, sonnet=400  (sums: opus=300, sonnet=700)
+ */
+async function seedTimeseriesSumMetric(client: ClickHouseClient) {
+  const base = {
+    ResourceAttributes: {},
+    ResourceSchemaUrl: "",
+    ScopeName: "claude-code",
+    ScopeVersion: "1.0.0",
+    ScopeAttributes: {},
+    ScopeDroppedAttrCount: 0,
+    ScopeSchemaUrl: "",
+    ServiceName: "claude-code",
+    MetricName: "claude_code.cost.usage",
+    MetricDescription: "Claude Code cost in USD",
+    MetricUnit: "USD",
+    StartTimeUnix: "2024-02-01 00:00:00.000000000",
+    Flags: 0,
+    "Exemplars.FilteredAttributes": [],
+    "Exemplars.TimeUnix": [],
+    "Exemplars.Value": [],
+    "Exemplars.SpanId": [],
+    "Exemplars.TraceId": [],
+    AggregationTemporality: 1, // Delta
+    IsMonotonic: true,
+  };
+
+  const row = (
+    timeUnix: string,
+    model: string,
+    value: number
+  ): Record<string, unknown> => ({
+    ...base,
+    Attributes: { model },
+    TimeUnix: timeUnix,
+    Value: value,
+  });
+
+  await client.insert({
+    table: "otel_metrics_sum",
+    values: [
+      // 2024-02-01
+      row("2024-02-01 01:00:00.000000000", "opus", 1),
+      row("2024-02-01 02:00:00.000000000", "sonnet", 2),
+      row("2024-02-01 03:00:00.000000000", "opus", 3),
+      // 2024-02-02
+      row("2024-02-02 04:00:00.000000000", "opus", 10),
+      row("2024-02-02 05:00:00.000000000", "sonnet", 20),
+      row("2024-02-02 06:00:00.000000000", "sonnet", 30),
+      // 2024-02-03
+      row("2024-02-03 07:00:00.000000000", "opus", 100),
+      row("2024-02-03 08:00:00.000000000", "opus", 200),
+      row("2024-02-03 09:00:00.000000000", "sonnet", 300),
+      row("2024-02-03 10:00:00.000000000", "sonnet", 400),
+    ],
+    format: "JSONEachRow",
+  });
+}
+
 async function seedMultiAttrMetric(client: ClickHouseClient) {
   await client.insert({
     table: "otel_metrics_gauge",
@@ -1414,7 +1524,8 @@ describe("ClickHouseReadDatasource", () => {
     it("returns all logs with no filters", async () => {
       const result = await ds.getLogs({ requestContext: requestContext() });
 
-      expect(result.data.length).toBe(6);
+      // 3 base + 3 dup-timestamp + 6 tool_decision = 12
+      expect(result.data.length).toBe(12);
     });
 
     it("filters by serviceName", async () => {
@@ -1579,6 +1690,89 @@ describe("ClickHouseReadDatasource", () => {
     });
   });
 
+  describe("getAggregatedLogs", () => {
+    it("counts grouped by single LogAttributes key sorted DESC", async () => {
+      const result = await ds.getAggregatedLogs({
+        serviceName: "claude-code",
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        logAttributes: { "event.name": "tool_decision" },
+        requestContext: requestContext(),
+      });
+
+      expect(result.nextCursor).toBeNull();
+      expect(result.data).toEqual([
+        { groups: { tool_name: "Bash" }, value: 3 },
+        { groups: { tool_name: "Edit" }, value: 2 },
+        { groups: { tool_name: "Read" }, value: 1 },
+      ]);
+    });
+
+    it("counts grouped by multiple LogAttributes keys", async () => {
+      const result = await ds.getAggregatedLogs({
+        serviceName: "claude-code",
+        aggregate: "count",
+        groupBy: ["tool_name", "decision"],
+        logAttributes: { "event.name": "tool_decision" },
+        requestContext: requestContext(),
+      });
+
+      expect(result.nextCursor).toBeNull();
+      // 5 unique (tool_name, decision) combinations from 6 seed rows
+      expect(result.data.length).toBe(5);
+      // Sorted DESC by value; Bash/accept has count=2, others count=1
+      expect(result.data[0]).toEqual({
+        groups: { tool_name: "Bash", decision: "accept" },
+        value: 2,
+      });
+      // Remaining 4 groups all have count=1
+      for (const row of result.data.slice(1)) {
+        expect(row.value).toBe(1);
+      }
+      const combos = result.data.map(
+        (r) => `${String(r.groups.tool_name)}/${String(r.groups.decision)}`
+      );
+      expect(combos).toEqual(
+        expect.arrayContaining([
+          "Bash/accept",
+          "Bash/reject",
+          "Edit/accept",
+          "Edit/reject",
+          "Read/accept",
+        ])
+      );
+    });
+
+    it("filters by timestamp range", async () => {
+      // Tool-decision logs are at 2024-02-01 00:00:00..05
+      // Use a window that excludes all of them
+      const result = await ds.getAggregatedLogs({
+        serviceName: "claude-code",
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        timestampMin: "1700000000000000000", // 2023-11-14
+        timestampMax: "1700100000000000000", // 2023-11-15
+        requestContext: requestContext(),
+      });
+
+      expect(result.data).toEqual([]);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("returns empty array when no rows match", async () => {
+      const result = await ds.getAggregatedLogs({
+        serviceName: "claude-code",
+        aggregate: "count",
+        groupBy: ["tool_name"],
+        logAttributes: { "event.name": "nonexistent" },
+        requestContext: requestContext(),
+      });
+
+      expect(result.data).toEqual([]);
+      expect(result.nextCursor).toBeNull();
+    });
+  });
+
   describe("getMetrics", () => {
     it("queries Gauge metrics", async () => {
       const result = await ds.getMetrics({
@@ -1594,6 +1788,7 @@ describe("ClickHouseReadDatasource", () => {
     it("queries Sum metrics", async () => {
       const result = await ds.getMetrics({
         metricType: "Sum",
+        metricName: "http.server.request.count",
         requestContext: requestContext(),
       });
 
@@ -1754,6 +1949,105 @@ describe("ClickHouseReadDatasource", () => {
     });
   });
 
+  describe("getMetricsTimeSeries", () => {
+    // Bucket start (UTC) -> nanos since epoch
+    const DAY_1_NS = "1706745600000000000"; // 2024-02-01 00:00:00 UTC
+    const DAY_2_NS = "1706832000000000000"; // 2024-02-02 00:00:00 UTC
+    const DAY_3_NS = "1706918400000000000"; // 2024-02-03 00:00:00 UTC
+
+    it("returns one row per (group, daily bucket) for Sum metric", async () => {
+      const result = await ds.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+        requestContext: requestContext(),
+      });
+
+      expect(result.nextCursor).toBeNull();
+      // 3 days x 2 models = 6 rows
+      expect(result.data.length).toBe(6);
+
+      for (const row of result.data) {
+        expect(row).toHaveProperty("groups");
+        expect(row).toHaveProperty("timeBucketNs");
+        expect(row).toHaveProperty("value");
+        expect(typeof row.timeBucketNs).toBe("string");
+        expect(typeof row.value).toBe("number");
+        expect(row.groups).toHaveProperty("model");
+      }
+
+      // Sort ASC by bucket; ties broken by value DESC. Build expected:
+      //   day1: opus=4, sonnet=2
+      //   day2: sonnet=50, opus=10
+      //   day3: sonnet=700, opus=300
+      const findRow = (ts: string, model: string) =>
+        result.data.find(
+          (r) => r.timeBucketNs === ts && r.groups.model === model
+        );
+
+      // Explicit timeBucketNs assertions for 2024+ timestamps. Validates
+      // that `toInt64(toUnixTimestamp(...)) * 1e9` round-trips ≥
+      // 1.7e18-nanosecond values without UInt32 overflow.
+      const day1Opus = findRow(DAY_1_NS, "opus");
+      expect(day1Opus?.timeBucketNs).toBe(DAY_1_NS);
+      expect(day1Opus?.value).toBe(4);
+      expect(findRow(DAY_1_NS, "sonnet")?.value).toBe(2);
+      expect(findRow(DAY_2_NS, "opus")?.value).toBe(10);
+      expect(findRow(DAY_2_NS, "sonnet")?.value).toBe(50);
+      expect(findRow(DAY_3_NS, "opus")?.value).toBe(300);
+      expect(findRow(DAY_3_NS, "sonnet")?.value).toBe(700);
+    });
+
+    it("returns rows in ascending order by timeBucketNs", async () => {
+      const result = await ds.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+        requestContext: requestContext(),
+      });
+
+      expectAscending(result.data.map((r) => BigInt(r.timeBucketNs)));
+    });
+
+    it("filters by time range", async () => {
+      // Only include 2024-02-02 rows
+      const result = await ds.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "claude_code.cost.usage",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+        timeUnixMin: "1706832000000000000", // 2024-02-02 00:00:00
+        timeUnixMax: "1706918399000000000", // 2024-02-02 23:59:59
+        requestContext: requestContext(),
+      });
+
+      expect(result.nextCursor).toBeNull();
+      expect(result.data.length).toBe(2);
+      for (const row of result.data) {
+        expect(row.timeBucketNs).toBe(DAY_2_NS);
+      }
+    });
+
+    it("returns empty array when no rows match", async () => {
+      const result = await ds.getMetricsTimeSeries({
+        metricType: "Sum",
+        metricName: "does.not.exist",
+        aggregate: "sum",
+        groupBy: ["model"],
+        timeBucket: "1d",
+        requestContext: requestContext(),
+      });
+
+      expect(result.data).toEqual([]);
+      expect(result.nextCursor).toBeNull();
+    });
+  });
+
   describe("discoverMetrics errors without MVs", () => {
     beforeAll(async () => {
       // Ensure no MV tables exist regardless of test ordering
@@ -1860,10 +2154,11 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: requestContext(),
       });
 
-      expect(result.metrics.length).toBe(8);
+      expect(result.metrics.length).toBe(9);
 
       const names = result.metrics.map((m) => m.name).sort();
       expect(names).toEqual([
+        "claude_code.cost.usage",
         "dup.ts.gauge",
         "http.server.request.count",
         "http.server.request.duration",
@@ -1968,13 +2263,13 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: { ...requestContext(), logger: spy },
       });
 
-      expect(result.metrics.length).toBe(8);
+      expect(result.metrics.length).toBe(9);
       expect(spy.info).toHaveBeenCalledOnce();
       const logObj = spy.info.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(logObj).toMatchObject({
         database: TEST_DATABASE,
         method: "discoverMetrics",
-        metricCount: 8,
+        metricCount: 9,
       });
       expect(logObj.durationMs).toBeTypeOf("number");
     });
@@ -1986,7 +2281,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: readerRequestContext(),
       });
 
-      expect(result.metrics.length).toBe(8);
+      expect(result.metrics.length).toBe(9);
     });
   });
 
@@ -2042,8 +2337,8 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         requestContext: tenantBRequestContext(),
       });
 
-      // Tenant A has 6 logs (3 original + 3 dup-timestamp), tenant B has 1
-      expect(tenantA.data.length).toBe(6);
+      // Tenant A has 12 logs (3 original + 3 dup-timestamp + 6 tool_decision), tenant B has 1
+      expect(tenantA.data.length).toBe(12);
       expect(tenantB.data.length).toBe(1);
 
       // No cross-contamination
@@ -2085,7 +2380,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
 
       const tenantANames = tenantA.metrics.map((m) => m.name).sort();
 
-      expect(tenantANames.length).toBe(8);
+      expect(tenantANames.length).toBe(9);
       expect(tenantANames).not.toContain("tenant.b.gauge");
     });
 
@@ -2204,6 +2499,10 @@ GROUP BY MetricName, MetricType, source, attr_key`,
 
     it.each([
       ["getLogs", () => localDs.getLogs({ requestContext: ctx })],
+      [
+        "getAggregatedLogs",
+        () => localDs.getAggregatedLogs({ requestContext: ctx }),
+      ],
       [
         "getMetrics",
         () => localDs.getMetrics({ metricType: "Gauge", requestContext: ctx }),

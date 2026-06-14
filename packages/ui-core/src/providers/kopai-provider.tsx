@@ -6,8 +6,10 @@ export type KopaiClient = Pick<
   SDKClient,
   | "searchTracesPage"
   | "searchLogsPage"
+  | "searchLogsAggregate"
   | "searchMetricsPage"
   | "searchAggregatedMetrics"
+  | "searchMetricsTimeSeries"
   | "getTrace"
   | "discoverMetrics"
   | "getDashboard"

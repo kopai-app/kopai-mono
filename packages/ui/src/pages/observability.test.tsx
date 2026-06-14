@@ -16,8 +16,14 @@ function createMockClient(): MockClient {
   return {
     searchTracesPage: vi.fn().mockResolvedValue({ data: [] }),
     searchLogsPage: vi.fn().mockResolvedValue({ data: [] }),
+    searchLogsAggregate: vi
+      .fn()
+      .mockResolvedValue({ data: [], nextCursor: null }),
     searchMetricsPage: vi.fn().mockResolvedValue({ data: [] }),
     searchAggregatedMetrics: vi
+      .fn()
+      .mockResolvedValue({ data: [], nextCursor: null }),
+    searchMetricsTimeSeries: vi
       .fn()
       .mockResolvedValue({ data: [], nextCursor: null }),
     getTrace: vi.fn().mockResolvedValue({ data: [] }),

@@ -1,6 +1,9 @@
 export { OtelLogTimeline } from "./OtelLogTimeline.js";
+export { OtelMetricBarChart } from "./OtelMetricBarChart.js";
 export { OtelMetricDiscovery } from "./OtelMetricDiscovery.js";
+export { OtelMetricDonutChart } from "./OtelMetricDonutChart.js";
 export { OtelMetricHistogram } from "./OtelMetricHistogram.js";
+export { OtelMetricLeaderboard } from "./OtelMetricLeaderboard.js";
 export { OtelMetricStat } from "./OtelMetricStat.js";
 export { OtelMetricTable } from "./OtelMetricTable.js";
 export { OtelMetricTimeSeries } from "./OtelMetricTimeSeries.js";
