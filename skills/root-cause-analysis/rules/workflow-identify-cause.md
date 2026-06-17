@@ -36,13 +36,7 @@ The dashboard should include:
 2. **Logs** — LogTimeline component filtered to the affected service(s) during the incident timeframe (dataSource method: `searchLogsPage` with `serviceName` param)
 3. **Traces** — TraceDetail component showing a representative error trace
 
-After dashboard creation, present the link to the user:
-
-```
-<baseUrl>/?tab=metrics&dashboardId=<id>
-```
-
-Where `<id>` is from the CLI JSON response and `<baseUrl>` is the `--url` flag value or `http://localhost:8000` if omitted.
+After dashboard creation, present the link to the user — use the `url` field from the CLI JSON response. It's the fully-resolved dashboard URL based on the active `.kopairc` (or `--url` flag, or default). Do not construct the URL yourself.
 
 ### Why create a dashboard?
 

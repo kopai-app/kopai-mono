@@ -64,6 +64,7 @@ Example:
     const isJson = opts.json ?? false;
     try {
       const client = createClient(opts);
+      const { url: baseUrl } = resolveConnectionOpts(opts);
       const raw = await readStdin();
       let body: Record<string, unknown>;
       try {
@@ -84,7 +85,8 @@ Example:
       });
 
       const format = detectFormat(opts.json, opts.table);
-      output(result, { format });
+      const url = `${baseUrl}/?tab=metrics&dashboardId=${encodeURIComponent(result.id)}`;
+      output({ ...result, url }, { format });
     } catch (err) {
       outputError(err, isJson);
       process.exit(1);

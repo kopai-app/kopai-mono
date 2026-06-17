@@ -158,6 +158,8 @@ kopai dashboards schema
 echo '{"uiTree":{"root":"s1","elements":{"s1":{"key":"s1","type":"Stack","props":{"direction":"vertical","gap":"md","align":null},"children":[],"parentKey":""}}},"metadata":{}}' | kopai dashboards create --name "My Dashboard" --tree-version "0.5.0" --json
 ```
 
+The response includes a `url` field — the fully-resolved dashboard URL based on the active `.kopairc` (or `--url` flag, or default). Display it directly.
+
 ## Examples for Agents
 
 ```bash
