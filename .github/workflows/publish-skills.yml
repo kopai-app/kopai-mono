@@ -24,7 +24,7 @@ jobs:
           - otel-instrumentation
           - root-cause-analysis
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: tesslio/publish@1.0
         with:
           token: ${{ secrets.TESSL_API_TOKEN }}
