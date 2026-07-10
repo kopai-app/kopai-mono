@@ -39,12 +39,12 @@
   },
   "dependencies": {
     "@kopai/core": "workspace:*",
-    "fastify-type-provider-zod": "^6.1.0"
+    "fastify-type-provider-zod": "^7.0.0"
   },
   "devDependencies": {
-    "@fastify/swagger": "^9.7.0",
-    "@fastify/swagger-ui": "^5.2.6",
+    "@fastify/swagger": "^9.8.0",
+    "@fastify/swagger-ui": "^6.1.0",
     "@kopai/tsconfig": "workspace:*",
-    "tsdown": "^0.22.1"
+    "tsdown": "^0.22.4"
   }
 }
