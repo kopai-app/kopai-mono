@@ -1,10 +1,10 @@
 ---
 name: otel-instrumentation
-description: Instrument applications with OpenTelemetry SDK and validate telemetry using Kopai. Use when setting up observability, adding tracing/logging/metrics, testing instrumentation, debugging missing telemetry data, or when traces/logs/metrics aren't appearing after setup. Also use when users say things like "my traces aren't showing up", "I don't see any data", or "how do I add observability to my app".
+description: Instrument applications with OpenTelemetry SDK and validate telemetry using Kopai. Use when setting up observability, adding tracing/logging/metrics, testing instrumentation, debugging missing telemetry data, or when traces/logs/metrics aren't appearing after setup. Also use when users say things like "my traces aren't showing up", "I don't see any data", or "how do I add observability to my app". This skill owns the pipeline — SDK, exporters, data flowing; once logs flow, design the records themselves with the wide-events skill (one wide event per unit of work, correlated to traces).
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # OpenTelemetry Instrumentation with Kopai
@@ -34,6 +34,7 @@ npx @kopai/cli metrics discover --json
 3. **Instrument app** — install SDK + auto-instrumentation for your language (see rules below)
 4. **Validate** — `npx @kopai/cli traces search --service <name> --json`. If empty: check endpoint/port, verify app is running and generating traffic, wait 10-30s and retry
 5. **Troubleshoot** — if still no data, check rules in section 4 below
+6. **Design the records** — once traces and logs validate, the pipeline work is done; implement what the log records should _be_ (one wide event per unit of work, correlated to its span) with the `wide-events` skill
 
 ## Quick Example (Node.js)
 

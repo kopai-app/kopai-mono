@@ -1,0 +1,11 @@
+{
+  "name": "kopai/wide-events",
+  "version": "0.1.0",
+  "private": false,
+  "summary": "Wide events (canonical log lines) over OpenTelemetry — one context-rich log record per unit of work, emitted in the unit's span context so trace and span ids correlate logs to traces with zero plumbing. Use when implementing wide-event logging on a traced app, connecting logs to spans/traces, deciding which context belongs on spans vs log records, or consolidating scattered per-request log lines into one queryable event. Tracing must exist first — set it up with otel-instrumentation.",
+  "skills": {
+    "wide-events": {
+      "path": "SKILL.md"
+    }
+  }
+}
