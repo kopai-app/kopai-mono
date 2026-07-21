@@ -2,6 +2,8 @@ import {
   dataFilterSchemas,
   denormalizedSignals,
   dashboardDatasource,
+  kopaiQuery,
+  kopaiQueryCompiler,
 } from "@kopai/core";
 import z from "zod";
 import { request } from "./request.js";
@@ -47,6 +49,26 @@ const aggregatedMetricsResponseSchema = z.object({
   data: z.array(denormalizedSignals.aggregatedMetricSchema),
   nextCursor: z.null(),
 });
+
+// KopaiQuery aggregate-row response: dynamic dimension/measure keys.
+const aggregateResponseSchema = z.object({
+  data: z.array(
+    z.record(z.string(), z.union([z.string(), z.number(), z.null()]))
+  ),
+});
+
+// Aggregate result shape keyed off the query's `output.type`: timeSeries rows
+// carry an extra `bucket_start` ISO string. Re-exported from core (single
+// source of truth) so the narrow query*Aggregate methods stay consistent with
+// the polymorphic query() and core's KopaiQueryResult.
+type AggregateResultFor<Q extends { output: { type: string } }> =
+  kopaiQuery.AggregateResultFor<Q>;
+
+// Concrete union of every result shape `query()` can return. Use this when
+// consuming a query response without a statically-known query type (the
+// generic `KopaiQueryResult<Q>` requires the specific Q). Re-exported from the
+// package root.
+export type KopaiQueryResponse = kopaiQuery.KopaiQueryResponse;
 
 const dashboardResponseSchema = dashboardDatasource.dashboardSchema;
 
@@ -422,5 +444,182 @@ export class KopaiClient {
         defaultTimeout: this.defaultTimeout,
       }
     );
+  }
+
+  /**
+   * Run a raw trace query (KopaiQuery). Returns denormalized span rows.
+   */
+  async queryTracesRaw(
+    q: kopaiQuery.TraceRawQuery,
+    opts?: RequestOptions
+  ): Promise<SearchResult<OtelTracesRow>> {
+    const validated = kopaiQuery.TraceRawQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    return request(
+      `${this.baseUrl}/signals/query/traces/raw`,
+      tracesResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run an aggregate trace query (KopaiQuery). Returns grouped rows.
+   */
+  async queryTracesAggregate<Q extends kopaiQuery.TraceAggregateQuery>(
+    q: Q,
+    opts?: RequestOptions
+  ): Promise<AggregateResultFor<Q>> {
+    const validated = kopaiQuery.TraceAggregateQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    const res = await request(
+      `${this.baseUrl}/signals/query/traces/aggregate`,
+      aggregateResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+    return res as AggregateResultFor<Q>;
+  }
+
+  /**
+   * Run a raw log query (KopaiQuery). Returns denormalized log rows.
+   */
+  async queryLogsRaw(
+    q: kopaiQuery.LogRawQuery,
+    opts?: RequestOptions
+  ): Promise<SearchResult<OtelLogsRow>> {
+    const validated = kopaiQuery.LogRawQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    return request(
+      `${this.baseUrl}/signals/query/logs/raw`,
+      logsResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run an aggregate log query (KopaiQuery). Returns grouped rows.
+   */
+  async queryLogsAggregate<Q extends kopaiQuery.LogAggregateQuery>(
+    q: Q,
+    opts?: RequestOptions
+  ): Promise<AggregateResultFor<Q>> {
+    const validated = kopaiQuery.LogAggregateQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    const res = await request(
+      `${this.baseUrl}/signals/query/logs/aggregate`,
+      aggregateResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+    return res as AggregateResultFor<Q>;
+  }
+
+  /**
+   * Run a raw metric query (KopaiQuery). Returns denormalized data-point rows.
+   */
+  async queryMetricsRaw(
+    q: kopaiQuery.MetricRawQuery,
+    opts?: RequestOptions
+  ): Promise<SearchResult<OtelMetricsRow>> {
+    const validated = kopaiQuery.MetricRawQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    return request(
+      `${this.baseUrl}/signals/query/metrics/raw`,
+      metricsResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+  }
+
+  /**
+   * Run an aggregate metric query (KopaiQuery). Returns grouped rows.
+   */
+  async queryMetricsAggregate<Q extends kopaiQuery.MetricAggregateQuery>(
+    q: Q,
+    opts?: RequestOptions
+  ): Promise<AggregateResultFor<Q>> {
+    const validated = kopaiQuery.MetricAggregateQuerySchema.parse(q);
+    kopaiQueryCompiler.validateKopaiQuery(validated);
+    const res = await request(
+      `${this.baseUrl}/signals/query/metrics/aggregate`,
+      aggregateResponseSchema,
+      {
+        method: "POST",
+        body: validated,
+        ...opts,
+        baseHeaders: this.baseHeaders,
+        fetchFn: this.fetchFn,
+        defaultTimeout: this.defaultTimeout,
+      }
+    );
+    return res as AggregateResultFor<Q>;
+  }
+
+  /**
+   * Polymorphic query dispatcher. Given any KopaiQuery, picks the matching
+   * narrow method by (signal, mode). Builder output (kq.traces.aggregate()
+   * ...build()) can be passed directly without choosing a method name.
+   */
+  async query<Q extends kopaiQuery.KopaiQuery>(
+    q: Q,
+    opts?: RequestOptions
+  ): Promise<kopaiQuery.KopaiQueryResult<Q>> {
+    // Dispatch on (signal, mode) to one of the six narrow methods. Each
+    // narrow method returns a concrete shape; the conditional
+    // `KopaiQueryResult<Q>` can't be proven through this dispatch tree,
+    // so a single cast bridges the concrete union to the conditional
+    // return type. Same justification as the sqlite/clickhouse datasource
+    // dispatchers.
+    let result:
+      | { data: OtelTracesRow[]; nextCursor: string | null }
+      | { data: OtelLogsRow[]; nextCursor: string | null }
+      | { data: OtelMetricsRow[]; nextCursor: string | null }
+      | { data: kopaiQuery.KopaiAggregateRow[] };
+    if (q.signal === "traces" && q.mode === "raw") {
+      result = await this.queryTracesRaw(q, opts);
+    } else if (q.signal === "traces") {
+      result = await this.queryTracesAggregate(q, opts);
+    } else if (q.signal === "logs" && q.mode === "raw") {
+      result = await this.queryLogsRaw(q, opts);
+    } else if (q.signal === "logs") {
+      result = await this.queryLogsAggregate(q, opts);
+    } else if (q.mode === "raw") {
+      result = await this.queryMetricsRaw(q, opts);
+    } else {
+      result = await this.queryMetricsAggregate(q, opts);
+    }
+    return result as kopaiQuery.KopaiQueryResult<Q>;
   }
 }

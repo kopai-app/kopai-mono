@@ -106,12 +106,12 @@ export function SpanDetailInline({
           <span>
             Kind: <span className="text-foreground">{span.kind}</span>
           </span>
-          {span.status !== "UNSET" && (
+          {span.status !== "Unset" && (
             <span>
               Status:{" "}
               <span
                 className={
-                  span.status === "ERROR" ? "text-red-500" : "text-foreground"
+                  span.status === "Error" ? "text-red-500" : "text-foreground"
                 }
               >
                 {span.status}

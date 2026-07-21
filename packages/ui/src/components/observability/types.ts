@@ -15,7 +15,7 @@ export interface SpanNode {
   endTimeUnixMs: number;
   durationMs: number;
   kind: string;
-  status: string; // "UNSET" | "OK" | "ERROR"
+  status: string; // "Unset" | "Ok" | "Error"
   statusMessage?: string;
   serviceName: string;
   attributes: Record<string, unknown>;

@@ -1,5 +1,6 @@
 // Client
 export { KopaiClient } from "./client.js";
+export type { KopaiQueryResponse } from "./client.js";
 
 // Types
 export type {
@@ -30,3 +31,10 @@ export {
   KopaiTimeoutError,
   KopaiValidationError,
 } from "./errors.js";
+
+// Query builder
+export {
+  kq,
+  KopaiQueryBuildError,
+  type KopaiQueryBuildIssue,
+} from "./kopai-query-builder.js";

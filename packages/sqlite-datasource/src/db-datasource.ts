@@ -11,12 +11,20 @@ import {
 
 import {
   otlp,
+  kopaiQueryCompiler,
   type datasource,
   type otlpMetrics,
   type dataFilterSchemas,
   type denormalizedSignals,
+  type kopaiQuery as kopaiQueryNs,
 } from "@kopai/core";
 import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
+import {
+  runAggregate,
+  runRawLogs,
+  runRawMetrics,
+  runRawTraces,
+} from "./query-builder.js";
 
 import type {
   DB,
@@ -1255,6 +1263,9 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       const traceIds = pageTraceRows.map((r) => r.TraceId);
       const placeholders = traceIds.map(() => "?").join(",");
 
+      // Canonical error-status string, owned by the compiler (parity with the
+      // ClickHouse backend and the KopaiQuery builder) rather than hardcoded.
+      const errorStatus = kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL;
       const aggSql = `
         SELECT
           TraceId,
@@ -1263,7 +1274,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
           CAST(MIN(Timestamp) AS TEXT) as startTimeNs,
           CAST(MAX(Timestamp + Duration) - MIN(Timestamp) AS TEXT) as durationNs,
           COUNT(*) as spanCount,
-          SUM(CASE WHEN StatusCode = 'STATUS_CODE_ERROR' THEN 1 ELSE 0 END) as errorCount
+          SUM(CASE WHEN StatusCode = '${errorStatus}' THEN 1 ELSE 0 END) as errorCount
         FROM otel_traces
         WHERE TraceId IN (${placeholders})
         GROUP BY TraceId
@@ -1283,7 +1294,7 @@ export class DbDatasource implements datasource.TelemetryDatasource {
       // Step 3: Per-service breakdown (small result: ~traces × avg services)
       const svcSql = `
         SELECT TraceId, ServiceName, COUNT(*) as cnt,
-          MAX(CASE WHEN StatusCode = 'STATUS_CODE_ERROR' THEN 1 ELSE 0 END) as hasError
+          MAX(CASE WHEN StatusCode = '${errorStatus}' THEN 1 ELSE 0 END) as hasError
         FROM otel_traces
         WHERE TraceId IN (${placeholders})
         GROUP BY TraceId, ServiceName
@@ -1343,6 +1354,122 @@ export class DbDatasource implements datasource.TelemetryDatasource {
         cause: error,
       });
     }
+  }
+
+  async queryTracesRaw(
+    q: kopaiQueryNs.TraceRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelTracesRow[];
+    nextCursor: string | null;
+  }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runRawTraces(this.sqliteConnection, q);
+    });
+  }
+
+  async queryTracesAggregate(
+    q: kopaiQueryNs.TraceAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runAggregate(this.sqliteConnection, q);
+    });
+  }
+
+  async queryLogsRaw(
+    q: kopaiQueryNs.LogRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelLogsRow[];
+    nextCursor: string | null;
+  }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runRawLogs(this.sqliteConnection, q);
+    });
+  }
+
+  async queryLogsAggregate(
+    q: kopaiQueryNs.LogAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runAggregate(this.sqliteConnection, q);
+    });
+  }
+
+  async queryMetricsRaw(
+    q: kopaiQueryNs.MetricRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelMetricsRow[];
+    nextCursor: string | null;
+  }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runRawMetrics(this.sqliteConnection, q);
+    });
+  }
+
+  async queryMetricsAggregate(
+    q: kopaiQueryNs.MetricAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.guardKopaiQuery(() => {
+      kopaiQueryCompiler.validateKopaiQuery(q);
+      return runAggregate(this.sqliteConnection, q);
+    });
+  }
+
+  /**
+   * Centralized error envelope for KopaiQuery execution. Surfaces
+   * validation errors as-is and wraps everything else in
+   * SqliteDatasourceQueryError. Keeps the 6 narrow methods (and the
+   * dispatcher below) free of boilerplate.
+   */
+  private guardKopaiQuery<T>(run: () => T): T {
+    try {
+      return run();
+    } catch (error) {
+      if (error instanceof SqliteDatasourceQueryError) throw error;
+      if (error instanceof kopaiQueryCompiler.KopaiQueryValidationError) {
+        throw error;
+      }
+      throw new SqliteDatasourceQueryError("Failed to execute query", {
+        cause: error,
+      });
+    }
+  }
+
+  async query<Q extends kopaiQueryNs.KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<kopaiQueryNs.KopaiQueryResult<Q>> {
+    // Dispatch on (signal, mode) to one of the 6 narrow methods. Each
+    // narrow method returns a concrete shape; the conditional
+    // `KopaiQueryResult<Q>` is not provable through this dispatch tree,
+    // so a single cast bridges from the concrete union to the
+    // conditional return type. Justified per the Phase 1a plan: the
+    // alternative is rewriting `KopaiQueryResult` as an overload map.
+    let result:
+      | { data: denormalizedSignals.OtelTracesRow[]; nextCursor: string | null }
+      | { data: denormalizedSignals.OtelLogsRow[]; nextCursor: string | null }
+      | {
+          data: denormalizedSignals.OtelMetricsRow[];
+          nextCursor: string | null;
+        }
+      | { data: kopaiQueryNs.KopaiAggregateRow[] };
+    if (q.signal === "traces" && q.mode === "raw") {
+      result = await this.queryTracesRaw(q);
+    } else if (q.signal === "traces") {
+      result = await this.queryTracesAggregate(q);
+    } else if (q.signal === "logs" && q.mode === "raw") {
+      result = await this.queryLogsRaw(q);
+    } else if (q.signal === "logs") {
+      result = await this.queryLogsAggregate(q);
+    } else if (q.mode === "raw") {
+      result = await this.queryMetricsRaw(q);
+    } else {
+      result = await this.queryMetricsAggregate(q);
+    }
+    return result as kopaiQueryNs.KopaiQueryResult<Q>;
   }
 }
 
@@ -1428,12 +1555,12 @@ function toLogRow(
 
 function spanKindToString(kind: otlp.SpanKind | undefined): string {
   if (kind === undefined) return "";
-  return otlp.SpanKind[kind] ?? "";
+  return kopaiQueryCompiler.spanKindName(kind);
 }
 
 function statusCodeToString(code: otlp.StatusCode | undefined): string {
   if (code === undefined) return "";
-  return otlp.StatusCode[code] ?? "";
+  return kopaiQueryCompiler.statusCodeName(code);
 }
 
 function toGaugeRow(
@@ -1748,7 +1875,7 @@ function exemplarsArrayToJson<T>(
   return JSON.stringify(exemplars.map(extractor));
 }
 
-function mapRowToOtelTraces(
+export function mapRowToOtelTraces(
   row: Record<string, unknown> // TODO: can we use kysely-generated type for this?
 ): denormalizedSignals.OtelTracesRow {
   return {
@@ -1842,7 +1969,7 @@ function toOptionalString(value: unknown): string | undefined {
   return value === "" ? undefined : value;
 }
 
-function mapRowToOtelLogs(
+export function mapRowToOtelLogs(
   row: Record<string, unknown> // TODO: can we use kysely-generated type for this?
 ): denormalizedSignals.OtelLogsRow {
   return {
@@ -1875,7 +2002,7 @@ const METRIC_TABLES = [
 
 const MAX_ATTR_VALUES = 100;
 
-function mapRowToOtelMetrics(
+export function mapRowToOtelMetrics(
   row: Record<string, unknown>, // TODO: can we use kysely-generated type for this?
   metricType: "Gauge" | "Sum" | "Histogram" | "ExponentialHistogram" | "Summary"
 ): denormalizedSignals.OtelMetricsRow {

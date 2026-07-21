@@ -9,6 +9,7 @@ import { errorHandler } from "./routes/error-handler.js";
 import { tracesRoutes } from "./routes/traces.js";
 import { logsRoutes } from "./routes/logs.js";
 import { metricsRoutes } from "./routes/metrics.js";
+import { queryRoutes } from "./routes/query.js";
 import { dashboardsRoutes as _dashboardsRoutes } from "./routes/dashboards.js";
 
 export const signalsRoutes: FastifyPluginAsyncZod<{
@@ -28,6 +29,10 @@ export const signalsRoutes: FastifyPluginAsyncZod<{
 
   fastify.register(metricsRoutes, {
     readMetricsDatasource: opts.readTelemetryDatasource,
+  });
+
+  fastify.register(queryRoutes, {
+    readQueryDatasource: opts.readTelemetryDatasource,
   });
 };
 

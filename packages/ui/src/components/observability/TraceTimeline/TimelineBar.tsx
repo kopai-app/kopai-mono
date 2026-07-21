@@ -14,14 +14,14 @@ export function TimelineBar({
   relativeStart,
   relativeDuration,
 }: TimelineBarProps) {
-  const isError = span.status === "ERROR";
+  const isError = span.status === "Error";
   const barColor = getSpanBarColor(span.serviceName, isError);
 
   const leftPercent = relativeStart * 100;
   const widthPercent = Math.max(0.2, relativeDuration * 100);
   const isWide = widthPercent > 8;
 
-  const tooltipText = `${span.name}\n${formatDuration(span.durationMs)}\nStatus: ${isError ? "ERROR" : "OK"}`;
+  const tooltipText = `${span.name}\n${formatDuration(span.durationMs)}\nStatus: ${isError ? "Error" : "Ok"}`;
   const durationLabel = formatDuration(span.durationMs);
 
   return (

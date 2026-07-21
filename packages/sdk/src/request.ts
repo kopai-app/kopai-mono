@@ -124,15 +124,19 @@ async function handleErrorResponse(response: Response): Promise<never> {
   // Try to parse as RFC 7807 Problem Details
   if (body && typeof body === "object") {
     const problem = body as Record<string, unknown>;
+    const detail = problem.detail as string | undefined;
+    const title =
+      (problem.title as string) ||
+      (problem.message as string) ||
+      `HTTP ${response.status}`;
+    // Surface the actionable `detail` text in `message` so default error
+    // logging (e.g. `console.error(e.message)`) isn't limited to the title.
     throw new KopaiError({
-      message:
-        (problem.title as string) ||
-        (problem.message as string) ||
-        `HTTP ${response.status}`,
+      message: detail ? `${title}: ${detail}` : title,
       code: (problem.code as string) || `HTTP_${response.status}`,
       status: response.status,
       type: (problem.type as string) || `about:blank`,
-      detail: problem.detail as string | undefined,
+      detail,
     });
   }
 

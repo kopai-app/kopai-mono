@@ -9,6 +9,7 @@ import { TraceDetail } from "../index.js";
 import { TraceSearch } from "../TraceSearch/index.js";
 import type { TraceSummary } from "../TraceSearch/index.js";
 import { NoDataSource } from "./NoDataSource.js";
+import { narrowRows, hasTraceRowShape } from "./narrowRows.js";
 import type { dataFilterSchemas } from "@kopai/core";
 import type { OtelTracesRow, SearchResult } from "@kopai/sdk";
 
@@ -49,7 +50,7 @@ function TraceSummariesView({
       rootSpanName: row.rootSpanName,
       serviceName: row.rootServiceName,
       durationMs: parseInt(row.durationNs, 10) / 1e6,
-      statusCode: row.errorCount > 0 ? "ERROR" : "OK",
+      statusCode: row.errorCount > 0 ? "Error" : "Ok",
       timestampMs: parseInt(row.startTimeNs, 10) / 1e6,
       spanCount: row.spanCount,
       services: row.services,
@@ -106,7 +107,9 @@ export function OtelTraceDetail(props: Props) {
     );
   }
 
-  const rows = props.response?.data ?? [];
+  // searchTracesPage or a `query` returning trace rows. `query` is
+  // polymorphic, so narrow to trace rows and fall back to empty otherwise.
+  const rows = narrowRows(props.response, hasTraceRowShape) ?? [];
   const traceId = rows[0]?.TraceId ?? "";
 
   return (

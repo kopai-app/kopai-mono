@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dataFilterSchemas } from "@kopai/core";
+import { dataFilterSchemas, kopaiQuery } from "@kopai/core";
 import type { ReactNode } from "react";
 
 // DataSource schema - discriminated union with type-safe params per method
@@ -47,6 +47,11 @@ export const dataSourceSchema = z.discriminatedUnion("method", [
   z.object({
     method: z.literal("searchAggregatedMetrics"),
     params: dataFilterSchemas.metricsDataFilterSchema,
+    refetchIntervalMs: z.number().optional(),
+  }),
+  z.object({
+    method: z.literal("query"),
+    params: kopaiQuery.KopaiQuery,
     refetchIntervalMs: z.number().optional(),
   }),
 ]);

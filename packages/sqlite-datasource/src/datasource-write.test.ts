@@ -601,7 +601,7 @@ describe("OptimizedDatasource", () => {
         ParentSpanId: testParentSpanId,
         TraceState: testTraceState,
         SpanName: testSpanName,
-        SpanKind: "SPAN_KIND_SERVER",
+        SpanKind: "Server",
         ServiceName: testServiceName,
         ResourceAttributes: `{"service.name":"${testServiceName}","host.name":"test-host"}`,
         ScopeName: testScopeName,
@@ -609,7 +609,7 @@ describe("OptimizedDatasource", () => {
         SpanAttributes: '{"http.method":"GET","http.status_code":200}',
         Timestamp: BigInt(testStartTimeUnixNano),
         Duration: BigInt(testEndTimeUnixNano) - BigInt(testStartTimeUnixNano), // 60 seconds in nanos
-        StatusCode: "STATUS_CODE_OK",
+        StatusCode: "Ok",
         StatusMessage: testStatusMessage,
         "Events.Timestamp": `["1704067230000000000"]`,
         "Events.Name": '["exception"]',

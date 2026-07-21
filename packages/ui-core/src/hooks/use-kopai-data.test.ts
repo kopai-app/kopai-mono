@@ -23,6 +23,7 @@ const createMockClient = () => ({
   getServices: vi.fn(),
   getOperations: vi.fn(),
   searchTraceSummariesPage: vi.fn(),
+  query: vi.fn(),
 });
 
 type MockClient = ReturnType<typeof createMockClient>;
@@ -305,6 +306,38 @@ describe("useKopaiData", () => {
 
       expect(mockClient.searchTracesPage).toHaveBeenCalledTimes(1);
       expect(mockClient.searchLogsPage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("query (KopaiQuery dispatcher)", () => {
+    it("calls client.query with the KopaiQuery payload", async () => {
+      const mockData = { data: [{ n: 42 }] };
+      mockClient.query.mockResolvedValue(mockData);
+
+      const dataSource: DataSource = {
+        method: "query",
+        params: {
+          signal: "traces",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: { type: "relative", lookback: "2h" },
+          output: { type: "summary" },
+        },
+      };
+
+      const { result } = renderHook(() => useKopaiData(dataSource), {
+        wrapper: wrapper(mockClient),
+      });
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(result.current.data).toEqual(mockData);
+      expect(mockClient.query).toHaveBeenCalledWith(
+        dataSource.params,
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
     });
   });
 

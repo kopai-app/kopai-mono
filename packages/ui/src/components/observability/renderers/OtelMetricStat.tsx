@@ -3,6 +3,7 @@ import type { RendererComponentProps } from "@kopai/ui-core";
 import { MetricStat } from "../index.js";
 import { formatOtelValue } from "../utils/units.js";
 import { NoDataSource } from "./NoDataSource.js";
+import { narrowQueryRows, hasMetricRowShape } from "./narrowRows.js";
 import type { denormalizedSignals } from "@kopai/core";
 
 type AggregatedMetricRow = denormalizedSignals.AggregatedMetricRow;
@@ -57,13 +58,22 @@ export function OtelMetricStat(props: Props) {
     );
   }
 
-  const rows = props.response?.data ?? [];
+  // searchMetricsPage or a `query` returning metric rows. `query` is
+  // polymorphic, so narrow to metric rows; surface an explicit error (rather
+  // than an empty stat) when the query returned an incompatible shape, e.g. an
+  // aggregate-mode result that arrived via `query` rather than
+  // searchAggregatedMetrics.
+  const { rows, error } = narrowQueryRows(
+    props.response,
+    hasMetricRowShape,
+    "metric"
+  );
 
   return (
     <MetricStat
       rows={rows}
       isLoading={props.loading}
-      error={props.error ?? undefined}
+      error={props.error ?? error}
       label={props.element.props.label ?? undefined}
       showSparkline={props.element.props.showSparkline ?? false}
       formatValue={formatOtelValue}

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, expectTypeOf, vi, beforeEach } from "vitest";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { render, screen, waitFor, act } from "@testing-library/react";
@@ -11,6 +11,7 @@ import {
 } from "./renderer.js";
 import { KopaiSDKProvider, queryClient } from "../providers/kopai-provider.js";
 import { createCatalog } from "./component-catalog.js";
+import { observabilityCatalog } from "./observability-catalog.js";
 import z from "zod";
 import type { KopaiClient } from "@kopai/sdk";
 
@@ -729,5 +730,32 @@ describe("createRendererFromCatalog type safety", () => {
       // @ts-expect-error - Extra is not in catalog
       Extra,
     });
+  });
+});
+
+// M5: a component accepting the polymorphic `query` method must derive a
+// concrete response union (KopaiQueryResponse) — NOT `any`. Routing the generic
+// `query` method through `Awaited<ReturnType<...>>` collapses to `any`, which
+// would poison the whole InferData union and silently disable shape checking
+// for every component that accepts `query`. This is a type-level assertion,
+// enforced by `tsc --noEmit` (the type-check task): if `response` were `any`,
+// `.not.toBeAny()` is a type error.
+describe("M5: query method response is a typed union, not any", () => {
+  it("LogTimeline (accepts query) derives a non-any response", () => {
+    type Props = RendererComponentProps<
+      typeof observabilityCatalog.components.LogTimeline
+    >;
+    type WithDataProps = Extract<Props, { hasData: true }>;
+    expectTypeOf<WithDataProps["response"]>().not.toBeAny();
+    expect(true).toBe(true);
+  });
+
+  it("MetricTable (accepts query) derives a non-any response", () => {
+    type Props = RendererComponentProps<
+      typeof observabilityCatalog.components.MetricTable
+    >;
+    type WithDataProps = Extract<Props, { hasData: true }>;
+    expectTypeOf<WithDataProps["response"]>().not.toBeAny();
+    expect(true).toBe(true);
   });
 });

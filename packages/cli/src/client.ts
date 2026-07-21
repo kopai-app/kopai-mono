@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { KopaiClient } from "@kopai/sdk";
-import { loadConfig, DEFAULT_URL } from "./config.js";
+import { resolveConnection, clientFromConfig } from "@kopai/sdk/node";
 
 export function withConnectionOptions<T extends Command>(cmd: T): T {
   return cmd
@@ -23,24 +23,21 @@ export interface ConnectionOpts {
 }
 
 export function resolveConnectionOpts(opts: ClientOptions): ConnectionOpts {
-  const fileConfig = loadConfig(opts.config);
-  const raw = opts.url ?? fileConfig.url ?? DEFAULT_URL;
-  const url = raw.replace(/\/signals\/?$/, "").replace(/\/$/, "");
-  return {
-    url,
-    token: opts.token ?? fileConfig.token,
-  };
+  return resolveConnection({
+    url: opts.url,
+    token: opts.token,
+    configPath: opts.config,
+  });
 }
 
 export function createClient(opts: ClientOptions): KopaiClient {
-  const { url, token } = resolveConnectionOpts(opts);
-
   const timeout =
     opts.timeout != null ? parseInt(String(opts.timeout), 10) : undefined;
 
-  return new KopaiClient({
-    baseUrl: url,
-    token,
+  return clientFromConfig({
+    url: opts.url,
+    token: opts.token,
+    configPath: opts.config,
     timeout: Number.isNaN(timeout) ? undefined : timeout,
   });
 }

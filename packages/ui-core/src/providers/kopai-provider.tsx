@@ -14,6 +14,7 @@ export type KopaiClient = Pick<
   | "getServices"
   | "getOperations"
   | "searchTraceSummariesPage"
+  | "query"
 >;
 
 interface KopaiSDKContextValue {

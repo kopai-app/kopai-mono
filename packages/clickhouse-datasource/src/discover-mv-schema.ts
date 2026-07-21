@@ -49,6 +49,58 @@ SETTINGS index_granularity = 8192`,
   ];
 }
 
+/**
+ * Backfill statements that copy already-ingested base-table rows into the
+ * discover target tables.
+ *
+ * A ClickHouse materialized view only captures rows inserted AFTER it is
+ * created, so on first provisioning the discover MVs would miss every metric
+ * already in the base tables. These INSERT ... SELECT statements mirror each
+ * MV's SELECT exactly and seed the target tables with the existing data.
+ *
+ * Idempotent-safe: the target tables are ReplacingMergeTree (names, dedup on
+ * the ORDER BY key) / AggregatingMergeTree (attrs, merges the partial
+ * groupUniqArray states). Re-running the backfill — or running it after the MV
+ * has already captured some inserts — merges cleanly on read with FINAL /
+ * groupUniqArrayMerge (which the discover queries already use).
+ */
+function backfillDDL(db: string): string[] {
+  const stmts: string[] = [];
+
+  for (const { type, table } of METRIC_TABLES) {
+    // Names backfill — mirrors the names MV SELECT.
+    stmts.push(
+      `INSERT INTO ${db}.${DISCOVER_NAMES_TABLE}
+SELECT MetricName, '${type}' AS MetricType, MetricDescription, MetricUnit
+FROM ${db}.${table}`
+    );
+
+    // Attributes backfill — mirrors the attr MV SELECT.
+    stmts.push(
+      `INSERT INTO ${db}.${DISCOVER_ATTRS_TABLE}
+SELECT MetricName, '${type}' AS MetricType, 'attr' AS source, attr_key,
+    groupUniqArrayState(101)(Attributes[attr_key]) AS attr_values
+FROM ${db}.${table}
+ARRAY JOIN mapKeys(Attributes) AS attr_key
+WHERE notEmpty(Attributes)
+GROUP BY MetricName, MetricType, source, attr_key`
+    );
+
+    // ResourceAttributes backfill — mirrors the res_attr MV SELECT.
+    stmts.push(
+      `INSERT INTO ${db}.${DISCOVER_ATTRS_TABLE}
+SELECT MetricName, '${type}' AS MetricType, 'res_attr' AS source, attr_key,
+    groupUniqArrayState(101)(ResourceAttributes[attr_key]) AS attr_values
+FROM ${db}.${table}
+ARRAY JOIN mapKeys(ResourceAttributes) AS attr_key
+WHERE notEmpty(ResourceAttributes)
+GROUP BY MetricName, MetricType, source, attr_key`
+    );
+  }
+
+  return stmts;
+}
+
 function materializedViewDDL(db: string): string[] {
   const stmts: string[] = [];
 
@@ -98,6 +150,7 @@ GROUP BY MetricName, MetricType, source, attr_key`
 export function getDiscoverMVSchema(database: string): {
   targetTables: string[];
   materializedViews: string[];
+  backfill: string[];
 } {
   if (!DB_IDENTIFIER_RE.test(database)) {
     throw new Error(`Invalid database name: ${database}`);
@@ -105,5 +158,6 @@ export function getDiscoverMVSchema(database: string): {
   return {
     targetTables: targetTableDDL(database),
     materializedViews: materializedViewDDL(database),
+    backfill: backfillDDL(database),
   };
 }

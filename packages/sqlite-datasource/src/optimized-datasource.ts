@@ -3,6 +3,7 @@ import {
   type datasource,
   type dataFilterSchemas,
   type denormalizedSignals,
+  type kopaiQuery as kopaiQueryNs,
 } from "@kopai/core";
 import { DbDatasource } from "./db-datasource.js";
 
@@ -139,6 +140,57 @@ export class OptimizedDatasource implements datasource.TelemetryDatasource {
     nextCursor: string | null;
   }> {
     return this.dbDatasource.getTraceSummaries(filter);
+  }
+
+  async query<Q extends kopaiQueryNs.KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<kopaiQueryNs.KopaiQueryResult<Q>> {
+    return this.dbDatasource.query(q);
+  }
+
+  async queryTracesRaw(
+    q: kopaiQueryNs.TraceRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelTracesRow[];
+    nextCursor: string | null;
+  }> {
+    return this.dbDatasource.queryTracesRaw(q);
+  }
+
+  async queryTracesAggregate(
+    q: kopaiQueryNs.TraceAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.dbDatasource.queryTracesAggregate(q);
+  }
+
+  async queryLogsRaw(
+    q: kopaiQueryNs.LogRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelLogsRow[];
+    nextCursor: string | null;
+  }> {
+    return this.dbDatasource.queryLogsRaw(q);
+  }
+
+  async queryLogsAggregate(
+    q: kopaiQueryNs.LogAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.dbDatasource.queryLogsAggregate(q);
+  }
+
+  async queryMetricsRaw(
+    q: kopaiQueryNs.MetricRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelMetricsRow[];
+    nextCursor: string | null;
+  }> {
+    return this.dbDatasource.queryMetricsRaw(q);
+  }
+
+  async queryMetricsAggregate(
+    q: kopaiQueryNs.MetricAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQueryNs.KopaiAggregateRow[] }> {
+    return this.dbDatasource.queryMetricsAggregate(q);
   }
 
   async discoverMetrics(): Promise<datasource.MetricsDiscoveryResult> {

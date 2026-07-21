@@ -24,6 +24,7 @@ import {
 import { ClickHouseReadDatasource } from "./datasource.js";
 import { getDiscoverMVSchema } from "./discover-mv-schema.js";
 import { DISCOVER_NAMES_TABLE, DISCOVER_ATTRS_TABLE } from "./query-metrics.js";
+import { createOtelTables } from "./test/otel-ddl.js";
 
 /** Returns the first element of an array, failing the test if the array is empty. */
 function firstRow<T>(data: T[]): T {
@@ -74,7 +75,7 @@ function makeSpan(
     ScopeVersion: "",
     SpanAttributes: {},
     Duration: 1000000,
-    StatusCode: "OK",
+    StatusCode: "Ok",
     StatusMessage: "",
     "Events.Timestamp": [],
     "Events.Name": [],
@@ -212,150 +213,6 @@ afterAll(async () => {
   await container?.stop();
 });
 
-async function createOtelTables(client: ClickHouseClient) {
-  const metricsCommonCols = `
-    ResourceAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-    ResourceSchemaUrl String CODEC(ZSTD(1)),
-    ScopeName String CODEC(ZSTD(1)),
-    ScopeVersion String CODEC(ZSTD(1)),
-    ScopeAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-    ScopeDroppedAttrCount UInt32 CODEC(ZSTD(1)),
-    ScopeSchemaUrl String CODEC(ZSTD(1)),
-    ServiceName LowCardinality(String) CODEC(ZSTD(1)),
-    MetricName String CODEC(ZSTD(1)),
-    MetricDescription String CODEC(ZSTD(1)),
-    MetricUnit String CODEC(ZSTD(1)),
-    Attributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-    StartTimeUnix DateTime64(9) CODEC(Delta(8), ZSTD(1)),
-    TimeUnix DateTime64(9) CODEC(Delta(8), ZSTD(1))
-  `;
-
-  const exemplarCols = `
-    \`Exemplars.FilteredAttributes\` Array(Map(LowCardinality(String), String)) CODEC(ZSTD(1)),
-    \`Exemplars.TimeUnix\` Array(DateTime64(9)) CODEC(ZSTD(1)),
-    \`Exemplars.Value\` Array(Float64) CODEC(ZSTD(1)),
-    \`Exemplars.SpanId\` Array(String) CODEC(ZSTD(1)),
-    \`Exemplars.TraceId\` Array(String) CODEC(ZSTD(1))
-  `;
-
-  await client.command({
-    query: `
-      CREATE TABLE IF NOT EXISTS otel_traces (
-        Timestamp DateTime64(9) CODEC(Delta(8), ZSTD(1)),
-        TraceId String CODEC(ZSTD(1)),
-        SpanId String CODEC(ZSTD(1)),
-        ParentSpanId String CODEC(ZSTD(1)),
-        TraceState String CODEC(ZSTD(1)),
-        SpanName LowCardinality(String) CODEC(ZSTD(1)),
-        SpanKind LowCardinality(String) CODEC(ZSTD(1)),
-        ServiceName LowCardinality(String) CODEC(ZSTD(1)),
-        ResourceAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-        ScopeName String CODEC(ZSTD(1)),
-        ScopeVersion String CODEC(ZSTD(1)),
-        SpanAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-        Duration UInt64 CODEC(ZSTD(1)),
-        StatusCode LowCardinality(String) CODEC(ZSTD(1)),
-        StatusMessage String CODEC(ZSTD(1)),
-        \`Events.Timestamp\` Array(DateTime64(9)) CODEC(ZSTD(1)),
-        \`Events.Name\` Array(LowCardinality(String)) CODEC(ZSTD(1)),
-        \`Events.Attributes\` Array(Map(LowCardinality(String), String)) CODEC(ZSTD(1)),
-        \`Links.TraceId\` Array(String) CODEC(ZSTD(1)),
-        \`Links.SpanId\` Array(String) CODEC(ZSTD(1)),
-        \`Links.TraceState\` Array(String) CODEC(ZSTD(1)),
-        \`Links.Attributes\` Array(Map(LowCardinality(String), String)) CODEC(ZSTD(1))
-      ) ENGINE = MergeTree()
-      ORDER BY (ServiceName, SpanName, toDateTime(Timestamp))
-    `,
-  });
-
-  await client.command({
-    query: `
-      CREATE TABLE IF NOT EXISTS otel_logs (
-        Timestamp DateTime64(9) CODEC(Delta(8), ZSTD(1)),
-        TimestampTime DateTime DEFAULT toDateTime(Timestamp),
-        TraceId String CODEC(ZSTD(1)),
-        SpanId String CODEC(ZSTD(1)),
-        TraceFlags UInt8,
-        SeverityText LowCardinality(String) CODEC(ZSTD(1)),
-        SeverityNumber UInt8,
-        ServiceName LowCardinality(String) CODEC(ZSTD(1)),
-        Body String CODEC(ZSTD(1)),
-        ResourceSchemaUrl LowCardinality(String) CODEC(ZSTD(1)),
-        ResourceAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-        ScopeSchemaUrl LowCardinality(String) CODEC(ZSTD(1)),
-        ScopeName String CODEC(ZSTD(1)),
-        ScopeVersion LowCardinality(String) CODEC(ZSTD(1)),
-        ScopeAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-        LogAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-        EventName String CODEC(ZSTD(1))
-      ) ENGINE = MergeTree()
-      ORDER BY (ServiceName, TimestampTime, Timestamp)
-    `,
-  });
-
-  await client.command({
-    query: `CREATE TABLE IF NOT EXISTS otel_metrics_gauge (
-      ${metricsCommonCols},
-      Value Float64 CODEC(ZSTD(1)),
-      Flags UInt32 CODEC(ZSTD(1)),
-      ${exemplarCols}
-    ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
-  });
-
-  await client.command({
-    query: `CREATE TABLE IF NOT EXISTS otel_metrics_sum (
-      ${metricsCommonCols},
-      Value Float64 CODEC(ZSTD(1)),
-      Flags UInt32 CODEC(ZSTD(1)),
-      ${exemplarCols},
-      AggregationTemporality Int32 CODEC(ZSTD(1)),
-      IsMonotonic Bool CODEC(ZSTD(1))
-    ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
-  });
-
-  await client.command({
-    query: `CREATE TABLE IF NOT EXISTS otel_metrics_histogram (
-      ${metricsCommonCols},
-      Count UInt64 CODEC(ZSTD(1)),
-      Sum Float64 CODEC(ZSTD(1)),
-      BucketCounts Array(UInt64) CODEC(ZSTD(1)),
-      ExplicitBounds Array(Float64) CODEC(ZSTD(1)),
-      ${exemplarCols},
-      Min Float64 CODEC(ZSTD(1)),
-      Max Float64 CODEC(ZSTD(1)),
-      AggregationTemporality Int32 CODEC(ZSTD(1))
-    ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
-  });
-
-  await client.command({
-    query: `CREATE TABLE IF NOT EXISTS otel_metrics_exponential_histogram (
-      ${metricsCommonCols},
-      Count UInt64 CODEC(ZSTD(1)),
-      Sum Float64 CODEC(ZSTD(1)),
-      Scale Int32 CODEC(ZSTD(1)),
-      ZeroCount UInt64 CODEC(ZSTD(1)),
-      PositiveOffset Int32 CODEC(ZSTD(1)),
-      PositiveBucketCounts Array(UInt64) CODEC(ZSTD(1)),
-      NegativeOffset Int32 CODEC(ZSTD(1)),
-      NegativeBucketCounts Array(UInt64) CODEC(ZSTD(1)),
-      ${exemplarCols},
-      Min Float64 CODEC(ZSTD(1)),
-      Max Float64 CODEC(ZSTD(1)),
-      AggregationTemporality Int32 CODEC(ZSTD(1))
-    ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
-  });
-
-  await client.command({
-    query: `CREATE TABLE IF NOT EXISTS otel_metrics_summary (
-      ${metricsCommonCols},
-      Count UInt64 CODEC(ZSTD(1)),
-      Sum Float64 CODEC(ZSTD(1)),
-      \`ValueAtQuantiles.Quantile\` Array(Float64) CODEC(ZSTD(1)),
-      \`ValueAtQuantiles.Value\` Array(Float64) CODEC(ZSTD(1))
-    ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
-  });
-}
-
 async function seedTenantBData(client: ClickHouseClient) {
   await client.insert({
     table: "otel_traces",
@@ -374,7 +231,7 @@ async function seedTenantBData(client: ClickHouseClient) {
         ScopeVersion: "1.0.0",
         SpanAttributes: { "http.method": "GET" },
         Duration: 3000000,
-        StatusCode: "OK",
+        StatusCode: "Ok",
         StatusMessage: "",
         "Events.Timestamp": [],
         "Events.Name": [],
@@ -518,7 +375,7 @@ async function seedTraces(client: ClickHouseClient) {
         ScopeVersion: "1.0.0",
         SpanAttributes: { "http.method": "GET", "http.status_code": "200" },
         Duration: 5000000,
-        StatusCode: "OK",
+        StatusCode: "Ok",
         StatusMessage: "",
         "Events.Timestamp": [],
         "Events.Name": [],
@@ -542,7 +399,7 @@ async function seedTraces(client: ClickHouseClient) {
         ScopeVersion: "1.0.0",
         SpanAttributes: { "db.system": "postgresql" },
         Duration: 2000000,
-        StatusCode: "OK",
+        StatusCode: "Ok",
         StatusMessage: "",
         "Events.Timestamp": ["2024-01-01 00:00:02.100000000"],
         "Events.Name": ["query_start"],
@@ -566,7 +423,7 @@ async function seedTraces(client: ClickHouseClient) {
         ScopeVersion: "1.0.0",
         SpanAttributes: { "http.method": "POST", "http.status_code": "500" },
         Duration: 15000000,
-        StatusCode: "ERROR",
+        StatusCode: "Error",
         StatusMessage: "Internal server error",
         "Events.Timestamp": [],
         "Events.Name": [],
@@ -1754,51 +1611,105 @@ describe("ClickHouseReadDatasource", () => {
     });
   });
 
-  describe("discoverMetrics errors without MVs", () => {
-    beforeAll(async () => {
-      // Ensure no MV tables exist regardless of test ordering
+  describe("discoverMetrics falls back to a base-table scan when MVs are absent", () => {
+    // Each test drops the discover MV target tables first so we exercise the
+    // table-scan fallback path. The MVs are an optional optimization
+    // provisioned out of band (getDiscoverMVSchema); the request path must NOT
+    // do DDL/backfill — it falls back to scanning the base tables instead.
+    async function dropDiscoverMVs() {
+      // Drop the MVs too so they don't dangle pointing at recreated targets.
+      const { materializedViews } = getDiscoverMVSchema(TEST_DATABASE);
+      for (const stmt of materializedViews) {
+        const mvName = stmt.match(/MATERIALIZED VIEW IF NOT EXISTS (\S+)/)?.[1];
+        if (mvName) {
+          await adminClient.command({
+            query: `DROP TABLE IF EXISTS ${mvName}`,
+          });
+        }
+      }
       await adminClient.command({
         query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_ATTRS_TABLE}`,
       });
       await adminClient.command({
         query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
       });
-    });
+    }
 
-    it("throws when MV tables do not exist", async () => {
-      await expect(
-        ds.discoverMetrics({ requestContext: requestContext() })
-      ).rejects.toThrow(/MV tables not found/);
-    });
+    beforeEach(dropDiscoverMVs);
 
-    it("logs warning when MV tables not found", async () => {
-      const spy = createSpyLogger();
-      await expect(
-        ds.discoverMetrics({
-          requestContext: { ...requestContext(), logger: spy },
-        })
-      ).rejects.toThrow(/MV tables not found/);
-
-      expect(spy.warn).toHaveBeenCalledOnce();
-      expect(spy.warn.mock.calls[0]?.[0]).toMatchObject({
-        database: TEST_DATABASE,
-        method: "discoverMetrics",
+    it("scans base tables and serves metrics when MVs are absent", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
       });
+
+      // The fallback scan must surface the already-ingested metrics rather than
+      // 500ing because the discovery MVs were absent.
+      expect(result.metrics.length).toBe(8);
+      const names = result.metrics.map((m) => m.name).sort();
+      expect(names).toEqual([
+        "dup.ts.gauge",
+        "http.server.request.count",
+        "http.server.request.duration",
+        "http.server.request.duration.exp",
+        "rpc.server.duration.summary",
+        "system.cpu.utilization",
+        "test.multi.attr",
+        "test.truncation.metric",
+      ]);
+
+      // The request path must NOT provision: the discovery tables stay absent
+      // (it served the result via a base-table scan, not by creating MVs).
+      const tablesRs = await adminClient.query({
+        query: `SELECT name FROM system.tables WHERE database = {db:String}`,
+        query_params: { db: TEST_DATABASE },
+        format: "JSONEachRow",
+      });
+      const tableNames = new Set(
+        (await tablesRs.json<{ name: string }>()).map((r) => r.name)
+      );
+      expect(tableNames.has(DISCOVER_NAMES_TABLE)).toBe(false);
+      expect(tableNames.has(DISCOVER_ATTRS_TABLE)).toBe(false);
     });
 
-    it("throws when only names MV table exists", async () => {
+    it("scan surfaces attribute values from base-table rows", async () => {
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+
+      const gauge = defined(
+        result.metrics.find((m) => m.name === "system.cpu.utilization"),
+        "gauge metric"
+      );
+      expect(gauge.attributes.values).toHaveProperty("cpu");
+      expect(gauge.resourceAttributes.values).toHaveProperty("service.version");
+    });
+
+    it("is idempotent across repeated calls (no duplicate metrics)", async () => {
+      const first = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+      // Both calls take the same fallback scan (no MVs are ever created), so
+      // neither doubles anything.
+      const second = await ds.discoverMetrics({
+        requestContext: requestContext(),
+      });
+      expect(first.metrics.length).toBe(8);
+      expect(second.metrics.length).toBe(8);
+    });
+
+    it("falls back to a scan when MV state is partial (only names table exists)", async () => {
+      // Partial state: one target table present, the other missing. The MV
+      // read errors on the missing table and the scan fallback still serves
+      // the full result without any DDL.
       const namesOnly = `CREATE TABLE IF NOT EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}
 (MetricName String, MetricType LowCardinality(String), MetricDescription String, MetricUnit String)
 ENGINE = ReplacingMergeTree ORDER BY (MetricName, MetricType)`;
       await adminClient.command({ query: namesOnly });
 
-      await expect(
-        ds.discoverMetrics({ requestContext: requestContext() })
-      ).rejects.toThrow(/MV tables not found/);
-
-      await adminClient.command({
-        query: `DROP TABLE IF EXISTS ${TEST_DATABASE}.${DISCOVER_NAMES_TABLE}`,
+      const result = await ds.discoverMetrics({
+        requestContext: requestContext(),
       });
+      expect(result.metrics.length).toBe(8);
     });
   });
 
@@ -2089,11 +2000,17 @@ GROUP BY MetricName, MetricType, source, attr_key`,
       expect(tenantANames).not.toContain("tenant.b.gauge");
     });
 
-    it("discoverMetrics throws for tenant without MVs", async () => {
-      // Tenant B has no MV tables — discoverMetrics must fail explicitly
-      await expect(
-        ds.discoverMetrics({ requestContext: tenantBRequestContext() })
-      ).rejects.toThrow(/MV tables not found/);
+    it("discoverMetrics provisions MVs on demand for a tenant without them", async () => {
+      // Tenant B has no discover MV tables — discoverMetrics must provision +
+      // backfill them in tenant B's database (not 500), then serve its own
+      // metrics only (tenant-isolated).
+      const tenantB = await ds.discoverMetrics({
+        requestContext: tenantBRequestContext(),
+      });
+      const names = tenantB.metrics.map((m) => m.name);
+      expect(names).toContain("tenant.b.gauge");
+      // Tenant A's metrics must NOT leak into tenant B's discovery.
+      expect(names).not.toContain("system.cpu.utilization");
     });
   });
 

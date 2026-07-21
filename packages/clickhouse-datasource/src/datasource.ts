@@ -1,9 +1,11 @@
 import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import type { ResultSet } from "@clickhouse/client";
-import type {
-  dataFilterSchemas,
-  denormalizedSignals,
-  datasource,
+import {
+  kopaiQueryCompiler,
+  type dataFilterSchemas,
+  type denormalizedSignals,
+  type datasource,
+  type kopaiQuery,
 } from "@kopai/core";
 import type z from "zod";
 import {
@@ -22,6 +24,7 @@ import {
   buildMetricsQuery,
   buildAggregatedMetricsQuery,
   buildDiscoverMetricsFromMV,
+  buildDiscoverMetricsQueries,
 } from "./query-metrics.js";
 import {
   parseChRow,
@@ -31,6 +34,64 @@ import {
   chDiscoverAttrRowSchema,
   metricSchemaMap,
 } from "./ch-row-schemas.js";
+import { buildKopaiSql } from "./query-kopai.js";
+import { dateTime64ToNanos } from "./timestamp.js";
+
+// Coerces a ClickHouse JSON cell into the KopaiAggregateRow value union.
+// Mirrors the sqlite backend's normalizeCellValue: a bigint outside the
+// 53-bit safe-integer range is preserved as a string rather than silently
+// rounded by Number(). (ClickHouse usually serializes UInt64 as a string, so
+// the bigint branch is rare — this keeps the two backends consistent.)
+export function coerceAggregateCellValue(v: unknown): string | number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "string") return v;
+  if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  if (typeof v === "bigint") {
+    return v > BigInt(Number.MAX_SAFE_INTEGER) ||
+      v < BigInt(Number.MIN_SAFE_INTEGER)
+      ? v.toString()
+      : Number(v);
+  }
+  return String(v);
+}
+
+// Coerces a measure column (count/sum/min/max/avg/percentiles/...). ClickHouse
+// serializes integer aggregates (UInt64/Int64 from count/sum/min/max) as JSON
+// strings while Float64 aggregates (avg/percentiles) arrive as numbers. The
+// SQLite backend returns numbers for all of these, so we coerce strings to
+// numbers here to keep the two backends consistent. The bigint>safe-integer
+// guard from coerceAggregateCellValue is preserved: a stringified integer that
+// overflows the 53-bit safe range stays a string rather than being silently
+// rounded by Number() (matching sqlite's normalizeCellValue).
+export function coerceMeasureCellValue(v: unknown): string | number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  if (typeof v === "bigint") {
+    return v > BigInt(Number.MAX_SAFE_INTEGER) ||
+      v < BigInt(Number.MIN_SAFE_INTEGER)
+      ? v.toString()
+      : Number(v);
+  }
+  if (typeof v === "string") {
+    // Preserve full-precision integers beyond the 53-bit safe range as strings
+    // (e.g. huge UInt64 counts), matching the bigint guard above.
+    if (/^-?\d+$/.test(v)) {
+      const asBig = BigInt(v);
+      if (
+        asBig > BigInt(Number.MAX_SAFE_INTEGER) ||
+        asBig < BigInt(Number.MIN_SAFE_INTEGER)
+      ) {
+        return v;
+      }
+      return Number(asBig);
+    }
+    const n = Number(v);
+    return Number.isNaN(n) ? v : n;
+  }
+  return String(v);
+}
 
 const MAX_ATTR_VALUES = 100;
 
@@ -561,14 +622,16 @@ export class ClickHouseReadDatasource
           { count: number; hasError: boolean }
         >();
         for (const [svcName, statusCode] of r._serviceData) {
+          const isError =
+            statusCode === kopaiQueryCompiler.STATUS_CODE_ERROR_LITERAL;
           const existing = serviceMap.get(svcName);
           if (existing) {
             existing.count++;
-            if (statusCode === "ERROR") existing.hasError = true;
+            if (isError) existing.hasError = true;
           } else {
             serviceMap.set(svcName, {
               count: 1,
-              hasError: statusCode === "ERROR",
+              hasError: isError,
             });
           }
         }
@@ -623,6 +686,334 @@ export class ClickHouseReadDatasource
     }
   }
 
+  async queryTracesRaw(
+    q: kopaiQuery.TraceRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelTracesRow[];
+    nextCursor: string | null;
+  }> {
+    assertClickHouseRequestContext(q.requestContext);
+    const ctx = q.requestContext;
+    const log = getLogger(ctx);
+    const start = performance.now();
+    const method = "queryTracesRaw";
+    kopaiQueryCompiler.validateKopaiQuery(q);
+
+    let chNode: string | undefined;
+    try {
+      const { sql, params } = buildKopaiSql(q);
+      const resultSet = await this.clientQuery(ctx, sql, params);
+      chNode = getChNode(resultSet);
+
+      const limit = q.limit ?? 100;
+      const rows: denormalizedSignals.OtelTracesRow[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          rows.push(parseChRow(chTracesRowSchema, row.json()));
+        }
+      }
+      const hasMore = rows.length > limit;
+      const data = hasMore ? rows.slice(0, limit) : rows;
+      const last = data[data.length - 1];
+      const nextCursor =
+        hasMore && last ? `${last.Timestamp}:${last.SpanId}` : null;
+      this.logQuerySuccess({ ctx, chNode, start, log, method }, rows.length);
+      return { data, nextCursor };
+    } catch (err) {
+      this.logQueryFailure({ ctx, chNode, start, log, method }, err);
+      throw err;
+    }
+  }
+
+  async queryLogsRaw(
+    q: kopaiQuery.LogRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelLogsRow[];
+    nextCursor: string | null;
+  }> {
+    assertClickHouseRequestContext(q.requestContext);
+    const ctx = q.requestContext;
+    const log = getLogger(ctx);
+    const start = performance.now();
+    const method = "queryLogsRaw";
+    kopaiQueryCompiler.validateKopaiQuery(q);
+
+    let chNode: string | undefined;
+    try {
+      const { sql, params } = buildKopaiSql(q);
+      const resultSet = await this.clientQuery(ctx, sql, params);
+      chNode = getChNode(resultSet);
+
+      const limit = q.limit ?? 100;
+      const rows: {
+        parsed: denormalizedSignals.OtelLogsRow;
+        _rowHash: string;
+      }[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json();
+          if (!isRecord(json)) continue;
+          rows.push({
+            parsed: parseChRow(chLogsRowSchema, json),
+            _rowHash: String(json._rowHash),
+          });
+        }
+      }
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const data = items.map((r) => r.parsed);
+      const lastItem = items[items.length - 1];
+      const nextCursor =
+        hasMore && lastItem
+          ? `${lastItem.parsed.Timestamp}:${lastItem._rowHash}`
+          : null;
+      this.logQuerySuccess({ ctx, chNode, start, log, method }, rows.length);
+      return { data, nextCursor };
+    } catch (err) {
+      this.logQueryFailure({ ctx, chNode, start, log, method }, err);
+      throw err;
+    }
+  }
+
+  async queryMetricsRaw(
+    q: kopaiQuery.MetricRawQuery & { requestContext?: unknown }
+  ): Promise<{
+    data: denormalizedSignals.OtelMetricsRow[];
+    nextCursor: string | null;
+  }> {
+    assertClickHouseRequestContext(q.requestContext);
+    const ctx = q.requestContext;
+    const log = getLogger(ctx);
+    const start = performance.now();
+    const method = "queryMetricsRaw";
+    kopaiQueryCompiler.validateKopaiQuery(q);
+
+    let chNode: string | undefined;
+    try {
+      const { sql, params } = buildKopaiSql(q);
+      const resultSet = await this.clientQuery(ctx, sql, params);
+      chNode = getChNode(resultSet);
+
+      const limit = q.limit ?? 100;
+      const metricType = kopaiQueryCompiler.extractMetricType(q);
+      const schema = metricSchemaMap[metricType];
+      const rows: {
+        parsed: z.output<typeof schema>;
+        _rowHash: string;
+      }[] = [];
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json();
+          if (!isRecord(json)) continue;
+          rows.push({
+            parsed: parseChRow(schema, json),
+            _rowHash: String(json._rowHash),
+          });
+        }
+      }
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const data = items.map((r) => r.parsed);
+      const lastItem = items[items.length - 1];
+      const nextCursor =
+        hasMore && lastItem
+          ? `${lastItem.parsed.TimeUnix}:${lastItem._rowHash}`
+          : null;
+      this.logQuerySuccess({ ctx, chNode, start, log, method }, rows.length);
+      return { data, nextCursor };
+    } catch (err) {
+      this.logQueryFailure({ ctx, chNode, start, log, method }, err);
+      throw err;
+    }
+  }
+
+  async queryTracesAggregate(
+    q: kopaiQuery.TraceAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    return this.runAggregate(q, "queryTracesAggregate");
+  }
+
+  async queryLogsAggregate(
+    q: kopaiQuery.LogAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    return this.runAggregate(q, "queryLogsAggregate");
+  }
+
+  async queryMetricsAggregate(
+    q: kopaiQuery.MetricAggregateQuery & { requestContext?: unknown }
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    return this.runAggregate(q, "queryMetricsAggregate");
+  }
+
+  /**
+   * Shared aggregate execution: all three aggregate variants share an
+   * identical pipeline (validate → build SQL → stream → coerce JSON →
+   * collect). Per-signal SQL specialization happens entirely inside
+   * `buildKopaiSql`.
+   */
+  private async runAggregate(
+    q:
+      | (kopaiQuery.TraceAggregateQuery & { requestContext?: unknown })
+      | (kopaiQuery.LogAggregateQuery & { requestContext?: unknown })
+      | (kopaiQuery.MetricAggregateQuery & { requestContext?: unknown }),
+    method: string
+  ): Promise<{ data: kopaiQuery.KopaiAggregateRow[] }> {
+    assertClickHouseRequestContext(q.requestContext);
+    const ctx = q.requestContext;
+    const log = getLogger(ctx);
+    const start = performance.now();
+    kopaiQueryCompiler.validateKopaiQuery(q);
+
+    let chNode: string | undefined;
+    try {
+      const { sql, params } = buildKopaiSql(q);
+      const resultSet = await this.clientQuery(ctx, sql, params);
+      chNode = getChNode(resultSet);
+
+      const data: kopaiQuery.KopaiAggregateRow[] = [];
+      const isTimeSeries = q.output.type === "timeSeries";
+      // Measure-aliased columns hold numeric aggregates. ClickHouse serializes
+      // integer aggregates (count/sum/min/max → UInt64/Int64) as JSON strings,
+      // so coerce them to numbers to match the SQLite backend. Dimension columns
+      // and bucket_start stay strings (a dimension like "service.name" must not
+      // be numerically coerced).
+      const measureAliases = new Set(q.measures.map((m) => m.as));
+      for await (const batch of resultSet.stream()) {
+        for (const row of batch) {
+          const json = row.json() as Record<string, unknown>;
+          const out: Record<string, string | number | null> = {};
+          for (const [k, v] of Object.entries(json)) {
+            if (k === "bucket_start" && isTimeSeries) {
+              // ClickHouse serializes the bucket as a DateTime64 string
+              // ("YYYY-MM-DD HH:MM:SS.nnnnnnnnn"). Normalize to canonical
+              // ISO-8601 UTC so the same timeSeries query returns identical
+              // bucket_start strings on the ClickHouse and SQLite backends.
+              const nanos = BigInt(
+                dateTime64ToNanos(typeof v === "string" ? v : String(v))
+              );
+              out[k] = new Date(Number(nanos / 1_000_000n)).toISOString();
+            } else if (measureAliases.has(k)) {
+              out[k] = coerceMeasureCellValue(v);
+            } else {
+              out[k] = coerceAggregateCellValue(v);
+            }
+          }
+          data.push(out);
+        }
+      }
+      this.logQuerySuccess({ ctx, chNode, start, log, method }, data.length);
+      return { data };
+    } catch (err) {
+      this.logQueryFailure({ ctx, chNode, start, log, method }, err);
+      throw err;
+    }
+  }
+
+  async query<Q extends kopaiQuery.KopaiQuery>(
+    q: Q & { requestContext?: unknown }
+  ): Promise<kopaiQuery.KopaiQueryResult<Q>> {
+    // Dispatch on (signal, mode) to one of the six narrow methods. Each
+    // narrow method returns a concrete shape; the conditional
+    // `KopaiQueryResult<Q>` can't be proven through this dispatch tree,
+    // so a single cast bridges the concrete union to the conditional
+    // return type. Same justification as the sqlite-datasource dispatcher.
+    let result:
+      | {
+          data: denormalizedSignals.OtelTracesRow[];
+          nextCursor: string | null;
+        }
+      | { data: denormalizedSignals.OtelLogsRow[]; nextCursor: string | null }
+      | {
+          data: denormalizedSignals.OtelMetricsRow[];
+          nextCursor: string | null;
+        }
+      | { data: kopaiQuery.KopaiAggregateRow[] };
+    if (q.signal === "traces" && q.mode === "raw") {
+      result = await this.queryTracesRaw(q);
+    } else if (q.signal === "traces") {
+      result = await this.queryTracesAggregate(q);
+    } else if (q.signal === "logs" && q.mode === "raw") {
+      result = await this.queryLogsRaw(q);
+    } else if (q.signal === "logs") {
+      result = await this.queryLogsAggregate(q);
+    } else if (q.mode === "raw") {
+      result = await this.queryMetricsRaw(q);
+    } else {
+      result = await this.queryMetricsAggregate(q);
+    }
+    return result as kopaiQuery.KopaiQueryResult<Q>;
+  }
+
+  private logQuerySuccess(
+    meta: {
+      ctx: ClickHouseRequestContext;
+      chNode: string | undefined;
+      start: number;
+      log: Logger;
+      method: string;
+    },
+    rowCount: number
+  ): void {
+    const durationMs = Math.round(performance.now() - meta.start);
+    meta.log.info(
+      {
+        database: meta.ctx.database,
+        username: meta.ctx.username,
+        method: meta.method,
+        durationMs,
+        rowCount,
+        chNode: meta.chNode,
+      },
+      "query complete"
+    );
+  }
+
+  private logQueryFailure(
+    meta: {
+      ctx: ClickHouseRequestContext;
+      chNode: string | undefined;
+      start: number;
+      log: Logger;
+      method: string;
+    },
+    err: unknown
+  ): void {
+    const durationMs = Math.round(performance.now() - meta.start);
+    meta.log.error(
+      {
+        database: meta.ctx.database,
+        username: meta.ctx.username,
+        method: meta.method,
+        durationMs,
+        chNode: meta.chNode,
+        err,
+      },
+      "query failed"
+    );
+  }
+
+  /** Read the discover MV target tables. Throws CH error code 60 if absent. */
+  private async runDiscoverQueries(
+    ctx: ClickHouseRequestContext,
+    queries: { namesQuery: string; attributesQuery: string }
+  ): Promise<{
+    nameRows: z.infer<typeof chDiscoverNameRowSchema>[];
+    attrRows: z.infer<typeof chDiscoverAttrRowSchema>[];
+    chNodes: (string | undefined)[];
+  }> {
+    const { namesQuery, attributesQuery } = queries;
+    const [namesRs, attrsRs] = await Promise.all([
+      this.clientQuery(ctx, namesQuery),
+      this.clientQuery(ctx, attributesQuery),
+    ]);
+    const chNodes = [getChNode(namesRs), getChNode(attrsRs)];
+    const [nameRows, attrRows] = await Promise.all([
+      streamParse(namesRs, chDiscoverNameRowSchema),
+      streamParse(attrsRs, chDiscoverAttrRowSchema),
+    ]);
+    return { nameRows, attrRows, chNodes };
+  }
+
   async discoverMetrics(options?: {
     requestContext?: unknown;
   }): Promise<datasource.MetricsDiscoveryResult> {
@@ -633,31 +1024,33 @@ export class ClickHouseReadDatasource
     const logCtx = { database, username, method: "discoverMetrics" };
     const start = performance.now();
 
-    // Query MV tables directly — no system.tables detection needed.
-    // Reader users may lack access to system.tables, causing false negatives.
+    // Query the discover MV target tables directly — no system.tables
+    // detection needed (reader users may lack access, causing false negatives).
     let nameRows: z.infer<typeof chDiscoverNameRowSchema>[];
     let attrRows: z.infer<typeof chDiscoverAttrRowSchema>[];
     let chNodes: (string | undefined)[] = [];
     try {
-      const { namesQuery, attributesQuery } = buildDiscoverMetricsFromMV();
-      const [namesRs, attrsRs] = await Promise.all([
-        this.clientQuery(ctx, namesQuery),
-        this.clientQuery(ctx, attributesQuery),
-      ]);
-      chNodes = [getChNode(namesRs), getChNode(attrsRs)];
-      [nameRows, attrRows] = await Promise.all([
-        streamParse(namesRs, chDiscoverNameRowSchema),
-        streamParse(attrsRs, chDiscoverAttrRowSchema),
-      ]);
+      ({ nameRows, attrRows, chNodes } = await this.runDiscoverQueries(
+        ctx,
+        buildDiscoverMetricsFromMV()
+      ));
     } catch (err) {
-      const durationMs = Math.round(performance.now() - start);
-      // ClickHouse error code 60 = TABLE_DOES_NOT_EXIST → MV tables not provisioned
-      if (isChError(err, CH_ERR_TABLE_NOT_FOUND)) {
-        log.warn({ ...logCtx, durationMs, chNodes }, "MV tables not found");
-        throw new Error(`MV tables not found in ${database}`, { cause: err });
+      // ClickHouse error code 60 = TABLE_DOES_NOT_EXIST → the discover MVs
+      // aren't provisioned in this database. They're an optional optimization
+      // (see discover-mv-schema.ts / getDiscoverMVSchema, provisioned out of
+      // band), so fall back to a full base-table scan — correct, just slower —
+      // rather than doing DDL/backfill on the request path. Any other error
+      // propagates.
+      if (!isChError(err, CH_ERR_TABLE_NOT_FOUND)) {
+        const durationMs = Math.round(performance.now() - start);
+        log.error({ ...logCtx, durationMs, chNodes, err }, "MV query failed");
+        throw err;
       }
-      log.error({ ...logCtx, durationMs, chNodes, err }, "MV query failed");
-      throw err;
+      log.info({ ...logCtx }, "discover MVs absent — scanning base tables");
+      ({ nameRows, attrRows, chNodes } = await this.runDiscoverQueries(
+        ctx,
+        buildDiscoverMetricsQueries()
+      ));
     }
     const queryMs = Math.round(performance.now() - start);
 

@@ -2,6 +2,7 @@ import {
   describe,
   it,
   expect,
+  expectTypeOf,
   beforeAll,
   beforeEach,
   afterAll,
@@ -9,6 +10,8 @@ import {
 } from "vitest";
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
+import { kopaiQuery } from "@kopai/core";
+import { kq } from "./kopai-query-builder.js";
 import { KopaiClient } from "./client.js";
 import { KopaiError, KopaiTimeoutError } from "./errors.js";
 import type {
@@ -349,6 +352,48 @@ describe("KopaiClient", () => {
         expect(error.detail).toBe("No trace with that ID");
       }
     });
+
+    it("surfaces Problem Details `detail` in error.message (G4)", async () => {
+      const detail =
+        "Percentile measures (P50-P999) are not yet supported on the sqlite backend.";
+      server.use(
+        http.post(`${BASE_URL}/signals/query/metrics/aggregate`, () => {
+          return HttpResponse.json(
+            {
+              type: "https://docs.kopai.app/errors/signals-api-validation-error",
+              status: 400,
+              title: "Invalid query",
+              detail,
+            },
+            { status: 400 }
+          );
+        })
+      );
+
+      // Valid query (passes local validation) so it reaches the server,
+      // which rejects percentiles on the sqlite backend.
+      const send = () =>
+        client.queryMetricsAggregate({
+          signal: "metrics",
+          mode: "aggregate",
+          measures: [{ op: "P95", column: "Value", as: "p95" }],
+          filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+          timeDimension: { type: "relative", lookback: "1h" },
+          output: { type: "summary" },
+        });
+
+      await expect(send()).rejects.toThrow(KopaiError);
+
+      try {
+        await send();
+      } catch (e) {
+        const error = e as KopaiError;
+        expect(error.status).toBe(400);
+        expect(error.detail).toBe(detail);
+        expect(error.message).toContain("Percentile measures");
+        expect(error.message).toContain(detail);
+      }
+    });
   });
 
   describe("abort signal", () => {
@@ -429,5 +474,811 @@ describe("KopaiClient", () => {
       expect(capturedHeaders!.get("X-Custom-Header")).toBe("custom-value");
       expect(capturedHeaders!.get("Authorization")).toBe("Bearer test-token");
     });
+  });
+
+  // ============================================================
+  // KopaiQuery SDK methods (Phase 2a)
+  // ============================================================
+  describe("queryTracesRaw", () => {
+    const q: kopaiQuery.TraceRawQuery = {
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["SpanId"],
+      timeDimension: { type: "relative", lookback: "1h" },
+    };
+
+    it("POSTs to /signals/query/traces/raw with body + parses response", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/traces/raw`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({
+              data: [sampleTrace],
+              nextCursor: "next-page",
+            });
+          }
+        )
+      );
+
+      const result = await client.queryTracesRaw(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/traces/raw`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]!.SpanId).toBe(sampleTrace.SpanId);
+      expect(result.nextCursor).toBe("next-page");
+    });
+
+    it("rejects invalid query at runtime", async () => {
+      await expect(
+        // @ts-expect-error invalid runtime input (missing mode)
+        client.queryTracesRaw({ signal: "traces", dimensions: ["SpanId"] })
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("queryTracesAggregate", () => {
+    const q: kopaiQuery.TraceAggregateQuery = {
+      signal: "traces",
+      mode: "aggregate",
+      measures: [{ op: "COUNT", as: "c" }],
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "summary" },
+    };
+
+    it("POSTs to /signals/query/traces/aggregate with body + parses response", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/traces/aggregate`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({
+              data: [{ c: 42 }],
+            });
+          }
+        )
+      );
+
+      const result = await client.queryTracesAggregate(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/traces/aggregate`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toEqual([{ c: 42 }]);
+    });
+  });
+
+  describe("queryLogsRaw", () => {
+    const q: kopaiQuery.LogRawQuery = {
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Body"],
+      timeDimension: { type: "relative", lookback: "1h" },
+    };
+
+    it("POSTs to /signals/query/logs/raw with body + parses response", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(`${BASE_URL}/signals/query/logs/raw`, async ({ request }) => {
+          capturedUrl = request.url;
+          capturedBody = await request.clone().json();
+          return HttpResponse.json({
+            data: [sampleLog],
+            nextCursor: null,
+          });
+        })
+      );
+
+      const result = await client.queryLogsRaw(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/logs/raw`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]!.Body).toBe(sampleLog.Body);
+      expect(result.nextCursor).toBeNull();
+    });
+  });
+
+  describe("queryLogsAggregate", () => {
+    const q: kopaiQuery.LogAggregateQuery = {
+      signal: "logs",
+      mode: "aggregate",
+      measures: [{ op: "COUNT", as: "c" }],
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "summary" },
+    };
+
+    it("POSTs to /signals/query/logs/aggregate with body + parses response", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/logs/aggregate`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({
+              data: [{ c: 7 }],
+            });
+          }
+        )
+      );
+
+      const result = await client.queryLogsAggregate(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/logs/aggregate`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toEqual([{ c: 7 }]);
+    });
+  });
+
+  describe("queryMetricsRaw", () => {
+    const q: kopaiQuery.MetricRawQuery = {
+      signal: "metrics",
+      mode: "raw",
+      dimensions: ["MetricName"],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+      timeDimension: { type: "relative", lookback: "1h" },
+    };
+
+    it("POSTs to /signals/query/metrics/raw with body + parses response", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/metrics/raw`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({
+              data: [sampleMetric],
+              nextCursor: null,
+            });
+          }
+        )
+      );
+
+      const result = await client.queryMetricsRaw(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/metrics/raw`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]!.MetricName).toBe(sampleMetric.MetricName);
+      expect(result.nextCursor).toBeNull();
+    });
+  });
+
+  describe("queryMetricsAggregate", () => {
+    const q: kopaiQuery.MetricAggregateQuery = {
+      signal: "metrics",
+      mode: "aggregate",
+      measures: [{ op: "COUNT", as: "c" }],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "summary" },
+    };
+
+    it("POSTs to /signals/query/metrics/aggregate with body + parses response", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/metrics/aggregate`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({
+              data: [{ c: 99 }],
+            });
+          }
+        )
+      );
+
+      const result = await client.queryMetricsAggregate(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/metrics/aggregate`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toEqual([{ c: 99 }]);
+    });
+
+    it("rejects a metric query missing the MetricType filter before sending (M1)", async () => {
+      // No server mock: validateKopaiQuery must reject locally so the request
+      // is never made (would otherwise be a server 400).
+      await expect(
+        client.queryMetricsAggregate({
+          signal: "metrics",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "c" }],
+          timeDimension: { type: "relative", lookback: "1h" },
+          output: { type: "summary" },
+        })
+      ).rejects.toThrow(/MetricType/);
+    });
+  });
+
+  // ============================================================
+  // Polymorphic query() dispatcher (Phase A1)
+  // ============================================================
+  describe("query (dispatcher)", () => {
+    it("dispatches traces+raw to /signals/query/traces/raw", async () => {
+      const q: kopaiQuery.TraceRawQuery = {
+        signal: "traces",
+        mode: "raw",
+        dimensions: ["SpanId"],
+        timeDimension: { type: "relative", lookback: "1h" },
+      };
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/traces/raw`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({
+              data: [sampleTrace],
+              nextCursor: "next",
+            });
+          }
+        )
+      );
+
+      const result = await client.query(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/traces/raw`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toHaveLength(1);
+      expect(result.nextCursor).toBe("next");
+    });
+
+    it("dispatches traces+aggregate to /signals/query/traces/aggregate", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/traces/aggregate`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({ data: [{ c: 1 }] });
+          }
+        )
+      );
+
+      // Inline literal so KopaiQueryResult<Q> can narrow on output.type.
+      const result = await client.query({
+        signal: "traces",
+        mode: "aggregate",
+        measures: [{ op: "COUNT", as: "c" }],
+        timeDimension: { type: "relative", lookback: "1h" },
+        output: { type: "summary" },
+      });
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/traces/aggregate`);
+      expect(result.data).toEqual([{ c: 1 }]);
+      expect(capturedBody).toMatchObject({
+        signal: "traces",
+        mode: "aggregate",
+      });
+    });
+
+    it("dispatches logs+raw to /signals/query/logs/raw", async () => {
+      const q: kopaiQuery.LogRawQuery = {
+        signal: "logs",
+        mode: "raw",
+        dimensions: ["Body"],
+        timeDimension: { type: "relative", lookback: "1h" },
+      };
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(`${BASE_URL}/signals/query/logs/raw`, async ({ request }) => {
+          capturedUrl = request.url;
+          capturedBody = await request.clone().json();
+          return HttpResponse.json({ data: [sampleLog], nextCursor: null });
+        })
+      );
+
+      const result = await client.query(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/logs/raw`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toHaveLength(1);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("dispatches logs+aggregate to /signals/query/logs/aggregate", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/logs/aggregate`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({ data: [{ c: 2 }] });
+          }
+        )
+      );
+
+      const result = await client.query({
+        signal: "logs",
+        mode: "aggregate",
+        measures: [{ op: "COUNT", as: "c" }],
+        timeDimension: { type: "relative", lookback: "1h" },
+        output: { type: "summary" },
+      });
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/logs/aggregate`);
+      expect(result.data).toEqual([{ c: 2 }]);
+      expect(capturedBody).toMatchObject({ signal: "logs", mode: "aggregate" });
+    });
+
+    it("dispatches metrics+raw to /signals/query/metrics/raw", async () => {
+      const q: kopaiQuery.MetricRawQuery = {
+        signal: "metrics",
+        mode: "raw",
+        dimensions: ["MetricName"],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+        timeDimension: { type: "relative", lookback: "1h" },
+      };
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/metrics/raw`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({
+              data: [sampleMetric],
+              nextCursor: null,
+            });
+          }
+        )
+      );
+
+      const result = await client.query(q);
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/metrics/raw`);
+      expect(capturedBody).toEqual(q);
+      expect(result.data).toHaveLength(1);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("dispatches metrics+aggregate to /signals/query/metrics/aggregate", async () => {
+      let capturedUrl = "";
+      let capturedBody: unknown = null;
+      server.use(
+        http.post(
+          `${BASE_URL}/signals/query/metrics/aggregate`,
+          async ({ request }) => {
+            capturedUrl = request.url;
+            capturedBody = await request.clone().json();
+            return HttpResponse.json({ data: [{ c: 3 }] });
+          }
+        )
+      );
+
+      const result = await client.query({
+        signal: "metrics",
+        mode: "aggregate",
+        measures: [{ op: "COUNT", as: "c" }],
+        filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+        timeDimension: { type: "relative", lookback: "1h" },
+        output: { type: "summary" },
+      });
+
+      expect(capturedUrl).toBe(`${BASE_URL}/signals/query/metrics/aggregate`);
+      expect(result.data).toEqual([{ c: 3 }]);
+      expect(capturedBody).toMatchObject({
+        signal: "metrics",
+        mode: "aggregate",
+      });
+    });
+  });
+});
+
+// ============================================================
+// Type-only: KopaiQuery SDK method return types + variant guards
+// ============================================================
+describe("KopaiClient kopaiQuery method types", () => {
+  it("queryTracesRaw return type is exact", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = ReturnType<typeof _client.queryTracesRaw>;
+    expectTypeOf<Awaited<R>>().toEqualTypeOf<{
+      data: OtelTracesRow[];
+      nextCursor: string | null;
+    }>();
+  });
+
+  it("queryTracesRaw rejects non-trace-raw input", () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const logRaw: kopaiQuery.LogRawQuery = {
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Body"],
+      timeDimension: { type: "relative", lookback: "1h" },
+    };
+    if (false as boolean) {
+      // @ts-expect-error LogRawQuery is not TraceRawQuery
+      void client.queryTracesRaw(logRaw);
+    }
+    void logRaw;
+    expect(true).toBe(true);
+  });
+
+  it("queryTracesAggregate return type is exact", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = ReturnType<typeof _client.queryTracesAggregate>;
+    expectTypeOf<Awaited<R>>().toEqualTypeOf<{
+      data: kopaiQuery.KopaiAggregateRow[];
+    }>();
+  });
+
+  it("queryTracesAggregate rejects non-trace-aggregate input", () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const traceRaw: kopaiQuery.TraceRawQuery = {
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["SpanId"],
+      timeDimension: { type: "relative", lookback: "1h" },
+    };
+    if (false as boolean) {
+      // @ts-expect-error TraceRawQuery is not TraceAggregateQuery
+      void client.queryTracesAggregate(traceRaw);
+    }
+    void traceRaw;
+    expect(true).toBe(true);
+  });
+
+  it("queryLogsRaw return type is exact", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = ReturnType<typeof _client.queryLogsRaw>;
+    expectTypeOf<Awaited<R>>().toEqualTypeOf<{
+      data: OtelLogsRow[];
+      nextCursor: string | null;
+    }>();
+  });
+
+  it("queryLogsRaw rejects non-log-raw input", () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const traceRaw: kopaiQuery.TraceRawQuery = {
+      signal: "traces",
+      mode: "raw",
+      dimensions: ["SpanId"],
+      timeDimension: { type: "relative", lookback: "1h" },
+    };
+    if (false as boolean) {
+      // @ts-expect-error TraceRawQuery is not LogRawQuery
+      void client.queryLogsRaw(traceRaw);
+    }
+    void traceRaw;
+    expect(true).toBe(true);
+  });
+
+  it("queryLogsAggregate return type is exact", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = ReturnType<typeof _client.queryLogsAggregate>;
+    expectTypeOf<Awaited<R>>().toEqualTypeOf<{
+      data: kopaiQuery.KopaiAggregateRow[];
+    }>();
+  });
+
+  it("queryLogsAggregate rejects non-log-aggregate input", () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const traceAgg: kopaiQuery.TraceAggregateQuery = {
+      signal: "traces",
+      mode: "aggregate",
+      measures: [{ op: "COUNT", as: "c" }],
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "summary" },
+    };
+    if (false as boolean) {
+      // @ts-expect-error TraceAggregateQuery is not LogAggregateQuery
+      void client.queryLogsAggregate(traceAgg);
+    }
+    void traceAgg;
+    expect(true).toBe(true);
+  });
+
+  it("queryMetricsRaw return type is exact", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = ReturnType<typeof _client.queryMetricsRaw>;
+    expectTypeOf<Awaited<R>>().toEqualTypeOf<{
+      data: OtelMetricsRow[];
+      nextCursor: string | null;
+    }>();
+  });
+
+  it("queryMetricsRaw rejects non-metric-raw input", () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const logRaw: kopaiQuery.LogRawQuery = {
+      signal: "logs",
+      mode: "raw",
+      dimensions: ["Body"],
+      timeDimension: { type: "relative", lookback: "1h" },
+    };
+    if (false as boolean) {
+      // @ts-expect-error LogRawQuery is not MetricRawQuery
+      void client.queryMetricsRaw(logRaw);
+    }
+    void logRaw;
+    expect(true).toBe(true);
+  });
+
+  it("queryMetricsAggregate return type is exact", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = ReturnType<typeof _client.queryMetricsAggregate>;
+    expectTypeOf<Awaited<R>>().toEqualTypeOf<{
+      data: kopaiQuery.KopaiAggregateRow[];
+    }>();
+  });
+
+  it("queryMetricsAggregate rejects non-metric-aggregate input", () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const logAgg: kopaiQuery.LogAggregateQuery = {
+      signal: "logs",
+      mode: "aggregate",
+      measures: [{ op: "COUNT", as: "c" }],
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "summary" },
+    };
+    if (false as boolean) {
+      // @ts-expect-error LogAggregateQuery is not MetricAggregateQuery
+      void client.queryMetricsAggregate(logAgg);
+    }
+    void logAgg;
+    expect(true).toBe(true);
+  });
+});
+
+// ============================================================
+// Type-only: polymorphic query() dispatcher (Phase A1)
+// ============================================================
+describe("KopaiClient.query polymorphic types", () => {
+  it("narrows return type for TraceRawQuery", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = Awaited<
+      ReturnType<typeof _client.query<kopaiQuery.TraceRawQuery>>
+    >;
+    expectTypeOf<R>().toEqualTypeOf<{
+      data: OtelTracesRow[];
+      nextCursor: string | null;
+    }>();
+  });
+
+  it("narrows return type for TraceAggregateQuery (summary)", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    // Narrow the aggregate variant to the summary output so the conditional
+    // in KopaiQueryResult resolves past the output.type discriminator.
+    type Q = kopaiQuery.TraceAggregateQuery & {
+      output: { type: "summary" };
+    };
+    type R = Awaited<ReturnType<typeof _client.query<Q>>>;
+    expectTypeOf<R>().toEqualTypeOf<{ data: kopaiQuery.KopaiAggregateRow[] }>();
+  });
+
+  it("narrows return type for LogRawQuery", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = Awaited<ReturnType<typeof _client.query<kopaiQuery.LogRawQuery>>>;
+    expectTypeOf<R>().toEqualTypeOf<{
+      data: OtelLogsRow[];
+      nextCursor: string | null;
+    }>();
+  });
+
+  it("narrows return type for LogAggregateQuery (summary)", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type Q = kopaiQuery.LogAggregateQuery & { output: { type: "summary" } };
+    type R = Awaited<ReturnType<typeof _client.query<Q>>>;
+    expectTypeOf<R>().toEqualTypeOf<{ data: kopaiQuery.KopaiAggregateRow[] }>();
+  });
+
+  it("narrows return type for MetricRawQuery", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type R = Awaited<
+      ReturnType<typeof _client.query<kopaiQuery.MetricRawQuery>>
+    >;
+    expectTypeOf<R>().toEqualTypeOf<{
+      data: OtelMetricsRow[];
+      nextCursor: string | null;
+    }>();
+  });
+
+  it("narrows return type for MetricAggregateQuery (summary)", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    type Q = kopaiQuery.MetricAggregateQuery & { output: { type: "summary" } };
+    type R = Awaited<ReturnType<typeof _client.query<Q>>>;
+    expectTypeOf<R>().toEqualTypeOf<{ data: kopaiQuery.KopaiAggregateRow[] }>();
+  });
+
+  it("rejects shape missing the signal/mode discriminator", () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      // @ts-expect-error object lacks signal+mode discriminator; not a KopaiQuery variant
+      void client.query({ dimensions: ["SpanId"] });
+    }
+    expect(true).toBe(true);
+  });
+
+  // A query built via `kq.<signal>.aggregate()...build()` carries a
+  // union `output` (the builder's static type does not narrow output.type).
+  // Previously `client.query(built).data` errored TS2339 'data does not
+  // exist on never'. The result must now be fully typed: `.data` exists and
+  // is an aggregate-row array — no `never`, no `as any`.
+  it("built aggregate query result is fully typed — .data is not never", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const built = kq.traces
+      .aggregate()
+      .measure((m) => m.count("c"))
+      .timeRelative("1h")
+      .summary()
+      .build();
+    if (false as boolean) {
+      const res = await client.query(built);
+      // Would error TS2339 ('data' does not exist on 'never') before the fix.
+      expectTypeOf(res).toMatchTypeOf<{
+        data: kopaiQuery.KopaiAggregateRow[];
+      }>();
+      expectTypeOf(res.data).toMatchTypeOf<kopaiQuery.KopaiAggregateRow[]>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("timeSeries-narrowed aggregate query result adds bucket_start", async () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    // The builder does not statically narrow output.type, so use a
+    // timeSeries-narrowed query type (same pattern as the summary cases
+    // above) to assert the bucket_start branch resolves.
+    type Q = kopaiQuery.TraceAggregateQuery & {
+      output: { type: "timeSeries" };
+    };
+    type R = Awaited<ReturnType<typeof _client.query<Q>>>;
+    expectTypeOf<R>().toEqualTypeOf<{
+      data: (kopaiQuery.KopaiAggregateRow & { bucket_start: string })[];
+    }>();
+    expect(true).toBe(true);
+  });
+
+  it("built raw query result is { data; nextCursor }", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    const built = kq.traces
+      .raw()
+      .dimension("SpanId")
+      .timeRelative("1h")
+      .build();
+    if (false as boolean) {
+      const res = await client.query(built);
+      expectTypeOf(res).toMatchTypeOf<{ nextCursor: string | null }>();
+      expectTypeOf(res.data).toMatchTypeOf<OtelTracesRow[]>();
+    }
+    expect(true).toBe(true);
+  });
+});
+
+// ============================================================
+// Type-only: fully-typed aggregate result rows
+// ============================================================
+// The builder brands `.build()`'s return with a type-only `__aggRow`
+// phantom carrying each measure alias (→ number) and each string-literal
+// dimension (→ string|number|null). `client.query()` flows the query type
+// through core's AggregateResultFor, which reads the phantom — so result
+// rows are fully typed and consumers no longer cast.
+describe("KopaiClient.query aggregate result rows are fully typed", () => {
+  it("summary: measure aliases are number; dimension stays wide; no cast", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      const { data } = await client.query(
+        kq.traces
+          .aggregate()
+          .measure((m) => m.errorRate("er"))
+          .measure((m) => m.count("n"))
+          .dimension("service.name")
+          .timeRelative("1h")
+          .summary()
+          .build()
+      );
+      // Row element type (avoid noUncheckedIndexedAccess `T | undefined`).
+      type Row = (typeof data)[number];
+      // Measure aliases resolve to number.
+      expectTypeOf<Row["er"]>().toEqualTypeOf<number>();
+      expectTypeOf<Row["n"]>().toEqualTypeOf<number>();
+      // Arithmetic compiles with no `as any` / cast.
+      const row = data[0] as Row;
+      const _scaled: number = row.n * 100;
+      void _scaled;
+      // Dimension is a group-by key — kept wide, not over-narrowed.
+      expectTypeOf<Row["service.name"]>().toExtend<string | number | null>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("timeSeries: rows additionally carry bucket_start: string", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      const { data } = await client.query(
+        kq.traces
+          .aggregate()
+          .measure((m) => m.count("n"))
+          .dimension("service.name")
+          .timeRelative("1h")
+          .timeSeries("5m")
+          .build()
+      );
+      type Row = (typeof data)[number];
+      expectTypeOf(data).toExtend<Row[]>();
+      expectTypeOf<Row["n"]>().toEqualTypeOf<number>();
+      expectTypeOf<Row["bucket_start"]>().toEqualTypeOf<string>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("metrics: avg(Value,'v') alias resolves to number", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      const { data } = await client.query(
+        kq
+          .metrics("Gauge")
+          .aggregate()
+          .measure((m) => m.avg("Value", "v"))
+          .timeRelative("1h")
+          .summary()
+          .build()
+      );
+      type Row = (typeof data)[number];
+      expectTypeOf(data).toExtend<Row[]>();
+      expectTypeOf<Row["v"]>().toEqualTypeOf<number>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("logs: multiple measures each resolve to number", async () => {
+    const client = new KopaiClient({ baseUrl: "https://x.test" });
+    if (false as boolean) {
+      const { data } = await client.query(
+        kq.logs
+          .aggregate()
+          .measure((m) => m.count("total"))
+          .measure((m) => m.countDistinct("service.name", "svcs"))
+          .timeRelative("1h")
+          .summary()
+          .build()
+      );
+      type Row = (typeof data)[number];
+      expectTypeOf(data).toExtend<Row[]>();
+      expectTypeOf<Row["total"]>().toEqualTypeOf<number>();
+      expectTypeOf<Row["svcs"]>().toEqualTypeOf<number>();
+    }
+    expect(true).toBe(true);
+  });
+
+  it("fallback: an un-branded (widened) aggregate query keeps KopaiAggregateRow", () => {
+    const _client = new KopaiClient({ baseUrl: "https://x.test" });
+    // A query typed as the general aggregate type (no `__aggRow` phantom)
+    // must still resolve to the wide row — non-breaking.
+    type Q = kopaiQuery.TraceAggregateQuery & { output: { type: "summary" } };
+    type R = Awaited<ReturnType<typeof _client.query<Q>>>;
+    expectTypeOf<R>().toEqualTypeOf<{ data: kopaiQuery.KopaiAggregateRow[] }>();
+    expect(true).toBe(true);
+  });
+
+  it("the built runtime object carries NO __aggRow property (type-only phantom)", () => {
+    const built = kq.traces
+      .aggregate()
+      .measure((m) => m.count("n"))
+      .timeRelative("1h")
+      .summary()
+      .build();
+    expect("__aggRow" in built).toBe(false);
+    // Still a valid KopaiQuery at runtime (phantom never serialized).
+    expect(kopaiQuery.KopaiQuery.parse(built)).toEqual(built);
   });
 });

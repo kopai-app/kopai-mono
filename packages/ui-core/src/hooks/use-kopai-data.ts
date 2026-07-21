@@ -52,6 +52,8 @@ function fetchForDataSource(
         >[0],
         { signal }
       );
+    case "query":
+      return client.query(dataSource.params, { signal });
     default: {
       const exhaustiveCheck: never = dataSource;
       throw new Error(

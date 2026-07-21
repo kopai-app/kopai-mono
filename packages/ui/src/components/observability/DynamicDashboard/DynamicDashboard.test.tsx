@@ -36,6 +36,13 @@ function createMockClient(): MockClient {
     searchTraceSummariesPage: vi
       .fn()
       .mockResolvedValue({ data: [], nextCursor: null }),
+    queryTracesRaw: vi.fn().mockResolvedValue({ data: [], nextCursor: null }),
+    queryTracesAggregate: vi.fn().mockResolvedValue({ data: [] }),
+    queryLogsRaw: vi.fn().mockResolvedValue({ data: [], nextCursor: null }),
+    queryLogsAggregate: vi.fn().mockResolvedValue({ data: [] }),
+    queryMetricsRaw: vi.fn().mockResolvedValue({ data: [], nextCursor: null }),
+    queryMetricsAggregate: vi.fn().mockResolvedValue({ data: [] }),
+    query: vi.fn().mockResolvedValue({ data: [], nextCursor: null }),
   };
 }
 
@@ -349,8 +356,8 @@ describe("DynamicDashboard", () => {
         ParentSpanId: "",
         ServiceName: "api-gateway",
         SpanName: "GET /api/users",
-        SpanKind: "SERVER",
-        StatusCode: "OK",
+        SpanKind: "Server",
+        StatusCode: "Ok",
         StatusMessage: "",
         ScopeName: "",
         ScopeVersion: "",

@@ -134,20 +134,20 @@ describe("OptimizedDatasource", () => {
       expect(spanNameRow.SpanName).toBe("GET /api");
 
       const resultBySpanKind = await readDs.getTraces({
-        spanKind: "SPAN_KIND_SERVER",
+        spanKind: "Server",
       });
       expect(resultBySpanKind.data).toHaveLength(1);
       const spanKindRow = resultBySpanKind.data[0];
       assertDefined(spanKindRow);
-      expect(spanKindRow.SpanKind).toBe("SPAN_KIND_SERVER");
+      expect(spanKindRow.SpanKind).toBe("Server");
 
       const resultByStatusCode = await readDs.getTraces({
-        statusCode: "STATUS_CODE_OK",
+        statusCode: "Ok",
       });
       expect(resultByStatusCode.data).toHaveLength(1);
       const statusCodeRow = resultByStatusCode.data[0];
       assertDefined(statusCodeRow);
-      expect(statusCodeRow.StatusCode).toBe("STATUS_CODE_OK");
+      expect(statusCodeRow.StatusCode).toBe("Ok");
 
       const resultByScopeName = await readDs.getTraces({
         scopeName: "http-scope",
@@ -474,7 +474,7 @@ describe("OptimizedDatasource", () => {
 
       const result = await readDs.getTraces({
         serviceName: "target-service",
-        spanKind: "SPAN_KIND_SERVER",
+        spanKind: "Server",
       });
 
       expect(result.data).toHaveLength(1);

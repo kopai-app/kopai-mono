@@ -28,6 +28,137 @@ describe("schemas", () => {
     } satisfies DataSource;
   });
 
+  describe("query dataSource variant", () => {
+    const validTimeDimension = {
+      type: "relative" as const,
+      lookback: "2h",
+    };
+
+    it("accepts a trace-raw KopaiQuery payload", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          signal: "traces",
+          mode: "raw",
+          dimensions: ["SpanId", "TraceId", "Duration"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("accepts a trace-aggregate KopaiQuery payload", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          signal: "traces",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: { type: "summary" },
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("accepts a log-raw KopaiQuery payload", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          signal: "logs",
+          mode: "raw",
+          dimensions: ["Timestamp", "Body"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("accepts a log-aggregate KopaiQuery payload", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          signal: "logs",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: { type: "summary" },
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("accepts a metric-raw KopaiQuery payload with a MetricType filter", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          signal: "metrics",
+          mode: "raw",
+          dimensions: ["MetricName", "Value"],
+          timeDimension: validTimeDimension,
+          filters: [
+            {
+              column: "MetricType",
+              op: "eq",
+              value: "Gauge",
+            },
+          ],
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("accepts a metric-aggregate KopaiQuery payload", () => {
+      const valid = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          signal: "metrics",
+          mode: "aggregate",
+          measures: [{ op: "COUNT", as: "n" }],
+          timeDimension: validTimeDimension,
+          output: { type: "timeSeries", granularity: "5m" },
+        },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("rejects a malformed payload missing signal/mode", () => {
+      const invalid = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          dimensions: ["SpanId"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(invalid.success).toBe(false);
+    });
+
+    it("accepts refetchIntervalMs as optional", () => {
+      const withInterval = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          signal: "traces",
+          mode: "raw",
+          dimensions: ["SpanId"],
+          timeDimension: validTimeDimension,
+        },
+        refetchIntervalMs: 5000,
+      });
+      expect(withInterval.success).toBe(true);
+
+      const withoutInterval = dataSourceSchema.safeParse({
+        method: "query",
+        params: {
+          signal: "traces",
+          mode: "raw",
+          dimensions: ["SpanId"],
+          timeDimension: validTimeDimension,
+        },
+      });
+      expect(withoutInterval.success).toBe(true);
+    });
+  });
+
   describe("createCatalog", () => {
     it("creates uiTreeSchema that validates component props", () => {
       const catalog = createCatalog({
