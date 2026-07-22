@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   narrowRows,
   narrowQueryRows,
+  narrowAggregateRows,
   hasMetricRowShape,
   hasLogRowShape,
   hasTraceRowShape,
+  hasAggregateRowShape,
 } from "./narrowRows.js";
 
 // L6/L9: the polymorphic `query` dataSource can feed any of the six result
@@ -160,5 +162,55 @@ describe("row shape guards", () => {
     expect(hasTraceRowShape({ SpanId: "s", TraceId: "t", SpanName: "x" })).toBe(
       false
     );
+  });
+
+  it("hasAggregateRowShape accepts flat scalar rows and rejects raw rows", () => {
+    // Dimension + measure columns, all scalar.
+    expect(hasAggregateRowShape({ SpanName: "trpc.x", calls: 3 })).toBe(true);
+    expect(hasAggregateRowShape({ StatusCode: "Error", requests: 0 })).toBe(
+      true
+    );
+    // timeSeries aggregate adds a scalar bucket_start.
+    expect(hasAggregateRowShape({ bucket_start: "2024-01-01", value: 1 })).toBe(
+      true
+    );
+    expect(hasAggregateRowShape({ value: null })).toBe(true);
+    // Raw rows carry object/array-valued fields — must NOT pass.
+    expect(hasAggregateRowShape({ ...metricRow, Attributes: {} })).toBe(false);
+    expect(
+      hasAggregateRowShape({ SpanName: "x", ResourceAttributes: {} })
+    ).toBe(false);
+    expect(
+      hasAggregateRowShape({ MetricName: "m", "Exemplars.Value": [] })
+    ).toBe(false);
+    expect(hasAggregateRowShape(null)).toBe(false);
+  });
+});
+
+// narrowAggregateRows is the inverse of narrowQueryRows: it forwards
+// aggregate-shaped rows and surfaces an explicit error when a *raw* result is
+// bound to an aggregate renderer by mistake.
+describe("narrowAggregateRows", () => {
+  it("forwards aggregate rows with no error", () => {
+    const res = { data: [{ SpanName: "trpc.uploadLogo", avg_duration: 2090 }] };
+    const out = narrowAggregateRows(res);
+    expect(out.rows).toHaveLength(1);
+    expect(out.error).toBeUndefined();
+  });
+
+  it("surfaces an error when a raw metric result reaches an aggregate renderer", () => {
+    const res = {
+      data: [{ TimeUnix: "1", Value: 1, Attributes: { a: "b" } }],
+    };
+    const out = narrowAggregateRows(res);
+    expect(out.rows).toEqual([]);
+    expect(out.error).toBeInstanceOf(Error);
+    expect(out.error?.message).toContain('mode: "aggregate"');
+  });
+
+  it("does NOT error on empty or null responses", () => {
+    expect(narrowAggregateRows({ data: [] }).error).toBeUndefined();
+    expect(narrowAggregateRows(null).error).toBeUndefined();
+    expect(narrowAggregateRows({ data: undefined }).error).toBeUndefined();
   });
 });

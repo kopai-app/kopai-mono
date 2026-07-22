@@ -1,8 +1,9 @@
-import type { denormalizedSignals } from "@kopai/core";
+import type { denormalizedSignals, kopaiQuery } from "@kopai/core";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 type OtelLogsRow = denormalizedSignals.OtelLogsRow;
 type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
+type KopaiAggregateRow = kopaiQuery.KopaiAggregateRow;
 
 // The polymorphic `query` dataSource method can return any of the six
 // KopaiQuery result shapes. A signal-specific renderer must therefore validate
@@ -55,6 +56,28 @@ export function narrowQueryRows<T>(
       `This panel displays raw ${signal} rows, but the query returned a different ` +
         `row shape — typically an aggregate-mode query, or a query for another signal. ` +
         `Use a raw ${signal} query, or a renderer that supports aggregate results.`
+    ),
+  };
+}
+
+// The inverse of the raw-row narrowers: an *aggregate* renderer accepts the
+// dynamic dimension/measure rows produced by a `mode: "aggregate"` query and
+// must reject a raw signal result bound to it by mistake. `narrowAggregateRows`
+// returns null → an explicit error when the rows are raw-shaped, matching the
+// raw renderers' behaviour so the misconfiguration is visible rather than
+// silently rendering object-valued columns as JSON.
+export function narrowAggregateRows(
+  response: { data?: unknown } | null | undefined
+): { rows: KopaiAggregateRow[]; error?: Error } {
+  const rows = narrowRows(response, hasAggregateRowShape);
+  if (rows !== null) return { rows };
+  if (!Array.isArray(response?.data)) return { rows: [] };
+  return {
+    rows: [],
+    error: new Error(
+      `This panel displays aggregate query results, but the query returned rows ` +
+        `with a raw (non-scalar) shape — typically a raw-mode query or a raw ` +
+        `metric/trace/log source. Use an aggregate-mode query (mode: "aggregate").`
     ),
   };
 }
@@ -117,4 +140,19 @@ export function hasTraceRowShape(v: unknown): v is OtelTracesRow {
     hasAnyKey(v, SPAN_ONLY_KEYS) &&
     !hasAnyKey(v, LOG_ONLY_KEYS)
   );
+}
+
+// Aggregate rows (KopaiAggregateRow) are flat records of scalar cells — the
+// query's dimension and measure columns. Raw signal rows always carry at least
+// one non-scalar field (Attributes/ResourceAttributes objects, Exemplars
+// arrays), so "every value is string | number | null" is the reliable
+// discriminator between an aggregate result and a raw metric/trace/log row.
+export function hasAggregateRowShape(v: unknown): v is KopaiAggregateRow {
+  if (!isRecord(v)) return false;
+  for (const val of Object.values(v)) {
+    if (val !== null && typeof val !== "string" && typeof val !== "number") {
+      return false;
+    }
+  }
+  return true;
 }

@@ -153,6 +153,17 @@ export const observabilityCatalog = createCatalog({
       acceptsDataFrom: ["searchMetricsPage", "query"] as const,
     },
 
+    AggregateTable: {
+      props: z.object({ maxRows: z.number().nullable() }),
+      hasChildren: false,
+      description:
+        "Tabular display of aggregate query results — dimension and measure " +
+        "columns from a `query` dataSource in aggregate mode (e.g. top spans " +
+        "by AVG(Duration), request counts grouped by StatusCode). Columns are " +
+        "derived from the result rows, so it renders any signal's aggregate output.",
+      acceptsDataFrom: ["query"] as const,
+    },
+
     MetricDiscovery: {
       props: z.object({}),
       hasChildren: false,

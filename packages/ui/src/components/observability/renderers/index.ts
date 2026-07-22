@@ -1,3 +1,4 @@
+export { OtelAggregateTable } from "./OtelAggregateTable.js";
 export { OtelLogTimeline } from "./OtelLogTimeline.js";
 export { OtelMetricDiscovery } from "./OtelMetricDiscovery.js";
 export { OtelMetricHistogram } from "./OtelMetricHistogram.js";

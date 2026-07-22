@@ -16,6 +16,7 @@ import {
   Empty,
 } from "../../dashboard/index.js";
 import {
+  OtelAggregateTable,
   OtelLogTimeline,
   OtelMetricDiscovery,
   OtelMetricHistogram,
@@ -40,6 +41,7 @@ const MetricsRenderer = createRendererFromCatalog(observabilityCatalog, {
   MetricHistogram: OtelMetricHistogram,
   MetricStat: OtelMetricStat,
   MetricTable: OtelMetricTable,
+  AggregateTable: OtelAggregateTable,
   MetricDiscovery: OtelMetricDiscovery,
 });
 

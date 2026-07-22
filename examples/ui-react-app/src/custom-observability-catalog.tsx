@@ -470,6 +470,67 @@ function MetricTable(props: RendererProps<"MetricTable">) {
   );
 }
 
+// ---------- AggregateTable --------------------------------------------------
+// The mirror image of the raw renderers: an aggregate `query` returns dynamic
+// dimension/measure rows (KopaiAggregateRow — a flat scalar record), so the
+// columns come from the rows themselves. Raw rows carry object-valued fields,
+// so "every value is scalar" separates an aggregate result from a raw one.
+function hasAggregateRowShape(
+  v: unknown
+): v is Record<string, string | number | null> {
+  if (!isRecord(v)) return false;
+  return Object.values(v).every(
+    (val) => val === null || typeof val === "string" || typeof val === "number"
+  );
+}
+
+function AggregateTable(props: RendererProps<"AggregateTable">) {
+  if (!props.hasData) return <NoSource name="AggregateTable" />;
+  const maxRows = props.element.props.maxRows ?? 10;
+  const rows = narrowRows(props.response, hasAggregateRowShape);
+  if (rows === null) {
+    return (
+      <RequestState loading={props.loading} error={props.error}>
+        <UnsupportedShape name="AggregateTable" />
+      </RequestState>
+    );
+  }
+  const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  const shown = rows.slice(0, maxRows);
+  return (
+    <RequestState loading={props.loading} error={props.error}>
+      {shown.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#999" }}>(no rows)</div>
+      ) : (
+        <table
+          style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}
+        >
+          <thead>
+            <tr style={{ textAlign: "left", color: "#666" }}>
+              {columns.map((c) => (
+                <th key={c} style={{ padding: "4px 8px" }}>
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r, i) => (
+              <tr key={i} style={{ borderTop: "1px solid #eee" }}>
+                {columns.map((c) => (
+                  <td key={c} style={{ padding: "4px 8px" }}>
+                    {String(r[c] ?? "—")}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </RequestState>
+  );
+}
+
 // ---------- MetricDiscovery -------------------------------------------------
 // Unlike the paginated endpoints, `discoverMetrics` returns `{ metrics: [...] }`
 // — the shape is different, and the renderer reads `response.metrics` (not
@@ -633,7 +694,7 @@ function TraceDetail(props: TraceDetailProps) {
 }
 
 // =============================================================================
-// Register all 15 renderers with the catalog. `createRendererFromCatalog`
+// Register all 16 renderers with the catalog. `createRendererFromCatalog`
 // enforces at compile time that the registry matches the catalog shape.
 // =============================================================================
 const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
@@ -651,6 +712,7 @@ const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
   MetricTimeSeries,
   MetricHistogram,
   MetricTable,
+  AggregateTable,
   MetricDiscovery,
   LogTimeline,
   TraceDetail,
