@@ -143,12 +143,20 @@ export function hasTraceRowShape(v: unknown): v is OtelTracesRow {
 }
 
 // Aggregate rows (KopaiAggregateRow) are flat records of scalar cells — the
-// query's dimension and measure columns. Raw signal rows always carry at least
-// one non-scalar field (Attributes/ResourceAttributes objects, Exemplars
-// arrays), so "every value is string | number | null" is the reliable
-// discriminator between an aggregate result and a raw metric/trace/log row.
+// query's dimension and measure columns. Raw signal rows normally carry a
+// non-scalar field (Attributes/ResourceAttributes objects, Exemplars arrays),
+// but a raw row can also be all-scalar (e.g. a metric row with no attributes)
+// and would then match a raw-signal guard. Reject anything the raw guards
+// already claim before accepting a scalar-only record, so a raw result bound
+// to an aggregate renderer surfaces the config error instead of rendering
+// silently. This is safe for real aggregate rows: the raw guards require a raw
+// TimeUnix/Timestamp column, which aggregate results never have (they use
+// bucket_start).
 export function hasAggregateRowShape(v: unknown): v is KopaiAggregateRow {
   if (!isRecord(v)) return false;
+  if (hasMetricRowShape(v) || hasLogRowShape(v) || hasTraceRowShape(v)) {
+    return false;
+  }
   for (const val of Object.values(v)) {
     if (val !== null && typeof val !== "string" && typeof val !== "number") {
       return false;

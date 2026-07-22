@@ -479,6 +479,13 @@ function hasAggregateRowShape(
   v: unknown
 ): v is Record<string, string | number | null> {
   if (!isRecord(v)) return false;
+  // A scalar-only object can still be a raw signal row (e.g. a metric row with
+  // no attributes); defer to the raw-row guards first so a raw result bound
+  // here surfaces the shape error instead of rendering silently. Matches
+  // production `hasAggregateRowShape` in @kopai/ui's narrowRows.ts.
+  if (hasMetricRowShape(v) || hasLogRowShape(v) || hasTraceRowShape(v)) {
+    return false;
+  }
   return Object.values(v).every(
     (val) => val === null || typeof val === "string" || typeof val === "number"
   );

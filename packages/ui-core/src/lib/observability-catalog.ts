@@ -154,7 +154,7 @@ export const observabilityCatalog = createCatalog({
     },
 
     AggregateTable: {
-      props: z.object({ maxRows: z.number().nullable() }),
+      props: z.object({ maxRows: z.number().int().positive().nullable() }),
       hasChildren: false,
       description:
         "Tabular display of aggregate query results — dimension and measure " +

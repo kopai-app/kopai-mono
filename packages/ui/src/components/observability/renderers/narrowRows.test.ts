@@ -184,6 +184,25 @@ describe("row shape guards", () => {
       hasAggregateRowShape({ MetricName: "m", "Exemplars.Value": [] })
     ).toBe(false);
     expect(hasAggregateRowShape(null)).toBe(false);
+    // Scalar-only rows that still match a raw-signal guard are rejected, so a
+    // raw result bound to an aggregate renderer surfaces the config error
+    // rather than rendering silently.
+    expect(
+      hasAggregateRowShape({ TimeUnix: "1", MetricName: "m", Value: 1 })
+    ).toBe(false);
+    expect(
+      hasAggregateRowShape({ Timestamp: "1", Body: "hi", SeverityText: "INFO" })
+    ).toBe(false);
+    expect(
+      hasAggregateRowShape({
+        Timestamp: "1",
+        SpanId: "s",
+        TraceId: "t",
+        SpanName: "x",
+        Duration: 5,
+        StatusCode: "Ok",
+      })
+    ).toBe(false);
   });
 });
 
@@ -206,6 +225,16 @@ describe("narrowAggregateRows", () => {
     expect(out.rows).toEqual([]);
     expect(out.error).toBeInstanceOf(Error);
     expect(out.error?.message).toContain('mode: "aggregate"');
+  });
+
+  it("errors on a scalar-only raw result with no object-valued fields", () => {
+    // A raw metric row whose attribute columns are absent is all-scalar, but
+    // still matches the raw metric guard — it must not slip through as aggregate.
+    const out = narrowAggregateRows({
+      data: [{ TimeUnix: "1", MetricName: "m", Value: 1 }],
+    });
+    expect(out.rows).toEqual([]);
+    expect(out.error).toBeInstanceOf(Error);
   });
 
   it("does NOT error on empty or null responses", () => {
