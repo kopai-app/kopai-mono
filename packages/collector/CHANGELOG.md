@@ -1,5 +1,12 @@
 # @kopai/collector
 
+## 0.7.2
+
+### Patch Changes
+
+- Updated dependencies [1fb095c]
+  - @kopai/core@0.11.0
+
 ## 0.7.1
 
 ### Patch Changes
