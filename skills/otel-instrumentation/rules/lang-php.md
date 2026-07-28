@@ -2,13 +2,11 @@
 | ------------------- | ------ | -------------------------------- |
 | PHP Instrumentation | HIGH   | lang, php, traces, logs, metrics |
 
-## PHP Instrumentation
-
-**Impact:** HIGH
+# PHP Instrumentation
 
 Set up OpenTelemetry SDK for PHP applications with traces, logs, and metrics.
 
-### Install
+## Install
 
 ```bash
 composer require \
@@ -19,7 +17,7 @@ composer require \
   nyholm/psr7
 ```
 
-### Configuration
+## Configuration
 
 ```php
 $otelEndpoint = getenv('OTEL_EXPORTER_OTLP_ENDPOINT') ?: 'http://localhost:4318';
@@ -32,7 +30,7 @@ $serviceName = getenv('OTEL_SERVICE_NAME') ?: 'my-service';
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `http://localhost:4318`) |
 | `OTEL_SERVICE_NAME` | Service name shown in observability backend |
 
-### Traces (SDK)
+## Traces (SDK)
 
 ```php
 use OpenTelemetry\API\Globals;
@@ -101,7 +99,7 @@ try {
 }
 ```
 
-### Logs (SDK)
+## Logs (SDK)
 
 ```php
 use OpenTelemetry\API\Globals;
@@ -143,7 +141,7 @@ $logger->emit(
 );
 ```
 
-### Metrics (SDK)
+## Metrics (SDK)
 
 ```php
 use OpenTelemetry\API\Globals;
@@ -187,7 +185,7 @@ $counter = $meter->createCounter(
 $counter->add(1, ['endpoint' => '/api/users']);
 ```
 
-### Important Notes
+## Important Notes
 
 1. **PSR-18 HTTP Client**: The SDK requires a PSR-18 compatible HTTP client. Use `php-http/guzzle7-adapter` with Guzzle 7.
 
@@ -199,7 +197,7 @@ $counter->add(1, ['endpoint' => '/api/users']);
 
 5. **Output Buffering**: When using PHP's built-in server, use `ob_start()`/`ob_end_clean()` to prevent SDK initialization from interfering with HTTP responses.
 
-### Running
+## Running
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
@@ -207,6 +205,20 @@ export OTEL_SERVICE_NAME=my-php-service
 php -S localhost:3001 index.php
 ```
 
-### Reference
+## Reference
 
 [OpenTelemetry PHP](https://opentelemetry.io/docs/languages/php/)
+
+## Next
+
+SDK setup is step 3 of six. It gets bytes flowing; it does not make the telemetry good.
+
+1. Decide what earns a span — `instrument-spans.md`
+2. Add the context that makes spans answerable — `instrument-attributes.md`
+3. Instrument the error paths — `instrument-errors.md`
+4. Drive traffic yourself — `drive-traffic.md`
+5. Assert on what arrived — `validate-traces.md`
+
+Confirm before moving on: the SDK starts **before** any application code that could
+create a span, and shutdown flushes on SIGTERM (`validate-shutdown.md`). Both fail
+silently.

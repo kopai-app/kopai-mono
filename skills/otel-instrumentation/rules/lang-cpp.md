@@ -2,13 +2,11 @@
 | ------------------- | ------ | ------------------------------------- |
 | C++ Instrumentation | HIGH   | lang, cpp, c++, traces, logs, metrics |
 
-## C++ Instrumentation
-
-**Impact:** HIGH
+# C++ Instrumentation
 
 Set up OpenTelemetry SDK for C++ applications with traces, logs, and metrics using OTLP HTTP exporters.
 
-### CMake
+## CMake
 
 ```cmake
 find_package(opentelemetry-cpp CONFIG REQUIRED)
@@ -22,7 +20,7 @@ target_link_libraries(myapp PRIVATE
 )
 ```
 
-### Configuration
+## Configuration
 
 ```cpp
 #include <cstdlib>
@@ -45,7 +43,7 @@ std::string getServiceName() {
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `http://localhost:4318`) |
 | `OTEL_SERVICE_NAME` | Service name shown in observability backend |
 
-### Resource Configuration
+## Resource Configuration
 
 ```cpp
 #include "opentelemetry/sdk/resource/resource.h"
@@ -61,7 +59,7 @@ resource::Resource createResource() {
 }
 ```
 
-### Traces
+## Traces
 
 ```cpp
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_factory.h"
@@ -106,7 +104,7 @@ span->SetStatus(trace_api::StatusCode::kOk);
 span->End();
 ```
 
-### Logs
+## Logs
 
 ```cpp
 #include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter_factory.h"
@@ -143,7 +141,7 @@ logger->EmitLogRecord(opentelemetry::logs::Severity::kWarn, "Warning message");
 logger->EmitLogRecord(opentelemetry::logs::Severity::kError, "Error occurred");
 ```
 
-### Metrics
+## Metrics
 
 ```cpp
 #include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h"
@@ -194,7 +192,7 @@ auto histogram = meter->CreateDoubleHistogram("latency", "Request latency");
 histogram->Record(0.123, {{"endpoint", "/api"}});
 ```
 
-### Shutdown
+## Shutdown
 
 ```cpp
 void CleanupProviders() {
@@ -215,7 +213,21 @@ void CleanupProviders() {
 }
 ```
 
-### Reference
+## Reference
 
 - [OpenTelemetry C++](https://opentelemetry.io/docs/languages/cpp/)
 - [opentelemetry-cpp GitHub](https://github.com/open-telemetry/opentelemetry-cpp)
+
+## Next
+
+SDK setup is step 3 of six. It gets bytes flowing; it does not make the telemetry good.
+
+1. Decide what earns a span — `instrument-spans.md`
+2. Add the context that makes spans answerable — `instrument-attributes.md`
+3. Instrument the error paths — `instrument-errors.md`
+4. Drive traffic yourself — `drive-traffic.md`
+5. Assert on what arrived — `validate-traces.md`
+
+Confirm before moving on: the SDK starts **before** any application code that could
+create a span, and shutdown flushes on SIGTERM (`validate-shutdown.md`). Both fail
+silently.

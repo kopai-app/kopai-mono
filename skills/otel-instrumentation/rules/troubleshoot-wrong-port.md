@@ -2,35 +2,38 @@
 | ---------- | ------ | ------------------ |
 | Wrong Port | MEDIUM | troubleshoot, port |
 
-## Wrong Port
+# Wrong Port
 
-**Impact:** MEDIUM
+Kopai runs two servers, and sending telemetry to the wrong one produces silence rather
+than an error.
 
-Troubleshoot port confusion between collector and API.
-
-### Port Reference
-
-| Port | Service        | Purpose                         |
-| ---- | -------------- | ------------------------------- |
-| 4318 | OTEL Collector | Send telemetry here (OTLP/HTTP) |
-| 8000 | API Server     | Query data here (CLI uses this) |
-
-### Common Mistake
+| Port | Service        | Direction                                     |
+| ---- | -------------- | --------------------------------------------- |
+| 4318 | OTEL collector | Your app **sends** telemetry here (OTLP/HTTP) |
+| 8000 | API server     | The CLI and SDK **read** data from here       |
 
 ```bash
-# WRONG - API server doesn't accept OTLP
+# WRONG — the API server does not accept OTLP
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:8000
 
-# CORRECT - Collector endpoint
+# CORRECT
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
-### Verify
+Port 4317 is also wrong: that is the conventional gRPC port, and Kopai is HTTP-only.
+A Go or Java SDK left on its default will try it — `setup-environment.md` covers forcing
+`OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`.
+
+## Verify both ends
 
 ```bash
-# Should return 200 (collector)
-curl -I http://localhost:4318/v1/traces
+# collector accepts OTLP
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces \
+  -H 'Content-Type: application/json' -d '{"resourceSpans":[]}'
 
-# Should return API response
-curl http://localhost:8000/signals/traces
+# API server answers queries
+curl -s http://localhost:8000/signals/traces | head -c 200
 ```
+
+Check the endpoint in the shell that **launched the app**. A correction exported
+afterwards never reaches the running process — restart it.

@@ -2,13 +2,11 @@
 | -------------------- | ------ | --------------------------------- |
 | Ruby Instrumentation | HIGH   | lang, ruby, traces, logs, metrics |
 
-## Ruby Instrumentation
-
-**Impact:** HIGH
+# Ruby Instrumentation
 
 Set up OpenTelemetry SDK for Ruby applications with traces, logs, and metrics.
 
-### Install
+## Install
 
 In Gemfile:
 
@@ -38,7 +36,7 @@ Then run:
 bundle install
 ```
 
-### Configuration
+## Configuration
 
 ```ruby
 OTEL_ENDPOINT = ENV['OTEL_EXPORTER_OTLP_ENDPOINT'] || 'http://localhost:4318'
@@ -51,7 +49,7 @@ SERVICE_NAME = ENV['OTEL_SERVICE_NAME'] || 'my-service'
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `http://localhost:4318`) |
 | `OTEL_SERVICE_NAME` | Service name shown in observability backend |
 
-### Traces (SDK)
+## Traces (SDK)
 
 ```ruby
 require 'opentelemetry/sdk'
@@ -86,7 +84,7 @@ tracer.in_span('my-operation', attributes: { 'key' => 'value' }) do |span|
 end
 ```
 
-### Logs (SDK - Experimental)
+## Logs (SDK - Experimental)
 
 ```ruby
 require 'opentelemetry-logs-sdk'
@@ -126,7 +124,7 @@ rescue LoadError => e
 end
 ```
 
-### Metrics (SDK - Experimental)
+## Metrics (SDK - Experimental)
 
 ```ruby
 require 'opentelemetry-metrics-sdk'
@@ -167,7 +165,7 @@ rescue LoadError => e
 end
 ```
 
-### Important Notes
+## Important Notes
 
 1. **Compression**: Use `compression: 'none'` if your OTLP backend doesn't support gzip. The Ruby OTLP exporter uses gzip by default.
 
@@ -177,6 +175,20 @@ end
 
 4. **Endpoint Format**: Use the full endpoint with signal path (e.g., `/v1/traces`) when explicitly configuring exporters.
 
-### Reference
+## Reference
 
 [OpenTelemetry Ruby](https://opentelemetry.io/docs/languages/ruby/)
+
+## Next
+
+SDK setup is step 3 of six. It gets bytes flowing; it does not make the telemetry good.
+
+1. Decide what earns a span — `instrument-spans.md`
+2. Add the context that makes spans answerable — `instrument-attributes.md`
+3. Instrument the error paths — `instrument-errors.md`
+4. Drive traffic yourself — `drive-traffic.md`
+5. Assert on what arrived — `validate-traces.md`
+
+Confirm before moving on: the SDK starts **before** any application code that could
+create a span, and shutdown flushes on SIGTERM (`validate-shutdown.md`). Both fail
+silently.

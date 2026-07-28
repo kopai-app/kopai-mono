@@ -2,9 +2,7 @@
 | ----------------------------- | ------ | ------------------------------------------------- |
 | Erlang/Elixir Instrumentation | HIGH   | lang, erlang, elixir, beam, traces, logs, metrics |
 
-## Erlang/Elixir Instrumentation
-
-**Impact:** HIGH
+# Erlang/Elixir Instrumentation
 
 Set up OpenTelemetry for Erlang/Elixir applications with traces, logs, and metrics.
 
@@ -16,7 +14,7 @@ Set up OpenTelemetry for Erlang/Elixir applications with traces, logs, and metri
 | Logs    | Direct HTTP | No official OTLP log exporter available                   |
 | Metrics | Direct HTTP | No official OTLP metric exporter available                |
 
-### Elixir (mix.exs)
+## Elixir (mix.exs)
 
 **Note:** Replace `X.X` with the latest versions from [hex.pm](https://hex.pm).
 
@@ -35,7 +33,7 @@ defp deps do
 end
 ```
 
-### Configuration
+## Configuration
 
 **config/config.exs:**
 
@@ -77,7 +75,7 @@ config :opentelemetry_exporter,
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `http://localhost:4318`) |
 | `OTEL_SERVICE_NAME` | Service name shown in observability backend |
 
-### Traces (SDK)
+## Traces (SDK)
 
 ```elixir
 defmodule MyApp.Application do
@@ -118,7 +116,7 @@ defmodule MyApp.Router do
 end
 ```
 
-### Logs (Direct HTTP)
+## Logs (Direct HTTP)
 
 No official OTLP log exporter exists for Elixir. Use direct HTTP/JSON:
 
@@ -147,7 +145,7 @@ defp send_log(message, endpoint, service_name) do
 end
 ```
 
-### Metrics (Direct HTTP)
+## Metrics (Direct HTTP)
 
 No official OTLP metric exporter exists for Elixir. Use direct HTTP/JSON:
 
@@ -185,7 +183,7 @@ defp send_metric(name, value, endpoint, service_name, attributes) do
 end
 ```
 
-### HTTP Helper (for logs and metrics)
+## HTTP Helper (for logs and metrics)
 
 ```elixir
 defp send_otlp_request(url, body) do
@@ -210,7 +208,7 @@ rescue
 end
 ```
 
-### Important Notes
+## Important Notes
 
 1. **Auto-instrumentation**: Call `:opentelemetry_cowboy.setup()` to enable automatic HTTP span creation.
 
@@ -222,6 +220,20 @@ end
 
 5. **Logs/Metrics**: Use direct HTTP/JSON until official OTLP exporters are available.
 
-### Reference
+## Reference
 
 [OpenTelemetry Erlang](https://opentelemetry.io/docs/languages/erlang/)
+
+## Next
+
+SDK setup is step 3 of six. It gets bytes flowing; it does not make the telemetry good.
+
+1. Decide what earns a span — `instrument-spans.md`
+2. Add the context that makes spans answerable — `instrument-attributes.md`
+3. Instrument the error paths — `instrument-errors.md`
+4. Drive traffic yourself — `drive-traffic.md`
+5. Assert on what arrived — `validate-traces.md`
+
+Confirm before moving on: the SDK starts **before** any application code that could
+create a span, and shutdown flushes on SIGTERM (`validate-shutdown.md`). Both fail
+silently.

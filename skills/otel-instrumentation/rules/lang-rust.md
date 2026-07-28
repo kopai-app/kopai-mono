@@ -2,13 +2,11 @@
 | -------------------- | ------ | --------------------------------- |
 | Rust Instrumentation | HIGH   | lang, rust, traces, logs, metrics |
 
-## Rust Instrumentation
-
-**Impact:** HIGH
+# Rust Instrumentation
 
 Set up OpenTelemetry SDK for Rust applications with traces, logs, and metrics.
 
-### Cargo.toml
+## Cargo.toml
 
 **Note:** Replace `*` with the latest versions from [crates.io](https://crates.io/crates/opentelemetry).
 
@@ -30,7 +28,7 @@ tracing = "*"
 tracing-subscriber = { version = "*", features = ["env-filter"] }
 ```
 
-### Configuration
+## Configuration
 
 ```rust
 use std::env;
@@ -52,7 +50,7 @@ fn get_service_name() -> String {
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `http://localhost:4318`) |
 | `OTEL_SERVICE_NAME` | Service name shown in observability backend |
 
-### Traces (SDK)
+## Traces (SDK)
 
 ```rust
 use opentelemetry::{global, trace::{Status, TraceContextExt, Tracer}, KeyValue};
@@ -94,7 +92,7 @@ tracer.in_span("my-operation", |cx| {
 });
 ```
 
-### Metrics (SDK)
+## Metrics (SDK)
 
 ```rust
 use opentelemetry::global;
@@ -136,7 +134,7 @@ let counter = meter.u64_counter("http.requests").build();
 counter.add(1, &[KeyValue::new("endpoint", "/api/users")]);
 ```
 
-### Logs (SDK)
+## Logs (SDK)
 
 ```rust
 use opentelemetry_otlp::{Protocol, WithExportConfig};
@@ -181,7 +179,7 @@ tracing::info!(endpoint = "/hello", "Hello endpoint called");
 tracing::error!("Something went wrong");
 ```
 
-### Complete Setup Example
+## Complete Setup Example
 
 ```rust
 #[tokio::main]
@@ -203,7 +201,7 @@ async fn main() {
 }
 ```
 
-### Important Notes
+## Important Notes
 
 1. **Static Names**: `global::tracer()` and `global::meter()` require `&'static str` names.
 
@@ -215,6 +213,20 @@ async fn main() {
 
 5. **Tokio Runtime**: Requires Tokio runtime for async batching (`rt-tokio` feature).
 
-### Reference
+## Reference
 
 [OpenTelemetry Rust](https://opentelemetry.io/docs/languages/rust/)
+
+## Next
+
+SDK setup is step 3 of six. It gets bytes flowing; it does not make the telemetry good.
+
+1. Decide what earns a span — `instrument-spans.md`
+2. Add the context that makes spans answerable — `instrument-attributes.md`
+3. Instrument the error paths — `instrument-errors.md`
+4. Drive traffic yourself — `drive-traffic.md`
+5. Assert on what arrived — `validate-traces.md`
+
+Confirm before moving on: the SDK starts **before** any application code that could
+create a span, and shutdown flushes on SIGTERM (`validate-shutdown.md`). Both fail
+silently.
