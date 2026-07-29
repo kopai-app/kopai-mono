@@ -8,6 +8,10 @@ updates:
       all-dependencies:
         patterns:
           - "*"
+    ignore:
+      # TS 7 blocked until typescript-eslint + ts-jest support it (typescript-eslint#10940)
+      - dependency-name: "typescript"
+        versions: [">=7.0.0"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

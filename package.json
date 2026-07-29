@@ -32,7 +32,7 @@
     "lint-staged": "^17.2.0",
     "prettier": "^3.9.6",
     "turbo": "^2.10.6",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
   },
@@ -47,5 +47,10 @@
   },
   "dependencies": {
     "zod": "^4.4.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "typescript": "^6.0.3"
+    }
   }
 }
