@@ -1,8 +1,8 @@
 {
   "name": "kopai/otel-instrumentation",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "private": false,
-  "summary": "Instrument applications with OpenTelemetry SDK and validate telemetry using Kopai. Use when setting up observability, adding tracing/logging/metrics, testing instrumentation, debugging missing telemetry data, or when traces/logs/metrics aren't appearing after setup. Also use when users say things like \"my traces aren't showing up\", \"I don't see any data\", or \"how do I add observability to my app\".",
+  "summary": "Instrument applications with the OpenTelemetry SDK and prove the telemetry is good by validating it against a local Kopai backend. Use when setting up observability, adding tracing/logging/metrics, deciding what to instrument or which attributes to add, retrofitting OTel into an existing codebase, threading context through call chains, configuring sampling, or when traces/logs/metrics aren't appearing after setup. Also use when users say things like \"my traces aren't showing up\", \"I don't see any data\", or \"how do I add observability to my app\". Do NOT use to investigate existing telemetry for a root cause (use root-cause-analysis), to build dashboards (use create-dashboard), or to instrument LLM and agent calls (use otel-genai-instrumentation).",
   "skills": {
     "otel-instrumentation": {
       "path": "SKILL.md"

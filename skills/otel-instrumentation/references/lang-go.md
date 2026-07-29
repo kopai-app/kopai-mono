@@ -2,13 +2,11 @@
 | ------------------ | ------ | --------------------------------------- |
 | Go Instrumentation | HIGH   | lang, go, golang, traces, logs, metrics |
 
-## Go Instrumentation
-
-**Impact:** HIGH
+# Go Instrumentation
 
 Set up OpenTelemetry SDK for Go applications with traces, logs, and metrics.
 
-### Configuration
+## Configuration
 
 **Environment Variables:**
 | Variable | Description |
@@ -16,7 +14,7 @@ Set up OpenTelemetry SDK for Go applications with traces, logs, and metrics.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `http://localhost:4318`) |
 | `OTEL_SERVICE_NAME` | Service name shown in observability backend |
 
-### Install
+## Install
 
 ```bash
 go get go.opentelemetry.io/otel
@@ -28,7 +26,7 @@ go get go.opentelemetry.io/otel/sdk/log
 go get go.opentelemetry.io/otel/sdk/metric
 ```
 
-### Complete Setup (All Three Signals)
+## Complete Setup (All Three Signals)
 
 ```go
 package main
@@ -179,10 +177,24 @@ func main() {
 }
 ```
 
-### Example
+## Example
 
 See the complete working example: [kopai-integration-examples/go](https://github.com/kopai-app/kopai-integration-examples/tree/main/go)
 
-### Reference
+## Reference
 
 [OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/)
+
+## Next
+
+SDK setup is step 3 of six. It gets bytes flowing; it does not make the telemetry good.
+
+1. Decide what earns a span — `instrument-spans.md`
+2. Add the context that makes spans answerable — `instrument-attributes.md`
+3. Instrument the error paths — `instrument-errors.md`
+4. Drive traffic yourself — `drive-traffic.md`
+5. Assert on what arrived — `validate-traces.md`
+
+Confirm before moving on: the SDK starts **before** any application code that could
+create a span, and shutdown flushes on SIGTERM (`validate-shutdown.md`). Both fail
+silently.

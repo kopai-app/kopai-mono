@@ -2,13 +2,11 @@
 | -------------------- | ------ | ------------------------------------------- |
 | .NET Instrumentation | HIGH   | lang, dotnet, csharp, traces, logs, metrics |
 
-## .NET Instrumentation
-
-**Impact:** HIGH
+# .NET Instrumentation
 
 Set up OpenTelemetry SDK for .NET applications with traces, logs, and metrics.
 
-### Install
+## Install
 
 ```bash
 dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
@@ -16,7 +14,7 @@ dotnet add package OpenTelemetry.Extensions.Hosting
 dotnet add package OpenTelemetry.Instrumentation.AspNetCore
 ```
 
-### Configuration
+## Configuration
 
 **CRITICAL:** The OTLP exporter defaults to gRPC. For HTTP endpoints (port 4318), you MUST set `OtlpExportProtocol.HttpProtobuf` and append signal paths.
 
@@ -36,7 +34,7 @@ var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `http://localhost:4318`) |
 | `OTEL_SERVICE_NAME` | Service name shown in observability backend |
 
-### Traces
+## Traces
 
 ```csharp
 builder.Services.AddOpenTelemetry()
@@ -50,7 +48,7 @@ builder.Services.AddOpenTelemetry()
         }));
 ```
 
-### Logs
+## Logs
 
 ```csharp
 using OpenTelemetry.Resources;
@@ -69,7 +67,7 @@ builder.Logging.AddOpenTelemetry(logging =>
 });
 ```
 
-### Metrics
+## Metrics
 
 ```csharp
 using System.Diagnostics.Metrics;
@@ -88,7 +86,7 @@ builder.Services.AddOpenTelemetry()
         }));
 ```
 
-### Complete Example
+## Complete Example
 
 ```csharp
 using System.Diagnostics.Metrics;
@@ -150,6 +148,20 @@ app.MapGet("/hello", (ILogger<Program> logger) =>
 app.Run();
 ```
 
-### Reference
+## Reference
 
 [OpenTelemetry .NET](https://opentelemetry.io/docs/languages/net/)
+
+## Next
+
+SDK setup is step 3 of six. It gets bytes flowing; it does not make the telemetry good.
+
+1. Decide what earns a span — `instrument-spans.md`
+2. Add the context that makes spans answerable — `instrument-attributes.md`
+3. Instrument the error paths — `instrument-errors.md`
+4. Drive traffic yourself — `drive-traffic.md`
+5. Assert on what arrived — `validate-traces.md`
+
+Confirm before moving on: the SDK starts **before** any application code that could
+create a span, and shutdown flushes on SIGTERM (`validate-shutdown.md`). Both fail
+silently.

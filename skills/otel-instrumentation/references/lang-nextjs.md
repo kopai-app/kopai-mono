@@ -2,13 +2,11 @@
 | ----------------------- | ------ | -------------------------------------------- |
 | Next.js Instrumentation | HIGH   | lang, nextjs, react, traces, browser, server |
 
-## Next.js Instrumentation
-
-**Impact:** HIGH
+# Next.js Instrumentation
 
 Set up OpenTelemetry for Next.js App Router — two approaches: `@vercel/otel` (simple) or manual SDK (full control, browser+server).
 
-### Approach 1: @vercel/otel (Recommended Start)
+## Approach 1: @vercel/otel (Recommended Start)
 
 Minimal setup, server-side traces only.
 
@@ -30,7 +28,7 @@ export function register() {
 
 No `next.config.ts` changes needed.
 
-### Approach 2: Manual SDK (Server + Browser)
+## Approach 2: Manual SDK (Server + Browser)
 
 Full control over both server-side and client-side instrumentation with distributed tracing.
 
@@ -179,7 +177,7 @@ export async function POST(request: Request) {
 }
 ```
 
-### Key Concepts
+## Key Concepts
 
 - **`src/instrumentation.ts`** is a Next.js convention — runs at server startup
 - **`NEXT_RUNTIME` check** prevents Node SDK from loading in edge runtime
@@ -188,7 +186,7 @@ export async function POST(request: Request) {
 - **`propagateTraceHeaderCorsUrls`** injects `traceparent` headers in fetch calls, linking browser and server spans into distributed traces
 - **`ignoreUrls: [/\/api\/otel/]`** prevents infinite loop (don't trace the trace-export request)
 
-### What Gets Instrumented
+## What Gets Instrumented
 
 | Approach     | Signal         | Description                                              |
 | ------------ | -------------- | -------------------------------------------------------- |
@@ -198,7 +196,7 @@ export async function POST(request: Request) {
 
 Browser fetch calls inject `traceparent` headers, so server spans appear as children of browser spans — creating end-to-end distributed traces.
 
-### Validate
+## Validate
 
 1. Start the Kopai backend:
 
@@ -226,15 +224,29 @@ npx @kopai/cli traces search --service client-side --json
 npx @kopai/cli traces get <trace-id>
 ```
 
-### Example
+## Example
 
 See the complete working examples:
 
 - [@vercel/otel approach](https://github.com/kopai-app/kopai-integration-examples/tree/main/next-js/vercel-otel)
 - [Manual SDK approach](https://github.com/kopai-app/kopai-integration-examples/tree/main/next-js/manual-sdk)
 
-### Reference
+## Reference
 
 - [Next.js OpenTelemetry Guide](https://nextjs.org/docs/app/guides/open-telemetry)
 - [@vercel/otel](https://www.npmjs.com/package/@vercel/otel)
 - [@opentelemetry/sdk-node](https://www.npmjs.com/package/@opentelemetry/sdk-node)
+
+## Next
+
+SDK setup is step 3 of six. It gets bytes flowing; it does not make the telemetry good.
+
+1. Decide what earns a span — `instrument-spans.md`
+2. Add the context that makes spans answerable — `instrument-attributes.md`
+3. Instrument the error paths — `instrument-errors.md`
+4. Drive traffic yourself — `drive-traffic.md`
+5. Assert on what arrived — `validate-traces.md`
+
+Confirm before moving on: the SDK starts **before** any application code that could
+create a span, and shutdown flushes on SIGTERM (`validate-shutdown.md`). Both fail
+silently.
