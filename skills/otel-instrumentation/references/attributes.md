@@ -114,7 +114,7 @@ Without them a partial rollout produces an error rate that moves for no visible 
 
 **Why the slug:** it's low-cardinality so you can group by it, greppable so a chart leads
 straight to the line of code, and it detects its own gaps — any `error = true` with no
-slug is an error path nobody instrumented. See `rules/instrument-errors.md`.
+slug is an error path nobody instrumented. See `references/instrument-errors.md`.
 
 ---
 

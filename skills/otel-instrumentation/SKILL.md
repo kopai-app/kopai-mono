@@ -14,26 +14,27 @@ Emit **wide events**, then prove they are good.
 A span is a wide event: one flat record carrying the full context of a unit of work.
 Kopai runs on localhost, so you never ship instrumentation on faith — you drive traffic
 through the app yourself and assert on what arrived. The loop is **green** when every
-assertion in `validate-traces` passes. Nothing here is finished while an assertion is red.
+assertion in [validate-traces](references/validate-traces.md) passes. Nothing here is
+finished while an assertion is red.
 
 ## Branches
 
-| You are…                                    | Start at                                                                          |
-| ------------------------------------------- | --------------------------------------------------------------------------------- |
-| Setting up a service that has no telemetry  | Workflow step 1 below                                                             |
-| Retrofitting OTel into an existing codebase | `rules/context-propagation.md` first — it is ~60% of the work — then the workflow |
-| Chasing data that isn't arriving            | `rules/troubleshoot-no-data.md`, then step 4 of the workflow                      |
+| You are…                                    | Start at                                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Setting up a service that has no telemetry  | Workflow step 1 below                                                                                       |
+| Retrofitting OTel into an existing codebase | [context-propagation](references/context-propagation.md) first — it is ~60% of the work — then the workflow |
+| Chasing data that isn't arriving            | [troubleshoot-no-data](references/troubleshoot-no-data.md), then step 4 of the workflow                     |
 
 ## Workflow
 
-| #   | Step                                                                                                   | Done when                                                                                                                                                  |
-| --- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Start** the backend — `npx @kopai/app start`                                                         | `curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4318/v1/traces -H 'Content-Type: application/json' -d '{"resourceSpans":[]}'` returns 2xx |
-| 2   | **Configure** the environment — `rules/setup-environment.md`                                           | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, and a `validation.run_id` run tag are all exported in the shell that launches the app                  |
-| 3   | **Instrument** — `rules/lang-<language>.md` for the SDK, then the judgment rules below                 | The app boots with the SDK loaded and prints no OTel export errors                                                                                         |
-| 4   | **Drive** traffic yourself — `rules/drive-traffic.md`                                                  | Every discovered entry point hit at least once **and** at least one deliberate failure driven                                                              |
-| 5   | **Assert** — `rules/validate-traces.md`, then `validate-logs`, `validate-metrics`, `validate-shutdown` | Every assertion passes. The loop is **green**                                                                                                              |
-| 6   | **Fix** — `rules/troubleshoot-*.md`                                                                    | Return to step 4 and re-drive. Never stop on a red assertion                                                                                               |
+| #   | Step                                                                                                                                                                                                                       | Done when                                                                                                                                                  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Start** the backend — `npx @kopai/app start`                                                                                                                                                                             | `curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4318/v1/traces -H 'Content-Type: application/json' -d '{"resourceSpans":[]}'` returns 2xx |
+| 2   | **Configure** the environment — [setup-environment](references/setup-environment.md)                                                                                                                                       | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, and a `validation.run_id` run tag are all exported in the shell that launches the app                  |
+| 3   | **Instrument** — the matching `lang-<language>` rule under **Language SDKs** below, then the judgment rules                                                                                                                | The app boots with the SDK loaded and prints no OTel export errors                                                                                         |
+| 4   | **Drive** traffic yourself — [drive-traffic](references/drive-traffic.md)                                                                                                                                                  | Every discovered entry point hit at least once **and** at least one deliberate failure driven                                                              |
+| 5   | **Assert** — [validate-traces](references/validate-traces.md), then [validate-logs](references/validate-logs.md), [validate-metrics](references/validate-metrics.md), [validate-shutdown](references/validate-shutdown.md) | Every assertion passes. The loop is **green**                                                                                                              |
+| 6   | **Fix** — the matching `troubleshoot-*` rule under **Fix it** below                                                                                                                                                        | Return to step 4 and re-drive. Never stop on a red assertion                                                                                               |
 
 Steps 4–6 are a loop, not a sequence. Report the instrumentation complete only when
 step 5 is green against traffic you drove in step 4 of the _same_ run.
@@ -49,7 +50,45 @@ Both yes → create a span. Otherwise → put an **attribute on the span you alr
 
 When in doubt, prefer attributes over child spans. An attribute on the parent needs no
 JOIN, costs nothing extra to query, and is immediately groupable. Full decision table,
-plus the three ways this goes wrong, in `rules/instrument-spans.md`.
+plus the three ways this goes wrong, in [instrument-spans](references/instrument-spans.md).
+
+## The core pattern
+
+One span, rich attributes, explicit error status. Node.js shown; every language follows
+the same shape — see your language's rule under **Language SDKs** below:
+
+```typescript
+import { trace, SpanStatusCode } from "@opentelemetry/api";
+
+const tracer = trace.getTracer("checkout");
+
+export async function processPayment(order: Order) {
+  return tracer.startActiveSpan("process-payment", async (span) => {
+    try {
+      span.setAttributes({
+        "order.id": order.id, // IDs are attributes, never span names
+        "order.total": order.total,
+        "payment.provider": order.provider,
+      });
+      const receipt = await charge(order);
+      span.setAttribute("payment.status", receipt.status);
+      return receipt;
+    } catch (err) {
+      span.recordException(err as Error);
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: (err as Error).message,
+      });
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+```
+
+Full code for every pattern — nested spans, async fan-out, queues, manual context —
+in [custom-instrumentation](references/custom-instrumentation.md).
 
 ## Naming
 
@@ -63,25 +102,36 @@ belongs in an attribute.
 
 ## Rules
 
-Read `rules/<name>.md`.
+Task-scoped rule files. Load one only when the workflow points at it.
 
-**Setup** — `setup-backend`, `setup-environment`
+**Setup** — [setup-backend](references/setup-backend.md), [setup-environment](references/setup-environment.md)
 
-**Language SDKs** — `lang-nodejs`, `lang-nextjs`, `lang-python`, `lang-go`, `lang-java`,
-`lang-dotnet`, `lang-ruby`, `lang-php`, `lang-rust`, `lang-erlang`, `lang-cpp`
+**Language SDKs** — [lang-nodejs](references/lang-nodejs.md), [lang-nextjs](references/lang-nextjs.md),
+[lang-python](references/lang-python.md), [lang-go](references/lang-go.md),
+[lang-java](references/lang-java.md), [lang-dotnet](references/lang-dotnet.md),
+[lang-ruby](references/lang-ruby.md), [lang-php](references/lang-php.md),
+[lang-rust](references/lang-rust.md), [lang-erlang](references/lang-erlang.md),
+[lang-cpp](references/lang-cpp.md)
 
-**What to instrument** — `instrument-spans` (what earns a span), `instrument-attributes`
-(which attributes, timing attributes, async summaries), `instrument-errors`
-(`error`, span status, **slug**), `context-propagation` (threading context; framework
-accessor gotchas), `layered-telemetry` (traces vs metrics vs logs), `sampling`
+**What to instrument** — [instrument-spans](references/instrument-spans.md) (what earns a span),
+[instrument-attributes](references/instrument-attributes.md) (which attributes, timing attributes, async summaries),
+[instrument-errors](references/instrument-errors.md) (`error`, span status, **slug**),
+[context-propagation](references/context-propagation.md) (threading context; framework accessor gotchas),
+[layered-telemetry](references/layered-telemetry.md) (traces vs metrics vs logs),
+[sampling](references/sampling.md)
 
-**Prove it** — `drive-traffic` (generate the traffic yourself), `validate-traces`,
-`validate-logs`, `validate-metrics`, `validate-shutdown`
+**Prove it** — [drive-traffic](references/drive-traffic.md) (generate the traffic yourself),
+[validate-traces](references/validate-traces.md), [validate-logs](references/validate-logs.md),
+[validate-metrics](references/validate-metrics.md), [validate-shutdown](references/validate-shutdown.md)
 
-**Fix it** — `troubleshoot-no-data`, `troubleshoot-missing-spans`,
-`troubleshoot-missing-attrs`, `troubleshoot-wrong-port`
+**Fix it** — [troubleshoot-no-data](references/troubleshoot-no-data.md),
+[troubleshoot-missing-spans](references/troubleshoot-missing-spans.md),
+[troubleshoot-missing-attrs](references/troubleshoot-missing-attrs.md),
+[troubleshoot-wrong-port](references/troubleshoot-wrong-port.md)
 
 ## References
+
+Deep dives — load only when the task needs them:
 
 - [attributes](references/attributes.md) — the canonical attribute catalog, by category
 - [custom-instrumentation](references/custom-instrumentation.md) — full code for every pattern, per language

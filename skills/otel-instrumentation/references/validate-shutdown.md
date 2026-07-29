@@ -30,7 +30,7 @@ npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json 
 - The handler calls `exit()` before `shutdown()` resolves — it must be awaited
 - The shutdown timeout is shorter than the export takes; give it 10–30s
 
-Each language's setup in `rules/lang-<language>.md` shows the shutdown hook. Verify it
+Each language's setup in `references/lang-<language>.md` shows the shutdown hook. Verify it
 exists in your code rather than assuming the SDK installed one — most SDKs do not.
 
 ## S2 — Short-lived processes flush too

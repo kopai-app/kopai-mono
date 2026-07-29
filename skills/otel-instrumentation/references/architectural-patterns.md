@@ -68,7 +68,7 @@ Follow the OTel `messaging.*` semantic conventions where they apply.
 
 For a pipeline, per-message traces answer "what happened to _this_ message" and are the
 wrong tool for "is the pipeline healthy". Emit metrics alongside: consumer lag, queue
-depth, processing rate. See `rules/layered-telemetry.md`.
+depth, processing rate. See `references/layered-telemetry.md`.
 
 ---
 

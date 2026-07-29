@@ -22,7 +22,7 @@ npx @kopai/cli metrics discover --json | jq 'length'
 **Fail — and the run was short:** the periodic reader never fired. Set
 `OTEL_METRIC_EXPORT_INTERVAL=1000` and re-drive before concluding anything is broken.
 **Fail — and the run was long:** the MeterProvider isn't registered, or only the
-TracerProvider was set up. See `rules/lang-<language>.md`.
+TracerProvider was set up. See `references/lang-<language>.md`.
 
 ## M2 — The expected instruments exist
 

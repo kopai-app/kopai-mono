@@ -20,7 +20,7 @@ npx @kopai/cli logs search --service "$OTEL_SERVICE_NAME" --json | jq 'length'
 **Pass:** greater than zero.
 **Fail:** the log bridge isn't wired. The SDK log exporter is separate from the trace
 exporter in most languages — installing tracing does not give you logs. See
-`rules/lang-<language>.md`.
+`references/lang-<language>.md`.
 
 ## L2 — Logs carry trace context
 

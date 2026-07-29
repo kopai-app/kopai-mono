@@ -78,7 +78,7 @@ whether the span is recording.
 
 ## Custom spans around business logic
 
-For operations that are **interesting** and **aggregable** — see `rules/instrument-spans.md`.
+For operations that are **interesting** and **aggregable** — see `references/instrument-spans.md`.
 
 ### Go
 
@@ -444,7 +444,7 @@ produces traces that stay open for hours.
 
 ## Context propagation fixes
 
-The failures behind `rules/context-propagation.md`.
+The failures behind `references/context-propagation.md`.
 
 ### Go: threading context
 
