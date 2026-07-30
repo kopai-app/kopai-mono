@@ -114,11 +114,11 @@ describe("collector integration", () => {
     loggerProvider = new LoggerProvider({
       resource,
       processors: [
-        new SimpleLogRecordProcessor(
-          new OTLPLogExporter({
+        new SimpleLogRecordProcessor({
+          exporter: new OTLPLogExporter({
             url: `${baseUrl}/v1/logs`,
-          })
-        ),
+          }),
+        }),
       ],
     });
     logs.setGlobalLoggerProvider(loggerProvider);
@@ -274,11 +274,11 @@ describe("collector integration (protobuf)", () => {
     loggerProvider = new LoggerProvider({
       resource,
       processors: [
-        new SimpleLogRecordProcessor(
-          new OTLPLogExporterProto({
+        new SimpleLogRecordProcessor({
+          exporter: new OTLPLogExporterProto({
             url: `${baseUrl}/v1/logs`,
-          })
-        ),
+          }),
+        }),
       ],
     });
     logs.setGlobalLoggerProvider(loggerProvider);

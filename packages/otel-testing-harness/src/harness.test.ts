@@ -220,11 +220,11 @@ describe("logs (JSON)", () => {
     loggerProvider = new LoggerProvider({
       resource,
       processors: [
-        new SimpleLogRecordProcessor(
-          new OTLPLogExporter({
+        new SimpleLogRecordProcessor({
+          exporter: new OTLPLogExporter({
             url: `http://127.0.0.1:${harness.port}/v1/logs`,
-          })
-        ),
+          }),
+        }),
       ],
     });
     logs.setGlobalLoggerProvider(loggerProvider);
@@ -297,11 +297,11 @@ describe("protobuf encoding", () => {
     loggerProvider = new LoggerProvider({
       resource,
       processors: [
-        new SimpleLogRecordProcessor(
-          new OTLPLogExporterProto({
+        new SimpleLogRecordProcessor({
+          exporter: new OTLPLogExporterProto({
             url: `http://127.0.0.1:${harness.port}/v1/logs`,
-          })
-        ),
+          }),
+        }),
       ],
     });
     logs.setGlobalLoggerProvider(loggerProvider);
@@ -406,11 +406,11 @@ describe("clear()", () => {
     loggerProvider = new LoggerProvider({
       resource,
       processors: [
-        new SimpleLogRecordProcessor(
-          new OTLPLogExporter({
+        new SimpleLogRecordProcessor({
+          exporter: new OTLPLogExporter({
             url: `http://127.0.0.1:${harness.port}/v1/logs`,
-          })
-        ),
+          }),
+        }),
       ],
     });
     logs.setGlobalLoggerProvider(loggerProvider);
