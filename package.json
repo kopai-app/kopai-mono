@@ -26,12 +26,12 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "eslint": "^10.8.0",
     "lefthook": "^2.1.10",
     "lint-staged": "^17.2.0",
     "prettier": "^3.9.6",
-    "turbo": "^2.10.6",
+    "turbo": "^2.10.7",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
