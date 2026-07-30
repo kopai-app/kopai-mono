@@ -1,10 +1,7 @@
 import z from "zod";
 
 export const problemDetailsSchema = z.object({
-  type: z
-    .url()
-    .default("about:blank")
-    .describe("URI reference identifying the problem type"),
+  type: z.url().describe("URI reference identifying the problem type"),
   status: z
     .number()
     .int()
