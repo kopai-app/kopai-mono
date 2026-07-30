@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  typescript: ^6.0.3
-
 importers:
 
   .:
@@ -324,7 +321,7 @@ importers:
         version: 1.43.0
       tsdown:
         specifier: ^0.22.14
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@6.0.3)(unrun@0.2.37(synckit@0.11.12))
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@5.4.5)(unrun@0.2.37(synckit@0.11.12))
 
   packages/core:
     dependencies:
@@ -343,7 +340,7 @@ importers:
         version: 5.1.0
       tsdown:
         specifier: ^0.22.14
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@6.0.3)(unrun@0.2.37(synckit@0.11.12))
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@5.9.3)(unrun@0.2.37(synckit@0.11.12))
 
   packages/otel-testing-harness:
     dependencies:
@@ -422,13 +419,13 @@ importers:
         version: 30.4.2(@types/node@26.1.1)
       tap:
         specifier: ^21.7.4
-        version: 21.7.4(@types/node@26.1.1)(@types/react@19.2.17)(react-dom@19.2.8(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
+        version: 21.7.4(@types/node@26.1.1)(@types/react@19.2.17)(react-dom@19.2.8(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       ts-jest:
         specifier: ^29.4.12
-        version: 29.4.12(@babel/core@7.29.0)(@jest/transform@30.4.1)(@jest/types@30.4.1)(babel-jest@30.4.1(@babel/core@7.29.0))(esbuild@0.28.1)(jest-util@30.4.1)(jest@30.4.2(@types/node@26.1.1))(typescript@6.0.3)
+        version: 29.4.12(@babel/core@7.29.0)(@jest/transform@30.4.1)(@jest/types@30.4.1)(babel-jest@30.4.1(@babel/core@7.29.0))(esbuild@0.28.1)(jest-util@30.4.1)(jest@30.4.2(@types/node@26.1.1))(typescript@5.9.3)
       tsdown:
         specifier: ^0.22.14
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@6.0.3)(unrun@0.2.37(synckit@0.11.12))
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@5.9.3)(unrun@0.2.37(synckit@0.11.12))
       tsx:
         specifier: ^4.23.1
         version: 4.23.1
@@ -1395,7 +1392,7 @@ packages:
       '@swc/core': '>=1.2.50'
       '@swc/wasm': '>=1.2.50'
       '@types/node': '*'
-      typescript: ^6.0.3
+      typescript: '>=4.2'
     peerDependenciesMeta:
       '@swc/core':
         optional: true
@@ -1499,7 +1496,7 @@ packages:
   '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0':
     resolution: {integrity: sha512-qvsTEwEFefhdirGOPnu9Wp6ChfIwy2dBCRuETU3uE+4cC+PFoxMSiiEhxk4lOluA34eARHA0OxqsEUYDqRMgeQ==}
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '>= 4.3.x'
       vite: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       typescript:
@@ -2389,7 +2386,7 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       storybook: ^10.5.4
-      typescript: ^6.0.3
+      typescript: '>= 4.9.x'
       vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       typescript:
@@ -2403,7 +2400,7 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       storybook: ^10.5.4
-      typescript: ^6.0.3
+      typescript: '>= 4.9.x'
     peerDependenciesMeta:
       '@types/react':
         optional: true
@@ -2875,20 +2872,20 @@ packages:
     peerDependencies:
       '@typescript-eslint/parser': ^8.65.0
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
-      typescript: ^6.0.3
+      typescript: '>=4.8.4 <6.1.0'
 
   '@typescript-eslint/parser@8.65.0':
     resolution: {integrity: sha512-CZ4nMxWwgu1HEEFNkeaCptra9QCtkmKdgf3sWh1rl1trIhmxLilgTV4cwcbQ4wemnT4sWQN8CaKOmdYx+g2gMA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
-      typescript: ^6.0.3
+      typescript: '>=4.8.4 <6.1.0'
 
   '@typescript-eslint/project-service@8.65.0':
     resolution: {integrity: sha512-SxnPhbTsGahizDgbu7oqFH/xVtzIqMd/s+WtnSxNxJZJpLbdT5IPdzg8EZxO3+PoKahXmwJLeNQOpKJb3/bi7Q==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '>=4.8.4 <6.1.0'
 
   '@typescript-eslint/scope-manager@8.65.0':
     resolution: {integrity: sha512-Esbl8OSYiVxBokYgWPf7VVWg/BE798wXhimnn9ML9Pt5qoDf8bfQlgjlKXR/k98+AcNzlLKYrpCcrcuZ9DZLgg==}
@@ -2898,14 +2895,14 @@ packages:
     resolution: {integrity: sha512-j6GzGqCiRdA7Qhur2VVmKZAkBLfnHFQfx4TaJGL9RMveZqCo48jSHHO0DTgizEnGhtWnqmbtCUSrqSkdiY/0Hg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '>=4.8.4 <6.1.0'
 
   '@typescript-eslint/type-utils@8.65.0':
     resolution: {integrity: sha512-YjaZ7PRI5qY7ax2L3PbvX0rRyGtipAReCWs0mhhDBHjH/vl0g0BonaGXrKdKpMbIIsMIwDgbk/xzkBTyAltS5g==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
-      typescript: ^6.0.3
+      typescript: '>=4.8.4 <6.1.0'
 
   '@typescript-eslint/types@8.65.0':
     resolution: {integrity: sha512-JSSwWNy+H0E/01jJEM+hrX6N0OFDzFzeIhHFSAS01tlVaevpG8cFyYRPhS5yjGOvBUx3sqQHVMjCL1CAZZMxBg==}
@@ -2915,14 +2912,14 @@ packages:
     resolution: {integrity: sha512-JboAE2swaYt4tb1fHhHTABE2K+OLy09XfcTbhnk4Pw96f9dd2e9iYsJ28gBggHlo5z5x1rkyWvcPoTuNTd4oGg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '>=4.8.4 <6.1.0'
 
   '@typescript-eslint/utils@8.65.0':
     resolution: {integrity: sha512-gXiwIHsYreboxeJucHKPvgwl7dXt50mF8s1/c00cP/WoVTyWKFdtfhRWwZiXYFU5H2O8vVoSLNrexFZjYS/SGA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
-      typescript: ^6.0.3
+      typescript: '>=4.8.4 <6.1.0'
 
   '@typescript-eslint/visitor-keys@8.65.0':
     resolution: {integrity: sha512-8C71BQkGjiMmXtop7pHVJu1l2NNShFdkCyD6a2ezzs5vU/L3LRtb69EtcteFwz0mYMPzIgOw0n6OV4VBUWZd7A==}
@@ -2978,7 +2975,7 @@ packages:
   '@typescript/vfs@1.6.4':
     resolution: {integrity: sha512-PJFXFS4ZJKiJ9Qiuix6Dz/OwEIqHD7Dme1UwZhTK11vR+5dqW2ACbdndWQexBzCx+CPuMe5WBYQWCsFyGlQLlQ==}
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '*'
 
   '@ungap/structured-clone@1.3.1':
     resolution: {integrity: sha512-mUFwbeTqrVgDQxFveS+df2yfap6iuP20NAKAsBt5jDEoOTDew+zwLAOilHCeQJOVSvmgCX4ogqIrA0mnyr08yQ==}
@@ -5181,7 +5178,7 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '>= 4.8.x'
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -5645,7 +5642,7 @@ packages:
   react-docgen-typescript@2.4.0:
     resolution: {integrity: sha512-ZtAp5XTO5HRzQctjPU0ybY0RRCQO19X/8fxn3w7y2VVTUbGHDKULPTL4ky3vB05euSgG5NpALhEhDPvQ56wvXg==}
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '>= 4.3.x'
 
   react-docgen@8.0.3:
     resolution: {integrity: sha512-aEZ9qP+/M+58x2qgfSFEWH1BxLyHe5+qkLNJOZQb5iGS017jpbRnoKhNRrXPeA6RfBrZO5wZrT9DMC1UqE1f1w==}
@@ -5825,7 +5822,7 @@ packages:
       '@typescript/native-preview': '*'
       '@volar/typescript': ~2.4.0
       rolldown: ^1.0.0
-      typescript: ^6.0.3
+      typescript: ^5.0.0 || ^6.0.0 || ~7.0.0
       vue-tsc: ~3.2.0 || ~3.3.0
     peerDependenciesMeta:
       '@typescript/native-preview':
@@ -6356,7 +6353,7 @@ packages:
     resolution: {integrity: sha512-OJ/ibxhPlqrMM0UiNHJ/0CKQkoKF243/AEmplt3qpRgkW8VG7IfOS41h7V8TjITqdByHzrjcS/2si+y4lIh8NA==}
     engines: {node: '>=18.12'}
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '>=4.8.4'
 
   ts-dedent@2.3.0:
     resolution: {integrity: sha512-JfJeIHke7y2egdGGgRAvpCwYFUsHlM2gPcrVOxFkznt/4uzQ7HFmvE63iFHVLBJNDuyDOQgijDK/tXH/f6Msjg==}
@@ -6374,7 +6371,7 @@ packages:
       esbuild: '*'
       jest: ^29.0.0 || ^30.0.0
       jest-util: ^29.0.0 || ^30.0.0
-      typescript: ^6.0.3
+      typescript: '>=4.3 <7'
     peerDependenciesMeta:
       '@babel/core':
         optional: true
@@ -6408,7 +6405,7 @@ packages:
       '@vitejs/devtools': '*'
       publint: ^0.3.8
       tsx: '*'
-      typescript: ^6.0.3
+      typescript: ^5.0.0 || ^6.0.0 || ^7.0.0
       unplugin-unused: ^0.5.0
       unrun: '*'
     peerDependenciesMeta:
@@ -6446,7 +6443,7 @@ packages:
     resolution: {integrity: sha512-mHKK3iUXL+3UF6xL5k0PEhKRUBKPBCv/+RkEOpjRWxxx27KKRBmmA60A9pgOUvMi8GKhRMPEmjBRPzs2W7O1OA==}
     engines: {node: '>= 6'}
     peerDependencies:
-      typescript: ^6.0.3
+      typescript: '>=2.8.0 || >= 3.2.0-dev || >= 3.3.0-dev || >= 3.4.0-dev || >= 3.5.0-dev || >= 3.6.0-dev || >= 3.6.0-beta || >= 3.7.0-dev || >= 3.7.0-beta'
 
   tsx@4.23.1:
     resolution: {integrity: sha512-GQHnkIfxyx1wYCOS/wonik5MVRZU9hi1TEZmzGZSCJB1y9YgoZ8H6itNE/u4suE+yLmOzuE4E5S4TZ/ZX2wcWQ==}
@@ -6489,7 +6486,17 @@ packages:
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
-      typescript: ^6.0.3
+      typescript: '>=4.8.4 <6.1.0'
+
+  typescript@5.4.5:
+    resolution: {integrity: sha512-vcI4UpRgg81oIRUFwR0WSIHKt11nJ7SAVlYNIu+QpqeyXP+gpQJy/Z4+F0aGxSE4MqwjyXvW/TzgkLAx2AGHwQ==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
 
   typescript@6.0.3:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
@@ -7181,8 +7188,8 @@ snapshots:
   '@bufbuild/protoplugin@2.13.0':
     dependencies:
       '@bufbuild/protobuf': 2.13.0
-      '@typescript/vfs': 1.6.4(typescript@6.0.3)
-      typescript: 6.0.3
+      '@typescript/vfs': 1.6.4(typescript@5.4.5)
+      typescript: 5.4.5
     transitivePeerDependencies:
       - supports-color
 
@@ -7706,7 +7713,7 @@ snapshots:
     dependencies:
       minipass: 7.1.3
 
-  '@isaacs/ts-node-temp-fork-for-pr-2009@10.9.7(@types/node@26.1.1)(typescript@6.0.3)':
+  '@isaacs/ts-node-temp-fork-for-pr-2009@10.9.7(@types/node@26.1.1)(typescript@5.9.3)':
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node14': 14.1.8
@@ -7719,7 +7726,7 @@ snapshots:
       arg: 4.1.3
       diff: 4.0.4
       make-error: 1.3.6
-      typescript: 6.0.3
+      typescript: 5.9.3
       v8-compile-cache-lib: 3.0.1
 
   '@isaacs/which@7.0.4':
@@ -8996,7 +9003,7 @@ snapshots:
 
   '@tapjs/test@4.4.8(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@isaacs/ts-node-temp-fork-for-pr-2009': 10.9.7(@types/node@26.1.1)(typescript@6.0.3)
+      '@isaacs/ts-node-temp-fork-for-pr-2009': 10.9.7(@types/node@26.1.1)(typescript@5.9.3)
       '@tapjs/after': 3.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
       '@tapjs/after-each': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
       '@tapjs/asserts': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(react-dom@19.2.8(react@18.3.1))(react@18.3.1)
@@ -9012,7 +9019,7 @@ snapshots:
       '@tapjs/snapshot': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(react-dom@19.2.8(react@18.3.1))(react@18.3.1)
       '@tapjs/spawn': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
       '@tapjs/stdin': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
-      '@tapjs/typescript': 3.5.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(@types/node@26.1.1)(typescript@6.0.3)
+      '@tapjs/typescript': 3.5.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(@types/node@26.1.1)(typescript@5.9.3)
       '@tapjs/worker': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
       glob: 13.0.6
       jackspeak: 4.2.3
@@ -9023,7 +9030,7 @@ snapshots:
       sync-content: 2.0.4
       tap-parser: 18.3.4
       tshy: 3.3.2
-      typescript: 6.0.3
+      typescript: 5.9.3
       walk-up-path: 4.0.0
     transitivePeerDependencies:
       - '@swc/core'
@@ -9037,9 +9044,9 @@ snapshots:
       '@tapjs/core': 4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1)
       tsx: 4.23.1
 
-  '@tapjs/typescript@3.5.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(@types/node@26.1.1)(typescript@6.0.3)':
+  '@tapjs/typescript@3.5.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(@types/node@26.1.1)(typescript@5.9.3)':
     dependencies:
-      '@isaacs/ts-node-temp-fork-for-pr-2009': 10.9.7(@types/node@26.1.1)(typescript@6.0.3)
+      '@isaacs/ts-node-temp-fork-for-pr-2009': 10.9.7(@types/node@26.1.1)(typescript@5.9.3)
       '@tapjs/core': 4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1)
     transitivePeerDependencies:
       - '@swc/core'
@@ -9379,10 +9386,17 @@ snapshots:
       '@typescript/native-preview-win32-arm64': 7.0.0-dev.20260515.1
       '@typescript/native-preview-win32-x64': 7.0.0-dev.20260515.1
 
-  '@typescript/vfs@1.6.4(typescript@6.0.3)':
+  '@typescript/vfs@1.6.4(typescript@5.4.5)':
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
-      typescript: 6.0.3
+      typescript: 5.4.5
+    transitivePeerDependencies:
+      - supports-color
+
+  '@typescript/vfs@1.6.4(typescript@5.9.3)':
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
@@ -12263,6 +12277,34 @@ snapshots:
       glob: 13.0.6
       package-json-from-dist: 1.0.1
 
+  rolldown-plugin-dts@0.27.14(oxc-resolver@11.24.2)(rolldown@1.2.0)(typescript@5.4.5):
+    dependencies:
+      dts-resolver: 3.0.0(oxc-resolver@11.24.2)
+      get-tsconfig: 5.0.0-beta.5
+      obug: 2.1.4
+      rolldown: 1.2.0
+      yuku-ast: 0.8.0
+      yuku-codegen: 0.8.0
+      yuku-parser: 0.8.0
+    optionalDependencies:
+      typescript: 5.4.5
+    transitivePeerDependencies:
+      - oxc-resolver
+
+  rolldown-plugin-dts@0.27.14(oxc-resolver@11.24.2)(rolldown@1.2.0)(typescript@5.9.3):
+    dependencies:
+      dts-resolver: 3.0.0(oxc-resolver@11.24.2)
+      get-tsconfig: 5.0.0-beta.5
+      obug: 2.1.4
+      rolldown: 1.2.0
+      yuku-ast: 0.8.0
+      yuku-codegen: 0.8.0
+      yuku-parser: 0.8.0
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - oxc-resolver
+
   rolldown-plugin-dts@0.27.14(oxc-resolver@11.24.2)(rolldown@1.2.0)(typescript@6.0.3):
     dependencies:
       dts-resolver: 3.0.0(oxc-resolver@11.24.2)
@@ -12639,7 +12681,7 @@ snapshots:
       yaml: 2.9.0
       yaml-types: 0.4.0(yaml@2.9.0)
 
-  tap@21.7.4(@types/node@26.1.1)(@types/react@19.2.17)(react-dom@19.2.8(react@18.3.1))(react@18.3.1)(typescript@6.0.3):
+  tap@21.7.4(@types/node@26.1.1)(@types/react@19.2.17)(react-dom@19.2.8(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
     dependencies:
       '@tapjs/after': 3.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
       '@tapjs/after-each': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
@@ -12658,7 +12700,7 @@ snapshots:
       '@tapjs/spawn': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
       '@tapjs/stdin': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
       '@tapjs/test': 4.4.8(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1)
-      '@tapjs/typescript': 3.5.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(@types/node@26.1.1)(typescript@6.0.3)
+      '@tapjs/typescript': 3.5.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))(@types/node@26.1.1)(typescript@5.9.3)
       '@tapjs/worker': 4.3.10(@tapjs/core@4.5.8(@types/node@26.1.1)(react-dom@19.2.8(react@18.3.1))(react@18.3.1))
       resolve-import: 2.4.0
     transitivePeerDependencies:
@@ -12943,7 +12985,7 @@ snapshots:
 
   ts-dedent@2.3.0: {}
 
-  ts-jest@29.4.12(@babel/core@7.29.0)(@jest/transform@30.4.1)(@jest/types@30.4.1)(babel-jest@30.4.1(@babel/core@7.29.0))(esbuild@0.28.1)(jest-util@30.4.1)(jest@30.4.2(@types/node@26.1.1))(typescript@6.0.3):
+  ts-jest@29.4.12(@babel/core@7.29.0)(@jest/transform@30.4.1)(@jest/types@30.4.1)(babel-jest@30.4.1(@babel/core@7.29.0))(esbuild@0.28.1)(jest-util@30.4.1)(jest@30.4.2(@types/node@26.1.1))(typescript@5.9.3):
     dependencies:
       bs-logger: 0.2.6
       fast-json-stable-stringify: 2.1.0
@@ -12954,7 +12996,7 @@ snapshots:
       make-error: 1.3.6
       semver: 7.8.5
       type-fest: 4.41.0
-      typescript: 6.0.3
+      typescript: 5.9.3
       yargs-parser: 21.1.1
     optionalDependencies:
       '@babel/core': 7.29.0
@@ -12968,14 +13010,14 @@ snapshots:
     dependencies:
       '@clack/prompts': 1.0.0-alpha.4
       '@oclif/core': 4.8.0
-      '@typescript/vfs': 1.6.4(typescript@6.0.3)
+      '@typescript/vfs': 1.6.4(typescript@5.9.3)
       chokidar: 4.0.3
       listr2: 9.0.5
       slash: 5.1.0
       text-case: 1.2.10
       tslib: 2.8.1
-      tsutils: 3.21.0(typescript@6.0.3)
-      typescript: 6.0.3
+      tsutils: 3.21.0(typescript@5.9.3)
+      typescript: 5.9.3
       zod: 4.4.3
     transitivePeerDependencies:
       - supports-color
@@ -12985,6 +13027,60 @@ snapshots:
       json5: 2.2.3
       minimist: 1.2.8
       strip-bom: 3.0.0
+
+  tsdown@0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@5.4.5)(unrun@0.2.37(synckit@0.11.12)):
+    dependencies:
+      ansis: 4.3.1
+      cac: 7.0.0
+      defu: 6.1.7
+      empathic: 2.0.1
+      hookable: 6.1.1
+      import-without-cache: 0.4.0
+      obug: 2.1.4
+      picomatch: 4.0.5
+      rolldown: 1.2.0
+      rolldown-plugin-dts: 0.27.14(oxc-resolver@11.24.2)(rolldown@1.2.0)(typescript@5.4.5)
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tree-kill: 1.2.2
+      unconfig-core: 7.5.0
+      verkit: 0.3.0
+    optionalDependencies:
+      tsx: 4.23.1
+      typescript: 5.4.5
+      unrun: 0.2.37(synckit@0.11.12)
+    transitivePeerDependencies:
+      - '@typescript/native-preview'
+      - '@volar/typescript'
+      - oxc-resolver
+      - vue-tsc
+
+  tsdown@0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@5.9.3)(unrun@0.2.37(synckit@0.11.12)):
+    dependencies:
+      ansis: 4.3.1
+      cac: 7.0.0
+      defu: 6.1.7
+      empathic: 2.0.1
+      hookable: 6.1.1
+      import-without-cache: 0.4.0
+      obug: 2.1.4
+      picomatch: 4.0.5
+      rolldown: 1.2.0
+      rolldown-plugin-dts: 0.27.14(oxc-resolver@11.24.2)(rolldown@1.2.0)(typescript@5.9.3)
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tree-kill: 1.2.2
+      unconfig-core: 7.5.0
+      verkit: 0.3.0
+    optionalDependencies:
+      tsx: 4.23.1
+      typescript: 5.9.3
+      unrun: 0.2.37(synckit@0.11.12)
+    transitivePeerDependencies:
+      - '@typescript/native-preview'
+      - '@volar/typescript'
+      - oxc-resolver
+      - vue-tsc
 
   tsdown@0.22.14(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@6.0.3)(unrun@0.2.37(synckit@0.11.12)):
     dependencies:
@@ -13026,17 +13122,17 @@ snapshots:
       resolve-import: 2.4.0
       rimraf: 6.1.3
       sync-content: 2.0.4
-      typescript: 6.0.3
+      typescript: 5.9.3
       walk-up-path: 4.0.0
 
   tslib@1.14.1: {}
 
   tslib@2.8.1: {}
 
-  tsutils@3.21.0(typescript@6.0.3):
+  tsutils@3.21.0(typescript@5.9.3):
     dependencies:
       tslib: 1.14.1
-      typescript: 6.0.3
+      typescript: 5.9.3
 
   tsx@4.23.1:
     dependencies:
@@ -13087,6 +13183,10 @@ snapshots:
       typescript: 6.0.3
     transitivePeerDependencies:
       - supports-color
+
+  typescript@5.4.5: {}
+
+  typescript@5.9.3: {}
 
   typescript@6.0.3: {}
 
