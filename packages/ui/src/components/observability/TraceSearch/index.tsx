@@ -281,7 +281,7 @@ export function TraceSearch({
                           key={svc.name}
                           className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
                           style={{
-                            backgroundColor: getServiceTint(svc.name, 0.14),
+                            backgroundColor: getServiceTint(svc.name),
                             color: getServiceLabelColor(svc.name),
                           }}
                         >
