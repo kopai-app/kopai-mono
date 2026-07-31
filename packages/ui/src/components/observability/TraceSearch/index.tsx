@@ -1,6 +1,10 @@
 import { useState, useMemo } from "react";
 import { formatTimestamp } from "../utils/time.js";
-import { getServiceColor } from "../utils/colors.js";
+import {
+  getServiceColor,
+  getServiceLabelColor,
+  getServiceTint,
+} from "../utils/colors.js";
 import { SearchForm, filtersKey } from "./SearchForm.js";
 import type { SearchFormValues } from "./SearchForm.js";
 import { ScatterPlot } from "./ScatterPlot.js";
@@ -277,8 +281,8 @@ export function TraceSearch({
                           key={svc.name}
                           className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
                           style={{
-                            backgroundColor: `${getServiceColor(svc.name)}20`,
-                            color: getServiceColor(svc.name),
+                            backgroundColor: getServiceTint(svc.name, 0.14),
+                            color: getServiceLabelColor(svc.name),
                           }}
                         >
                           {svc.hasError && (
