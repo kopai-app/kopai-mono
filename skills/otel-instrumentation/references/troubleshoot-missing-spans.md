@@ -15,7 +15,7 @@ code runs perfectly the entire time it's happening.
 
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq -r '.[] | select((.parentSpanId // "") == "") | .name' | sort | uniq -c | sort -rn
+  | jq -r '.[] | select((.ParentSpanId // "") == "") | .SpanName' | sort | uniq -c | sort -rn
 ```
 
 Every name here that isn't an entry point is a break. Go to `context-propagation.md` —
@@ -69,6 +69,27 @@ full, which looks exactly like sampling.
 Initialisation ordering. The SDK must start _before_ the libraries it patches are
 imported. In Node.js this means `--import`/`--require`, not a `require()` at the top of
 `server.mjs` — by then the modules are already loaded and unpatchable.
+
+Two more causes with the identical symptom — patching that no-ops without an error:
+
+- **Native-ESM dependencies.** `"type": "module"` doesn't disable patching wholesale:
+  CommonJS dependencies still load through the `require` hook and patch fine. A
+  dependency published as native ESM bypasses that hook and needs OTel's loader hook
+  registered before the app loads:
+  `--experimental-loader=@opentelemetry/instrumentation/hook.mjs`. Diagnose per
+  dependency, by its packaging — and if the framework ships a native plugin, prefer it
+  over loader mechanics entirely (Fastify → `lang-fastify.md`).
+- **A deprecated instrumentation package.** Deprecation doesn't disable the code — it
+  means unmaintained and superseded, so it silently falls behind the framework versions
+  and loader semantics it once patched. Check the version actually installed —
+  `npm ls <pkg>` (`pnpm list <pkg>` / `yarn why <pkg>`) — then
+  `npm view <pkg>@<version> deprecated`; a bare `npm view <pkg> deprecated` reads the
+  latest release, which may differ. `npm view` works in any project regardless of its
+  package manager — it is a registry read, and npm ships with Node. The message
+  is free text: it usually names the replacement; when it doesn't, check the package's
+  migration notes. Either way, spend the time migrating (after a compatibility check),
+  not debugging the abandoned package. Known case:
+  `@opentelemetry/instrumentation-fastify` → `@fastify/otel`.
 
 ## Then
 

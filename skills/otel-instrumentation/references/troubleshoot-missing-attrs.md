@@ -8,7 +8,7 @@ Spans arrive, but they're too narrow to answer anything. First, see what you act
 
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq -r '.[].attributes // {} | keys[]' | sort -u
+  | jq -r '.[].SpanAttributes // {} | keys[]' | sort -u
 ```
 
 Diff that against [references/attributes.md](../references/attributes.md).

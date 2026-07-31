@@ -28,7 +28,7 @@ Take a trace ID from the run and ask for its logs:
 
 ```bash
 TRACE_ID=$(npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" \
-  --limit 1 --json | jq -r '.[0].traceId')
+  --limit 1 --json | jq -r '.[0].TraceId')
 
 npx @kopai/cli logs search --trace-id "$TRACE_ID" --json | jq 'length'
 ```
@@ -57,7 +57,7 @@ for real problems.
 
 ```bash
 npx @kopai/cli logs search --service "$OTEL_SERVICE_NAME" --severity-text ERROR --json \
-  | jq -r '.[] | .body' | head -20
+  | jq -r '.[] | .Body' | head -20
 ```
 
 **Pass:** each body identifies the operation and the reason. Structured fields beat
