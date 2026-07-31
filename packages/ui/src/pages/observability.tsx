@@ -543,21 +543,21 @@ function TraceSearchView({
     urlState.tags,
   ]);
 
-  const handleSearch = useCallback(
-    (filters: TraceSearchFilters) => {
-      pushURLState({
-        tab: "services",
-        service: filters.service ?? service,
-        operation: filters.operation ?? null,
-        tags: filters.tags ?? null,
-        lookback: filters.lookback ?? null,
-        minDuration: filters.minDuration ?? null,
-        maxDuration: filters.maxDuration ?? null,
-        limit: filters.limit,
-      });
-    },
-    [service]
-  );
+  const handleSearch = useCallback((filters: TraceSearchFilters) => {
+    // The form submits every field, so an absent one means the user cleared it.
+    // Falling back to the URL's service here would make "All Services"
+    // unselectable — it would just re-apply whatever was already filtered.
+    pushURLState({
+      tab: "services",
+      service: filters.service ?? null,
+      operation: filters.operation ?? null,
+      tags: filters.tags ?? null,
+      lookback: filters.lookback ?? null,
+      minDuration: filters.minDuration ?? null,
+      maxDuration: filters.maxDuration ?? null,
+      limit: filters.limit,
+    });
+  }, []);
 
   // Fetch trace summaries
   const { data, loading, error } = useKopaiData<{
@@ -575,13 +575,23 @@ function TraceSearchView({
   );
   const _services = servicesData?.services ?? [];
 
-  // Fetch operations for selected service
+  // Operations follow the service picked in the form, not the one in the URL:
+  // the URL only catches up on submit, and the user needs the operation list
+  // before that to build the search.
+  const [pendingService, setPendingService] = useState(service ?? "");
+  useEffect(() => {
+    setPendingService(service ?? "");
+  }, [service]);
+
   const operationDs = useMemo<DataSource | undefined>(
     () =>
-      service
-        ? { method: "getOperations" as const, params: { serviceName: service } }
+      pendingService
+        ? {
+            method: "getOperations" as const,
+            params: { serviceName: pendingService },
+          }
         : undefined,
-    [service]
+    [pendingService]
   );
   const { data: opsData } = useKopaiData<{ operations: string[] }>(operationDs);
   const operations = opsData?.operations ?? [];
@@ -616,6 +626,7 @@ function TraceSearchView({
       onSelectTrace={onSelectTrace}
       onCompare={onCompare}
       onSearch={handleSearch}
+      onServiceChange={setPendingService}
     />
   );
 }

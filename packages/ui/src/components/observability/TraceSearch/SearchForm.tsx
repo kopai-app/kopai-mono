@@ -20,6 +20,12 @@ export interface SearchFormProps {
   operations: string[];
   initialValues?: Partial<SearchFormValues>;
   onSubmit: (values: SearchFormValues) => void;
+  /**
+   * Fires as soon as the service picker changes, before submit — the parent
+   * needs it to load that service's operations while the form is still being
+   * filled in.
+   */
+  onServiceChange?: (service: string) => void;
   isLoading?: boolean;
 }
 
@@ -42,6 +48,7 @@ export function SearchForm({
   operations,
   initialValues,
   onSubmit,
+  onServiceChange,
   isLoading,
 }: SearchFormProps) {
   const [service, setService] = useState(initialValues?.service ?? "");
@@ -60,6 +67,14 @@ export function SearchForm({
   useEffect(() => {
     if (initialValues?.service != null) setService(initialValues.service);
   }, [initialValues?.service]);
+
+  const handleServiceChange = (next: string) => {
+    setService(next);
+    // The operation list is scoped to the service, so a held-over operation
+    // would filter on a name the new service never emits.
+    setOperation("");
+    onServiceChange?.(next);
+  };
 
   const handleSubmit = () => {
     onSubmit({
@@ -84,7 +99,7 @@ export function SearchForm({
         <span className="text-xs text-muted-foreground">Service</span>
         <select
           value={service}
-          onChange={(e) => setService(e.target.value)}
+          onChange={(e) => handleServiceChange(e.target.value)}
           className={inputClass}
         >
           <option value="">All Services</option>
@@ -102,9 +117,12 @@ export function SearchForm({
         <select
           value={operation}
           onChange={(e) => setOperation(e.target.value)}
-          className={inputClass}
+          disabled={!service}
+          className={`${inputClass} disabled:opacity-50`}
         >
-          <option value="">All Operations</option>
+          <option value="">
+            {service ? "All Operations" : "Select a service first"}
+          </option>
           {operations.map((op) => (
             <option key={op} value={op}>
               {op}

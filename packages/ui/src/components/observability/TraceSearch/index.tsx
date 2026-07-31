@@ -45,6 +45,8 @@ export interface TraceSearchProps {
   // Callbacks
   onSelectTrace: (traceId: string) => void;
   onSearch?: (filters: TraceSearchFilters) => void;
+  /** Fires on every service-picker change so the parent can load its operations. */
+  onServiceChange?: (service: string) => void;
   onCompare?: (traceIds: [string, string]) => void;
   // Sort
   sort?: string;
@@ -85,6 +87,7 @@ export function TraceSearch({
   error,
   onSelectTrace,
   onSearch,
+  onServiceChange,
   onCompare,
   sort: controlledSort,
   onSortChange,
@@ -148,6 +151,7 @@ export function TraceSearch({
             operations={operations}
             initialValues={{ service }}
             onSubmit={handleFormSubmit}
+            onServiceChange={onServiceChange}
             isLoading={isLoading}
           />
         </div>
