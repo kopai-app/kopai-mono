@@ -94,7 +94,7 @@ phases, because the failure modes compound and become hard to attribute.
 ```bash
 # orphans by name — anything that isn't an entry point is a bug
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq -r '.[] | select((.parentSpanId // "") == "") | .name' | sort | uniq -c | sort -rn
+  | jq -r '.[] | select((.ParentSpanId // "") == "") | .SpanName' | sort | uniq -c | sort -rn
 ```
 
 A database, cache, or HTTP-client span appearing as an orphan means context isn't

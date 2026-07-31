@@ -4,7 +4,7 @@ description: Instrument applications with the OpenTelemetry SDK and prove the te
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "2.0.0"
+  version: "2.1.0"
 ---
 
 # OpenTelemetry Instrumentation with Kopai
@@ -100,13 +100,43 @@ in [custom-instrumentation](references/custom-instrumentation.md).
 Span names must be low-cardinality. Never interpolate an ID into a span name — that
 belongs in an attribute.
 
+## Picking instrumentation packages
+
+Detect the project's package manager first: the `packageManager` field in package.json
+is authoritative when present; otherwise the lockfile decides — `pnpm-lock.yaml` →
+pnpm, `yarn.lock` → yarn, `bun.lock` → bun, `package-lock.json` → npm. Run every
+install with that manager — a second manager writes a second lockfile and diverges
+silently. The `npx @kopai/cli` validation commands are manager-neutral; npx ships with
+Node and never touches the project's dependency tree.
+
+Check deprecation against the registry, not install output — only npm prints full
+deprecation warnings at install time; pnpm truncates them and Yarn 4 prints none at
+all. When npm does print them, read them: never filter an install through `tail`,
+`grep -v`, or `--quiet`.
+
+```bash
+npm view @opentelemetry/instrumentation-<lib> deprecated   # empty output = not deprecated
+```
+
+`npm view` is a pure registry read that works inside pnpm/yarn projects too (npm ships
+with Node); native equivalents are `pnpm view <pkg> deprecated` and
+`yarn npm info <pkg> --fields deprecated --json` (Yarn 4).
+
+A deprecation message usually names its replacement — use it, never the deprecated
+package; when none is named, follow the package's own migration guidance instead of
+guessing. When a framework team ships its own plugin (Fastify → `@fastify/otel`), prefer
+it over the contrib package: it registers through the framework's plugin system instead
+of intercepting `require`/`import` — interception that native-ESM imports bypass unless
+an experimental loader hook is added.
+
 ## Rules
 
 Task-scoped rule files. Load one only when the workflow points at it.
 
 **Setup** — [setup-backend](references/setup-backend.md), [setup-environment](references/setup-environment.md)
 
-**Language SDKs** — [lang-nodejs](references/lang-nodejs.md), [lang-nextjs](references/lang-nextjs.md),
+**Language SDKs** — [lang-nodejs](references/lang-nodejs.md), [lang-fastify](references/lang-fastify.md),
+[lang-nextjs](references/lang-nextjs.md),
 [lang-python](references/lang-python.md), [lang-go](references/lang-go.md),
 [lang-java](references/lang-java.md), [lang-dotnet](references/lang-dotnet.md),
 [lang-ruby](references/lang-ruby.md), [lang-php](references/lang-php.md),

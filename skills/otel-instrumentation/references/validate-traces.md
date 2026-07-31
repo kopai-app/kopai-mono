@@ -19,9 +19,10 @@ know the real field names:
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --limit 1 --json | jq .
 ```
 
-The assertions below use OTLP/JSON names — `name`, `traceId`, `spanId`, `parentSpanId`,
-`attributes`, `resource`, `status`. **If the output uses different names, substitute
-them** in every `jq` filter that follows. Do this once, at the top of the loop.
+The assertions below use the current CLI's row names — `SpanName`, `TraceId`, `SpanId`,
+`ParentSpanId`, `SpanAttributes`, `ResourceAttributes`, `StatusCode`. **If the output
+uses different names, substitute them** in every `jq` filter that follows. Do this
+once, at the top of the loop.
 
 For assertions richer than `jq` can express comfortably, escalate to `@kopai/sdk` code
 mode — the typed query API, `kq`, and `client.query()` are documented in the
@@ -54,7 +55,7 @@ downstream of one is a context-propagation bug.
 
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq '[.[] | select((.parentSpanId // "") == "")] | length as $orphans
+  | jq '[.[] | select((.ParentSpanId // "") == "")] | length as $orphans
         | "orphans: \($orphans)"'
 ```
 
@@ -67,7 +68,7 @@ List the orphans by name to see which ones shouldn't be:
 
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq -r '.[] | select((.parentSpanId // "") == "") | .name' | sort | uniq -c | sort -rn
+  | jq -r '.[] | select((.ParentSpanId // "") == "") | .SpanName' | sort | uniq -c | sort -rn
 ```
 
 A database or HTTP-client span in that list is always a bug.
@@ -76,7 +77,7 @@ A database or HTTP-client span in that list is always a bug.
 
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq -r 'group_by(.traceId) | map(length)
+  | jq -r 'group_by(.TraceId) | map(length)
            | "traces: \(length), spans per trace: min \(min) max \(max)"'
 ```
 
@@ -89,7 +90,7 @@ package for each library is installed, then `context-propagation.md`.
 
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq -r '.[].name' | sort -u
+  | jq -r '.[].SpanName' | sort -u
 ```
 
 **Pass:** every entry point from your route sweep appears. Compare against the list you
@@ -128,7 +129,7 @@ Then check those failures carry a **slug**:
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" \
   --status-code ERROR --json \
-  | jq -r '.[] | [.name, (.attributes["exception.slug"] // "NO-SLUG")] | @tsv'
+  | jq -r '.[] | [.SpanName, (.SpanAttributes["exception.slug"] // "NO-SLUG")] | @tsv'
 ```
 
 **Pass:** no `NO-SLUG` rows — every failure site is greppable and groupable.
@@ -140,7 +141,7 @@ List every attribute key this run produced:
 
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq -r '.[].attributes // {} | keys[]' | sort -u
+  | jq -r '.[].SpanAttributes // {} | keys[]' | sort -u
 ```
 
 Diff that against [references/attributes.md](../references/attributes.md).
@@ -155,7 +156,7 @@ slow paths). Missing any one of them means the next incident stalls.
 
 ```bash
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" --json \
-  | jq -r '.[].name' | grep -iE 'test|debug|foo|bar|tmp|xxx' || echo "clean"
+  | jq -r '.[].SpanName' | grep -iE 'test|debug|foo|bar|tmp|xxx' || echo "clean"
 ```
 
 **Pass:** `clean`. A span created only to prove tracing worked is an artefact — delete it

@@ -104,7 +104,7 @@ npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" \
 # and every one of them carries a slug
 npx @kopai/cli traces search --resource-attr "validation.run_id=$RUN_ID" \
   --status-code ERROR --json \
-  | jq -r '.[] | [.name, (.attributes["exception.slug"] // "NO-SLUG")] | @tsv'
+  | jq -r '.[] | [.SpanName, (.SpanAttributes["exception.slug"] // "NO-SLUG")] | @tsv'
 ```
 
 Zero rows from the first command does not mean no errors — you drove them on purpose.

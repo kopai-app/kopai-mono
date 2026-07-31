@@ -12,13 +12,17 @@ Set up OpenTelemetry SDK for Node.js applications with automatic instrumentation
 npm install @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node @opentelemetry/api
 ```
 
+npm shown — install with the project's own package manager (`pnpm add` / `yarn add`),
+detected per the package-picking rule in SKILL.md.
+
 ## Configuration
 
 **Environment Variables:**
-| Variable | Description |
-|----------|-------------|
+
+| Variable                      | Description                                   |
+| ----------------------------- | --------------------------------------------- |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint (e.g., `http://localhost:4318`) |
-| `OTEL_SERVICE_NAME` | Service name shown in observability backend |
+| `OTEL_SERVICE_NAME`           | Service name shown in observability backend   |
 
 ## Instrumentation File (instrumentation.mjs)
 
@@ -62,6 +66,15 @@ Or in package.json:
 }
 ```
 
+In a `"type": "module"` app this patches CommonJS dependencies (they still load through
+the `require` hook). A dependency published as **native ESM** bypasses that hook and
+additionally needs OTel's experimental loader hook:
+
+```bash
+node --experimental-loader=@opentelemetry/instrumentation/hook.mjs \
+  --import ./instrumentation.mjs server.mjs
+```
+
 ## What Gets Instrumented
 
 The auto-instrumentation automatically captures:
@@ -71,6 +84,14 @@ The auto-instrumentation automatically captures:
 - **Metrics**: HTTP request metrics (with additional config)
 
 The SDK auto-detects `OTEL_EXPORTER_OTLP_ENDPOINT` and exports via OTLP HTTP.
+
+## Framework coverage
+
+`getNodeAutoInstrumentations()` covers Express, Koa, Hapi, and most HTTP/DB clients. It
+does **not** cover Fastify — that instrumentation moved to the Fastify team
+(`@fastify/otel`) and the deprecated contrib package was removed from the bundle in
+March 2026. Fastify app → `lang-fastify.md`, which registers a plugin instead of
+relying on module interception.
 
 ## Example
 
