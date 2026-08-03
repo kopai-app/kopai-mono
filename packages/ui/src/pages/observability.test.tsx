@@ -66,31 +66,31 @@ const VALID_TREE = {
   },
 };
 
+let mockClient: MockClient;
+let originalLocation: string;
+
+beforeEach(() => {
+  mockClient = createMockClient();
+  queryClient.clear();
+  vi.clearAllMocks();
+  originalLocation = window.location.search;
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  window.history.replaceState(
+    null,
+    "",
+    window.location.pathname + originalLocation
+  );
+});
+
+function setURL(params: string) {
+  window.history.replaceState(null, "", window.location.pathname + params);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 describe("useDashboardTree validation", () => {
-  let mockClient: MockClient;
-  let originalLocation: string;
-
-  beforeEach(() => {
-    mockClient = createMockClient();
-    queryClient.clear();
-    vi.clearAllMocks();
-    originalLocation = window.location.search;
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    window.history.replaceState(
-      null,
-      "",
-      window.location.pathname + originalLocation
-    );
-  });
-
-  function setURL(params: string) {
-    window.history.replaceState(null, "", window.location.pathname + params);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }
-
   it("renders DynamicDashboard when API returns a valid uiTree", async () => {
     mockClient.getDashboard.mockResolvedValueOnce({ uiTree: VALID_TREE });
 
@@ -143,30 +143,6 @@ describe("useDashboardTree validation", () => {
 });
 
 describe("trace search operation picker", () => {
-  let mockClient: MockClient;
-  let originalLocation: string;
-
-  beforeEach(() => {
-    mockClient = createMockClient();
-    queryClient.clear();
-    vi.clearAllMocks();
-    originalLocation = window.location.search;
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    window.history.replaceState(
-      null,
-      "",
-      window.location.pathname + originalLocation
-    );
-  });
-
-  function setURL(params: string) {
-    window.history.replaceState(null, "", window.location.pathname + params);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }
-
   it("loads the operations of a service as soon as it is picked, before any search is submitted", async () => {
     mockClient.getServices.mockResolvedValue({
       services: ["cart", "checkout"],
@@ -236,6 +212,166 @@ describe("trace search operation picker", () => {
     fireEvent.change(serviceSelect, { target: { value: "checkout" } });
 
     expect(operationSelect.value).toBe("");
+  });
+
+  it("does not submit an operation held over from a URL-driven service change", async () => {
+    mockClient.getServices.mockResolvedValue({
+      services: ["cart", "checkout"],
+    });
+    mockClient.getOperations.mockImplementation(async (serviceName: string) =>
+      serviceName === "cart"
+        ? { operations: ["GET /cart"] }
+        : { operations: ["POST /pay"] }
+    );
+
+    setURL("?tab=services&service=checkout");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    const operationSelect = (await screen.findByRole("combobox", {
+      name: /operation/i,
+    })) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "POST /pay" })).toBeTruthy();
+    });
+    fireEvent.change(operationSelect, { target: { value: "POST /pay" } });
+    expect(operationSelect.value).toBe("POST /pay");
+
+    // Browser Back onto a search that ran against a different service.
+    setURL("?tab=services&service=cart");
+
+    await waitFor(() => {
+      const service = screen.getByRole("combobox", {
+        name: /service/i,
+      }) as HTMLSelectElement;
+      expect(service.value).toBe("cart");
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "GET /cart" })).toBeTruthy();
+    });
+
+    // Submitting the committed search verbatim would rebuild the same URL and
+    // fire no request, leaving the assertions below on the pre-click call. Move
+    // one unrelated field so the submit is a genuinely new search.
+    fireEvent.change(screen.getByRole("spinbutton", { name: /limit/i }), {
+      target: { value: "50" },
+    });
+
+    const callsBefore = mockClient.searchTraceSummariesPage.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: /find traces/i }));
+
+    await waitFor(() => {
+      expect(
+        mockClient.searchTraceSummariesPage.mock.calls.length
+      ).toBeGreaterThan(callsBefore);
+    });
+
+    // "POST /pay" belongs to checkout — cart never emits it.
+    expect(window.location.search).toContain("service=cart");
+    expect(window.location.search).not.toContain("POST");
+    const lastCall = mockClient.searchTraceSummariesPage.mock.calls.at(-1);
+    expect(lastCall?.[0]).toMatchObject({ serviceName: "cart" });
+    expect(lastCall?.[0]).not.toHaveProperty("spanName");
+  });
+
+  it("hydrates the operation filter from the URL", async () => {
+    mockClient.getServices.mockResolvedValue({ services: ["cart"] });
+    mockClient.getOperations.mockResolvedValue({
+      operations: ["GET /cart"],
+    });
+
+    setURL("?tab=services&service=cart&operation=GET%20%2Fcart");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "GET /cart" })).toBeTruthy();
+    });
+
+    const operationSelect = screen.getByRole("combobox", {
+      name: /operation/i,
+    }) as HTMLSelectElement;
+    expect(operationSelect.value).toBe("GET /cart");
+  });
+
+  it("hydrates the remaining trace filters from the URL", async () => {
+    mockClient.getServices.mockResolvedValue({ services: ["cart"] });
+
+    setURL(
+      "?tab=services&service=cart&tags=http.status_code%3D500" +
+        "&lookback=1h&minDuration=100ms&maxDuration=5s&limit=50"
+    );
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    const tags = (await screen.findByRole("textbox", {
+      name: /tags/i,
+    })) as HTMLTextAreaElement;
+    expect(tags.value).toBe("http.status_code=500");
+
+    const lookback = screen.getByRole("combobox", {
+      name: /lookback/i,
+    }) as HTMLSelectElement;
+    expect(lookback.value).toBe("1h");
+
+    const minDuration = screen.getByRole("textbox", {
+      name: /min duration/i,
+    }) as HTMLInputElement;
+    expect(minDuration.value).toBe("100ms");
+
+    const maxDuration = screen.getByRole("textbox", {
+      name: /max duration/i,
+    }) as HTMLInputElement;
+    expect(maxDuration.value).toBe("5s");
+
+    const limit = screen.getByRole("spinbutton", {
+      name: /limit/i,
+    }) as HTMLInputElement;
+    expect(limit.value).toBe("50");
+  });
+
+  it("disables the operation picker until a service is chosen", async () => {
+    mockClient.getServices.mockResolvedValue({ services: ["cart"] });
+
+    setURL("?tab=services");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    const operationSelect = (await screen.findByRole("combobox", {
+      name: /operation/i,
+    })) as HTMLSelectElement;
+    expect(operationSelect.disabled).toBe(true);
+    expect(
+      screen.getByRole("option", { name: /select a service first/i })
+    ).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "cart" })).toBeTruthy();
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: /service/i }), {
+      target: { value: "cart" },
+    });
+
+    const operationAfter = screen.getByRole("combobox", {
+      name: /operation/i,
+    }) as HTMLSelectElement;
+    expect(operationAfter.disabled).toBe(false);
   });
 
   it("clears the service filter when All Services is submitted", async () => {

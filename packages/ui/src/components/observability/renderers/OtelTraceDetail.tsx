@@ -85,7 +85,6 @@ function TraceSummariesView({
   return (
     <TraceSearch
       services={[]}
-      service=""
       traces={traces}
       isLoading={loading}
       error={error ?? undefined}

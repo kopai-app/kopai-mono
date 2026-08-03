@@ -28,12 +28,15 @@ import {
   KeyboardShortcutsProvider,
   useRegisterShortcuts,
   DynamicDashboard,
+  filtersKey,
 } from "../components/observability/index.js";
 import type { UITree } from "../components/observability/DynamicDashboard/index.js";
 import type {
   TraceSummary,
   TraceSearchFilters,
+  SearchFormValues,
 } from "../components/observability/index.js";
+import { useDebouncedValue } from "../components/observability/utils/use-debounced-value.js";
 
 import { SERVICES_SHORTCUTS } from "../components/observability/ServiceList/shortcuts.js";
 
@@ -489,6 +492,9 @@ interface TraceSummaryRow {
   services: Array<{ name: string; count: number; hasError: boolean }>;
 }
 
+/** Keyboard-arrowing a <select> fires one change per option passed over. */
+const OPERATIONS_DEBOUNCE_MS = 300;
+
 function TraceSearchView({
   onSelectTrace,
   onCompare,
@@ -575,26 +581,63 @@ function TraceSearchView({
   );
   const _services = servicesData?.services ?? [];
 
-  // Operations follow the service picked in the form, not the one in the URL:
-  // the URL only catches up on submit, and the user needs the operation list
-  // before that to build the search.
-  const [pendingService, setPendingService] = useState(service ?? "");
-  useEffect(() => {
-    setPendingService(service ?? "");
-  }, [service]);
+  // The committed search — what the URL currently describes. The form is seeded
+  // from this and rebuilt whenever it changes, so a submit or a back/forward
+  // can never leave one field holding a value from a different search.
+  const initialFilters = useMemo<SearchFormValues>(
+    () => ({
+      service: urlState.service ?? "",
+      operation: urlState.operation ?? "",
+      tags: urlState.tags ?? "",
+      lookback: urlState.lookback ?? "",
+      minDuration: urlState.minDuration ?? "",
+      maxDuration: urlState.maxDuration ?? "",
+      limit: urlState.limit ?? 20,
+    }),
+    [
+      urlState.service,
+      urlState.operation,
+      urlState.tags,
+      urlState.lookback,
+      urlState.minDuration,
+      urlState.maxDuration,
+      urlState.limit,
+    ]
+  );
+  const committedKey = filtersKey(initialFilters);
 
+  // Operations follow the service in the form, which starts from the committed
+  // search and then tracks the picker until the next submit — the user needs the
+  // list before submitting. Resetting during render rather than in an effect
+  // keeps the list and the picker consistent within a single commit.
+  const [draftService, setDraftService] = useState(initialFilters.service);
+  const [syncedKey, setSyncedKey] = useState(committedKey);
+  if (syncedKey !== committedKey) {
+    setSyncedKey(committedKey);
+    setDraftService(initialFilters.service);
+  }
+
+  // Arrowing through the picker fires a change event per service; only fetch for
+  // the one the user settles on.
+  const settledService = useDebouncedValue(
+    draftService,
+    OPERATIONS_DEBOUNCE_MS
+  );
   const operationDs = useMemo<DataSource | undefined>(
     () =>
-      pendingService
+      settledService
         ? {
             method: "getOperations" as const,
-            params: { serviceName: pendingService },
+            params: { serviceName: settledService },
           }
         : undefined,
-    [pendingService]
+    [settledService]
   );
   const { data: opsData } = useKopaiData<{ operations: string[] }>(operationDs);
-  const operations = opsData?.operations ?? [];
+  // Mid-debounce these still describe the previously settled service; offering
+  // them would let the user pick an operation the current service never emits.
+  const operations =
+    settledService === draftService ? (opsData?.operations ?? []) : [];
 
   // Map TraceSummaryRow → TraceSummary
   const traces = useMemo<TraceSummary[]>(() => {
@@ -618,7 +661,7 @@ function TraceSearchView({
   return (
     <TraceSearch
       services={_services}
-      service={service ?? ""}
+      initialFilters={initialFilters}
       traces={traces}
       operations={operations}
       isLoading={loading}
@@ -626,7 +669,7 @@ function TraceSearchView({
       onSelectTrace={onSelectTrace}
       onCompare={onCompare}
       onSearch={handleSearch}
-      onServiceChange={setPendingService}
+      onServiceChange={setDraftService}
     />
   );
 }

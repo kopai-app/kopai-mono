@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { formatTimestamp } from "../utils/time.js";
 import { getServiceColor } from "../utils/colors.js";
-import { SearchForm } from "./SearchForm.js";
+import { SearchForm, filtersKey } from "./SearchForm.js";
 import type { SearchFormValues } from "./SearchForm.js";
 import { ScatterPlot } from "./ScatterPlot.js";
 import { SortDropdown } from "./SortDropdown.js";
@@ -36,7 +36,12 @@ export interface TraceSearchFilters {
 export interface TraceSearchProps {
   // Search form data
   services?: string[];
-  service: string;
+  /**
+   * The committed search, i.e. what the URL currently describes. Seeds the form
+   * and, on change, rebuilds it — so a submit or a back/forward can never leave
+   * one field showing a value that belongs to a different search.
+   */
+  initialFilters?: SearchFormValues;
   operations?: string[];
   // Results
   traces: TraceSummary[];
@@ -78,9 +83,19 @@ function sortTraces(traces: TraceSummary[], sort: string): TraceSummary[] {
 // Component
 // ---------------------------------------------------------------------------
 
+const EMPTY_FILTERS: SearchFormValues = {
+  service: "",
+  operation: "",
+  tags: "",
+  lookback: "",
+  minDuration: "",
+  maxDuration: "",
+  limit: 20,
+};
+
 export function TraceSearch({
   services = [],
-  service,
+  initialFilters = EMPTY_FILTERS,
   operations = [],
   traces,
   isLoading,
@@ -147,9 +162,10 @@ export function TraceSearch({
       {onSearch && (
         <div className="w-72 shrink-0 border border-border rounded-lg p-4 self-start">
           <SearchForm
+            key={filtersKey(initialFilters)}
             services={services}
             operations={operations}
-            initialValues={{ service }}
+            initialValues={initialFilters}
             onSubmit={handleFormSubmit}
             onServiceChange={onServiceChange}
             isLoading={isLoading}
