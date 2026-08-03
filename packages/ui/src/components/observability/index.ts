@@ -12,8 +12,11 @@ export type {
   TraceSummary,
 } from "./TraceSearch/index.js";
 
-export { SearchForm } from "./TraceSearch/SearchForm.js";
-export type { SearchFormProps } from "./TraceSearch/SearchForm.js";
+export { SearchForm, filtersKey } from "./TraceSearch/SearchForm.js";
+export type {
+  SearchFormProps,
+  SearchFormValues,
+} from "./TraceSearch/SearchForm.js";
 
 export { ScatterPlot } from "./TraceSearch/ScatterPlot.js";
 export type { ScatterPlotProps } from "./TraceSearch/ScatterPlot.js";

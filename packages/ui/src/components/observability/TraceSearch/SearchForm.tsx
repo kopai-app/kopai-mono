@@ -1,9 +1,14 @@
 /**
  * SearchForm - Jaeger-style sidebar search form for trace filtering.
- * Owns its own form state; parent only receives values on submit.
+ *
+ * Owns its own form state; the parent only receives values on submit. The
+ * parent must remount it (`key={filtersKey(...)}`) whenever the committed
+ * search changes, which is how the draft is reset on submit and on browser
+ * back/forward. Syncing a field in from props instead would give that field a
+ * second writer that bypasses the clearing rules in the change handlers.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export interface SearchFormValues {
   service: string;
@@ -13,6 +18,22 @@ export interface SearchFormValues {
   minDuration: string;
   maxDuration: string;
   limit: number;
+}
+
+/**
+ * Identity of a committed search — feed it to `key` to rebuild the form from
+ * `initialValues` when, and only when, the committed search changes.
+ */
+export function filtersKey(values: SearchFormValues): string {
+  return JSON.stringify([
+    values.service,
+    values.operation,
+    values.tags,
+    values.lookback,
+    values.minDuration,
+    values.maxDuration,
+    values.limit,
+  ]);
 }
 
 export interface SearchFormProps {
@@ -62,11 +83,6 @@ export function SearchForm({
     initialValues?.maxDuration ?? ""
   );
   const [limit, setLimit] = useState(initialValues?.limit ?? 20);
-
-  // Sync service from URL-driven changes
-  useEffect(() => {
-    if (initialValues?.service != null) setService(initialValues.service);
-  }, [initialValues?.service]);
 
   const handleServiceChange = (next: string) => {
     setService(next);

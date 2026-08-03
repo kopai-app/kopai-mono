@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { dataFilterSchemas, denormalizedSignals } from "@kopai/core";
+import { useDebouncedValue } from "../utils/use-debounced-value.js";
 
 type LogsDataFilter = dataFilterSchemas.LogsDataFilter;
 type OtelLogsRow = denormalizedSignals.OtelLogsRow;
@@ -94,19 +95,6 @@ const INPUT_CLS =
   "w-full bg-muted/50 border border-border rounded px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50";
 
 const LABEL_CLS = "text-xs text-muted-foreground";
-
-// ---------------------------------------------------------------------------
-// Debounce hook
-// ---------------------------------------------------------------------------
-
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(id);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 // ---------------------------------------------------------------------------
 // MultiSelect dropdown
