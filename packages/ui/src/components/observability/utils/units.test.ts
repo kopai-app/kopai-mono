@@ -114,3 +114,47 @@ describe("formatOtelValue", () => {
     expect(formatOtelValue(42, "")).toBe("42");
   });
 });
+
+// OTel span Duration is nanoseconds. Before `ns` had a scale family it fell
+// through to generic scaling and rendered as "23.1 M ns".
+describe("nanosecond scaling", () => {
+  it.each([
+    [823, "823 ns"],
+    [4_500, "4.5 μs"],
+    [23_070_000, "23.1 ms"],
+    [1_397_820_000, "1.4 s"],
+    [90e9, "1.5 min"],
+    [7_200e9, "2 h"],
+  ])("formats %i ns as %s", (value, expected) => {
+    expect(formatOtelValue(value, "ns")).toBe(expected);
+  });
+
+  it("does not leave a raw 'ns' suffix on a scaled value", () => {
+    expect(formatOtelValue(23_070_000, "ns")).not.toContain("M ns");
+  });
+});
+
+describe("fractionDigits", () => {
+  it("defaults to one digit", () => {
+    const s = resolveUnitScale("ns", 23_070_000);
+    expect(formatDisplayValue(23_070_000, s)).toBe("23.1 ms");
+    expect(formatTickValue(23_070_000, s)).toBe("23.1");
+  });
+
+  it("honours a caller-supplied precision", () => {
+    const s = resolveUnitScale("ns", 23_070_000);
+    expect(formatDisplayValue(23_070_000, s, 2)).toBe("23.07 ms");
+    expect(formatTickValue(23_070_000, s, 2)).toBe("23.07");
+  });
+
+  it("applies precision to percents too", () => {
+    const s = resolveUnitScale("1", 0.4242);
+    expect(formatDisplayValue(0.4242, s)).toBe("42.4%");
+    expect(formatDisplayValue(0.4242, s, 2)).toBe("42.42%");
+  });
+
+  it("keeps whole numbers whole regardless of precision", () => {
+    const s = resolveUnitScale("By", 512);
+    expect(formatDisplayValue(512, s, 2)).toBe("512 B");
+  });
+});

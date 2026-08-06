@@ -37,6 +37,17 @@ const US_SCALES: ScaleEntry[] = [
   { threshold: 0, divisor: 1, suffix: "\u03BCs" },
 ];
 
+// OTel span Duration is nanoseconds, so this ladder runs the full range:
+// without it, `ns` falls through to generic scaling and reads "23.1 M ns".
+const NS_SCALES: ScaleEntry[] = [
+  { threshold: 3600e9, divisor: 3600e9, suffix: "h" },
+  { threshold: 60e9, divisor: 60e9, suffix: "min" },
+  { threshold: 1e9, divisor: 1e9, suffix: "s" },
+  { threshold: 1e6, divisor: 1e6, suffix: "ms" },
+  { threshold: 1e3, divisor: 1e3, suffix: "\u03BCs" },
+  { threshold: 0, divisor: 1, suffix: "ns" },
+];
+
 const GENERIC_SCALES: ScaleEntry[] = [
   { threshold: 1e9, divisor: 1e9, suffix: "B" },
   { threshold: 1e6, divisor: 1e6, suffix: "M" },
@@ -51,6 +62,7 @@ const UNIT_SCALE_MAP: Record<string, ScaleEntry[]> = {
   s: SECOND_SCALES,
   ms: MS_SCALES,
   us: US_SCALES,
+  ns: NS_SCALES,
 };
 
 function pickScale(scales: ScaleEntry[], maxValue: number): ScaleEntry {
@@ -107,19 +119,30 @@ export function resolveUnitScale(
   return { divisor: s.divisor, suffix, label: unit, isPercent: false };
 }
 
-export function formatTickValue(value: number, scale: ResolvedScale): string {
+/**
+ * `fractionDigits` defaults to 1, which suits axis ticks and KPI cards where
+ * space is tight. Tables pass 2 — a column of durations is read against its
+ * neighbours, so the extra digit distinguishes rows that a single digit
+ * rounds together.
+ */
+export function formatTickValue(
+  value: number,
+  scale: ResolvedScale,
+  fractionDigits = 1
+): string {
   const scaled = value / scale.divisor;
-  if (scale.isPercent) return `${scaled.toFixed(1)}`;
+  if (scale.isPercent) return `${scaled.toFixed(fractionDigits)}`;
   if (Number.isInteger(scaled) && Math.abs(scaled) < 1e4)
     return scaled.toString();
-  return scaled.toFixed(1);
+  return scaled.toFixed(fractionDigits);
 }
 
 export function formatDisplayValue(
   value: number,
-  scale: ResolvedScale
+  scale: ResolvedScale,
+  fractionDigits = 1
 ): string {
-  const tick = formatTickValue(value, scale);
+  const tick = formatTickValue(value, scale, fractionDigits);
   if (!scale.suffix) return tick;
   if (scale.isPercent) return `${tick}${scale.suffix}`;
   return `${tick} ${scale.suffix}`;

@@ -44,6 +44,85 @@ function toTableData(rows: kopaiQuery.KopaiAggregateRow[]): RawTableData {
   return { columns, types, rows: dataRows };
 }
 
+// The `units` prop is keyed by column name, but RawDataTable formats by
+// position — measures carry no unit metadata through the query layer, so the
+// dashboard author supplies it. Columns absent from the map format normally,
+// which is what lets a units map drift from its query without breaking the
+// other columns. `Object.hasOwn` is belt-and-braces: the catalog's
+// `z.record` parse already yields a fresh plain object.
+function unitsByColumn(
+  columns: string[],
+  units: Record<string, string> | null | undefined
+): (string | null)[] | undefined {
+  if (!units) return undefined;
+  return columns.map((col) => lookup(units, col));
+}
+
+function lookup(record: Record<string, string>, key: string): string | null {
+  return Object.hasOwn(record, key) ? (record[key] ?? null) : null;
+}
+
+// Segment tokens a column name may carry that restate its annotated unit.
+// Keyed by the OTel unit, since the drop only fires when the two agree —
+// "duration_ms" annotated as "ns" keeps its suffix rather than being
+// silently relabelled to something the values contradict.
+// Keys are the units `resolveUnitScale` actually recognises — annotating a
+// column with anything else leaves the name alone, matching the fact that
+// the cell won't be unit-formatted either.
+const UNIT_NAME_TOKENS = new Map<string, readonly string[]>([
+  ["ns", ["ns", "nanos", "nanoseconds"]],
+  ["us", ["us", "micros", "microseconds"]],
+  ["ms", ["ms", "millis", "milliseconds"]],
+  ["s", ["s", "sec", "secs", "seconds"]],
+  ["By", ["by", "b", "bytes"]],
+]);
+
+/** Splits PascalCase/camelCase, keeping acronym runs whole: HTTPRoute -> HTTP Route. */
+function splitCamel(segment: string): string[] {
+  return segment
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/([a-z\d])([A-Z])/g, "$1 $2")
+    .split(" ")
+    .filter(Boolean);
+}
+
+/** All-caps and alphanumeric runs (HTTP, P95) keep their case; others Title Case. */
+function capitalize(word: string): string {
+  if (/^[A-Z0-9]+$/.test(word)) return word;
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+/**
+ * Turns a raw column name into a display header: `span_count` -> "Span Count",
+ * `service.name` -> "Service Name", `SpanName` -> "Span Name". When the column
+ * is unit-annotated and its last segment restates that unit, the segment is
+ * dropped — `avg_duration_ns` + `ns` -> "Avg Duration" — because the formatted
+ * cell already carries the unit.
+ */
+function humanize(column: string, unit: string | null): string {
+  const segments = column.split(/[._]+/).filter(Boolean);
+  const tokens = unit ? UNIT_NAME_TOKENS.get(unit) : undefined;
+  const last = segments[segments.length - 1]?.toLowerCase();
+  if (tokens && segments.length > 1 && last && tokens.includes(last)) {
+    segments.pop();
+  }
+  return segments.flatMap(splitCamel).map(capitalize).join(" ");
+}
+
+// Explicit `labels` win outright; everything else is humanised. Kept here
+// rather than in RawDataTable so the naming policy lives beside the props
+// that drive it and the table stays a dumb renderer.
+function headersByColumn(
+  columns: string[],
+  units: (string | null)[] | undefined,
+  labels: Record<string, string> | null | undefined
+): string[] {
+  return columns.map((col, idx) => {
+    const override = labels ? lookup(labels, col) : null;
+    return override ?? humanize(col, units?.[idx] ?? null);
+  });
+}
+
 export function OtelAggregateTable(props: Props) {
   if (!props.hasData) return <NoDataSource />;
 
@@ -51,10 +130,14 @@ export function OtelAggregateTable(props: Props) {
   // error (rather than JSON-stringifying object columns) when a raw-shaped
   // result is bound here, mirroring the raw renderers' shape validation.
   const { rows, error } = narrowAggregateRows(props.response);
+  const data = toTableData(rows);
+  const units = unitsByColumn(data.columns, props.element.props.units);
 
   return (
     <RawDataTable
-      data={toTableData(rows)}
+      data={data}
+      units={units}
+      headers={headersByColumn(data.columns, units, props.element.props.labels)}
       isLoading={props.loading}
       error={props.error ?? error}
       maxRows={props.element.props.maxRows ?? 100}

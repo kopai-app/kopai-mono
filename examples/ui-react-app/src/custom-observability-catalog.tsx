@@ -14,7 +14,8 @@
  *   2. <RequestState> / <NoSource> helpers used by every data-backed renderer
  *   3. Primitive renderers:   Stack, Grid, Card, Heading, Text, Badge, Divider, Empty
  *   4. Data-backed renderers: MetricStat, MetricTimeSeries, MetricHistogram,
- *                             MetricTable, MetricDiscovery, LogTimeline, TraceDetail
+ *                             MetricTable, AggregateTable, MetricDiscovery,
+ *                             LogTimeline, TraceDetail
  *   5. Kitchen-sink `UITree` exercising every component
  *   6. Provider-wrapped <ExampleObservabilityCatalog /> export
  */
@@ -24,6 +25,7 @@
 // =============================================================================
 import {
   KopaiClient,
+  kq,
   type AggregatedMetricRow,
   type OtelLogsRow,
   type OtelMetricsRow,
@@ -728,6 +730,21 @@ const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
 // =============================================================================
 // 5. Kitchen-sink UITree — exercises every component in one layout.
 // =============================================================================
+
+// The other tiles below use the legacy per-signal methods, which only ever
+// return raw rows. AggregateTable is the one component bound exclusively to the
+// polymorphic `query` method, so its tile needs a real aggregate-mode query —
+// built with `kq` so the dimension/measure columns are checked at compile time
+// rather than hand-written as a KopaiQuery literal.
+const topSpansByCalls = kq.traces
+  .aggregate()
+  .dimension("SpanName")
+  .measure((m) => m.count("calls"))
+  .measure((m) => m.avg("Duration", "avg_duration"))
+  .timeRelative("1h")
+  .summary()
+  .build();
+
 const kitchenSinkTree = {
   root: "root",
   elements: {
@@ -843,6 +860,7 @@ const kitchenSinkTree = {
         "c-timeseries",
         "c-histogram",
         "c-table",
+        "c-aggregate",
         "c-discovery",
         "c-logs",
         "c-traces",
@@ -976,6 +994,32 @@ const kitchenSinkTree = {
         params: { metricType: "Sum" as const, limit: 10 },
       },
       props: { maxRows: 5 },
+    },
+
+    "c-aggregate": {
+      key: "c-aggregate",
+      type: "Card" as const,
+      parentKey: "grid",
+      children: ["aggtable"],
+      props: {
+        title: "AggregateTable",
+        description: "query (aggregate mode)",
+        padding: null,
+      },
+    },
+    aggtable: {
+      key: "aggtable",
+      type: "AggregateTable" as const,
+      parentKey: "c-aggregate",
+      children: [],
+      dataSource: {
+        method: "query" as const,
+        params: topSpansByCalls,
+      },
+      // Duration is stored in nanoseconds; without the unit the cell reads
+      // "23.07M" rather than "23.07 ms". Headers humanise on their own, so
+      // `labels` stays null here.
+      props: { maxRows: 5, units: { avg_duration: "ns" }, labels: null },
     },
 
     "c-discovery": {
