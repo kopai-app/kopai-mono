@@ -374,6 +374,12 @@ function parseDuration(input: string): string | undefined {
 // Logfmt helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Parses the Tags box — `key=value key2="quoted value"` — into an attribute
+ * map. Values may be bare or double-quoted. Each pair is matched downstream by
+ * exact equality, so `key=` searches for a literally empty value rather than
+ * for the key's presence.
+ */
 function parseLogfmt(str: string): Record<string, string> {
   const result: Record<string, string> = {};
   // Keys run to the first `=` or space: OTel attribute names are dotted

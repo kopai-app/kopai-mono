@@ -55,6 +55,7 @@ function luminance([r, g, b]: Rgb): number {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
+/** WCAG 2.1 contrast ratio. 4.5:1 is the AA threshold for body-size text. */
 function contrastRatio(a: Rgb, b: Rgb): number {
   const la = luminance(a);
   const lb = luminance(b);

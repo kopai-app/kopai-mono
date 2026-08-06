@@ -3,6 +3,11 @@
  * Generates consistent colors for service names using HSL color space
  */
 
+/**
+ * djb2. Deliberately a hand-rolled hash rather than anything host-provided: a
+ * service has to keep the same colour across reloads, processes and machines,
+ * so this must never depend on insertion order or a per-process hash seed.
+ */
 function hashString(str: string): number {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
@@ -21,6 +26,11 @@ const LABEL_LIGHTNESS = 72;
 // background, strong enough that the chip still reads as a filled shape.
 const TINT_ALPHA = 0.14;
 
+/**
+ * The single hue every colour below is derived from. Sharing one basis is what
+ * lets a tint, a label and a solid bar read as the same service; deriving any
+ * of them from its own hash would let them drift apart on a rename.
+ */
 function getServiceHue(serviceName: string): number {
   return hashString(serviceName) % 360;
 }
@@ -62,6 +72,11 @@ export function getServiceLabelColor(serviceName: string): string {
 
 export const ERROR_COLOR = "#ef4444";
 
+/**
+ * Bar colour for a span in the waterfall. An error drops the per-service hue
+ * for one shared red, so a failing span is findable without first learning
+ * which hue belongs to which service.
+ */
 export function getSpanBarColor(serviceName: string, isError: boolean): string {
   if (isError) {
     return ERROR_COLOR;
