@@ -204,6 +204,36 @@ describe("row shape guards", () => {
       })
     ).toBe(false);
   });
+
+  // An aggregate may group by a column the raw guards key on. Verified against
+  // a live backend: `kq.metrics("Gauge").aggregate().dimension("TimeUnix")`
+  // returns `{ TimeUnix: "1786017799669000000", n: 101 }`, which the bare
+  // TimeUnix check would misread as a raw metric row and send to the error path.
+  it("hasAggregateRowShape accepts aggregates grouped by raw-signal columns", () => {
+    expect(
+      hasAggregateRowShape({ TimeUnix: "1786017799669000000", n: 101 })
+    ).toBe(true);
+    // Log/trace-flavoured dimensions likewise: no raw Timestamp, so no veto.
+    expect(hasAggregateRowShape({ Body: "job failed", n: 3 })).toBe(true);
+    expect(hasAggregateRowShape({ SpanId: "0033932b485499f8", n: 1 })).toBe(
+      true
+    );
+    expect(hasAggregateRowShape({ StatusCode: "Error", Duration: 12 })).toBe(
+      true
+    );
+    // A real raw metric row still carries its value/identity columns and is
+    // still rejected — each companion key alone is enough to veto.
+    for (const companion of [
+      { Value: 1 },
+      { MetricName: "m" },
+      { MetricType: "Gauge" },
+      { StartTimeUnix: "1" },
+    ]) {
+      expect(
+        hasAggregateRowShape({ TimeUnix: "1786017799669000000", ...companion })
+      ).toBe(false);
+    }
+  });
 });
 
 // narrowAggregateRows is the inverse of narrowQueryRows: it forwards

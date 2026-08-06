@@ -142,6 +142,26 @@ export function hasTraceRowShape(v: unknown): v is OtelTracesRow {
   );
 }
 
+// `hasMetricRowShape` keys on TimeUnix alone, which is right for raw rendering
+// but too broad here: a metrics aggregate may legitimately group by TimeUnix,
+// producing `{ TimeUnix, <measures> }` — a valid aggregate row that the metric
+// guard would veto, routing a working query to the mismatch error. A genuine
+// raw metric row always carries its value/identity columns alongside the
+// timestamp (both datasources SELECT every column), so require one of those
+// before treating a TimeUnix-bearing row as raw. The log and trace guards need
+// no such narrowing — they already demand a raw `Timestamp` plus a
+// signal-exclusive key, which no aggregate row carries.
+const RAW_METRIC_COMPANION_KEYS = [
+  "Value",
+  "MetricName",
+  "MetricType",
+  "StartTimeUnix",
+];
+
+function looksRawMetric(v: Record<string, unknown>): boolean {
+  return hasMetricRowShape(v) && hasAnyKey(v, RAW_METRIC_COMPANION_KEYS);
+}
+
 // Aggregate rows (KopaiAggregateRow) are flat records of scalar cells — the
 // query's dimension and measure columns. Raw signal rows normally carry a
 // non-scalar field (Attributes/ResourceAttributes objects, Exemplars arrays),
@@ -154,7 +174,7 @@ export function hasTraceRowShape(v: unknown): v is OtelTracesRow {
 // bucket_start).
 export function hasAggregateRowShape(v: unknown): v is KopaiAggregateRow {
   if (!isRecord(v)) return false;
-  if (hasMetricRowShape(v) || hasLogRowShape(v) || hasTraceRowShape(v)) {
+  if (looksRawMetric(v) || hasLogRowShape(v) || hasTraceRowShape(v)) {
     return false;
   }
   for (const val of Object.values(v)) {

@@ -484,8 +484,13 @@ function hasAggregateRowShape(
   // A scalar-only object can still be a raw signal row (e.g. a metric row with
   // no attributes); defer to the raw-row guards first so a raw result bound
   // here surfaces the shape error instead of rendering silently. Matches
-  // production `hasAggregateRowShape` in @kopai/ui's narrowRows.ts.
-  if (hasMetricRowShape(v) || hasLogRowShape(v) || hasTraceRowShape(v)) {
+  // production `hasAggregateRowShape` in @kopai/ui's narrowRows.ts — including
+  // the companion-key check, without which a metrics aggregate grouping by
+  // TimeUnix would be misread as a raw metric row.
+  const looksRawMetric =
+    hasMetricRowShape(v) &&
+    ["Value", "MetricName", "MetricType", "StartTimeUnix"].some((k) => k in v);
+  if (looksRawMetric || hasLogRowShape(v) || hasTraceRowShape(v)) {
     return false;
   }
   return Object.values(v).every(

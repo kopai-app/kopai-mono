@@ -100,13 +100,15 @@ function capitalize(word: string): string {
  * cell already carries the unit.
  */
 function humanize(column: string, unit: string | null): string {
-  const segments = column.split(/[._]+/).filter(Boolean);
+  // Tokenise before testing the trailing unit: splitting on delimiters alone
+  // leaves `avgDurationNs` as a single segment, so the suffix would survive.
+  const words = column.split(/[._]+/).filter(Boolean).flatMap(splitCamel);
   const tokens = unit ? UNIT_NAME_TOKENS.get(unit) : undefined;
-  const last = segments[segments.length - 1]?.toLowerCase();
-  if (tokens && segments.length > 1 && last && tokens.includes(last)) {
-    segments.pop();
+  const last = words[words.length - 1]?.toLowerCase();
+  if (tokens && words.length > 1 && last && tokens.includes(last)) {
+    words.pop();
   }
-  return segments.flatMap(splitCamel).map(capitalize).join(" ");
+  return words.map(capitalize).join(" ");
 }
 
 // Explicit `labels` win outright; everything else is humanised. Kept here

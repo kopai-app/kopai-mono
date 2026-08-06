@@ -300,6 +300,29 @@ describe("OtelAggregateTable", () => {
     expect(screen.getByText("Avg Duration Ms")).toBeTruthy();
   });
 
+  // The suffix is a camel-case token, not a delimited segment, so stripping it
+  // requires tokenising before the comparison.
+  it.each([
+    ["avgDurationNs", "Avg Duration"],
+    ["AvgDurationNs", "Avg Duration"],
+    ["avg_durationNs", "Avg Duration"],
+  ])("drops a camel-case unit suffix from %s", async (column, expected) => {
+    render(
+      createElement(DynamicDashboard, {
+        kopaiClient: clientReturning({
+          data: [{ SpanName: "x", calls: 1, [column]: 8080000 }],
+        }),
+        uiTree: treeWith({ [column]: "ns" }),
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("raw-data-table")).toBeTruthy();
+    });
+    expect(screen.getByText(expected)).toBeTruthy();
+    expect(screen.getByText("8.08 ms")).toBeTruthy();
+  });
+
   it("keeps a unit-suffixed name when the column has no unit annotation", async () => {
     render(
       createElement(DynamicDashboard, {
