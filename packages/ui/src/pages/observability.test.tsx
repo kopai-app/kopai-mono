@@ -406,3 +406,51 @@ describe("trace search operation picker", () => {
     });
   });
 });
+
+describe("trace search tags filter", () => {
+  let mockClient: MockClient;
+  let originalLocation: string;
+
+  beforeEach(() => {
+    mockClient = createMockClient();
+    queryClient.clear();
+    vi.clearAllMocks();
+    originalLocation = window.location.search;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + originalLocation
+    );
+  });
+
+  function setURL(params: string) {
+    window.history.replaceState(null, "", window.location.pathname + params);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+
+  // Both halves of this filter failed silently: `tags` is not a key of
+  // traceSummariesFilterSchema, so zod stripped it, and the logfmt key pattern
+  // clipped dotted attribute names to their last segment. Either one returns
+  // zero traces with no error, so assert on what actually reaches the client.
+  it("sends tags as span attributes, preserving dotted attribute keys", async () => {
+    setURL("?tab=services&tags=http.request.method%3DGET");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    await waitFor(() => {
+      const filter = mockClient.searchTraceSummariesPage.mock.calls.at(-1)?.[0];
+      expect(filter).toMatchObject({
+        spanAttributes: { "http.request.method": "GET" },
+      });
+      expect(filter).not.toHaveProperty("tags");
+    });
+  });
+});

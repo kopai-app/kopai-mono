@@ -374,9 +374,18 @@ function parseDuration(input: string): string | undefined {
 // Logfmt helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Parses the Tags box — `key=value key2="quoted value"` — into an attribute
+ * map. Values may be bare or double-quoted. Each pair is matched downstream by
+ * exact equality, so `key=` searches for a literally empty value rather than
+ * for the key's presence.
+ */
 function parseLogfmt(str: string): Record<string, string> {
   const result: Record<string, string> = {};
-  const re = /(\w+)=(?:"([^"]*)"|([\S]*))/g;
+  // Keys run to the first `=` or space: OTel attribute names are dotted
+  // (`http.request.method`), and `\w+` would silently clip them to the last
+  // segment, leaving a filter that matches nothing.
+  const re = /([^\s=]+)=(?:"([^"]*)"|([\S]*))/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(str)) !== null) {
     const key = m[1];
@@ -530,8 +539,10 @@ function TraceSearchView({
       if (parsed) params.durationMax = parsed;
     }
     if (urlState.tags) {
+      // Tags are span-level attributes; the filter schema has no `tags` key, so
+      // sending one is silently stripped before the request leaves the SDK.
       const tagMap = parseLogfmt(urlState.tags);
-      if (Object.keys(tagMap).length > 0) params.tags = tagMap;
+      if (Object.keys(tagMap).length > 0) params.spanAttributes = tagMap;
     }
     return {
       method: "searchTraceSummariesPage",
