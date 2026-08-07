@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "testcontainers": "^12.0.4",
+    "testcontainers": "^12.1.0",
     "tsdown": "^0.22.14"
   }
 }
