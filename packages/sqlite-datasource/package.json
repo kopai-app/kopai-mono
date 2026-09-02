@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@kopai/core": "workspace:*",
-    "kysely": "^0.29.4"
+    "kysely": "^0.29.5"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
