@@ -39,11 +39,11 @@
   "dependencies": {
     "@clickhouse/client": "^1.23.1",
     "@kopai/core": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "testcontainers": "^12.0.4",
+    "testcontainers": "^12.1.0",
     "tsdown": "^0.22.14"
   }
 }
