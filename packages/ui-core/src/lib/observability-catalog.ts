@@ -153,6 +153,32 @@ export const observabilityCatalog = createCatalog({
       acceptsDataFrom: ["searchMetricsPage", "query"] as const,
     },
 
+    AggregateTable: {
+      props: z.object({
+        maxRows: z.number().int().positive().nullable(),
+        units: z.record(z.string(), z.string()).nullable(),
+        labels: z.record(z.string(), z.string()).nullable(),
+      }),
+      hasChildren: false,
+      description:
+        "Tabular display of aggregate query results — dimension and measure " +
+        "columns from a `query` dataSource in aggregate mode (e.g. top spans " +
+        "by AVG(Duration), request counts grouped by StatusCode). Columns are " +
+        "derived from the result rows, so it renders any signal's aggregate output. " +
+        "`units` maps a column name to its OTel unit so the cell renders in " +
+        'human terms — e.g. {"avg_duration_ns": "ns"} shows 23070000 as ' +
+        '"23.07 ms". Understood units: ns/us/ms/s (duration ladder) and By ' +
+        "(binary byte ladder); unmapped columns keep generic SI scaling. " +
+        "Headers are humanised automatically — snake_case, dotted and " +
+        'PascalCase names become Title Case ("span_count" -> "Span Count"), ' +
+        "and a trailing unit token is dropped when that column is unit-annotated " +
+        '("avg_duration_ns" + "ns" -> "Avg Duration") since the unit already ' +
+        "shows in the cell. `labels` overrides the header for any column, which " +
+        "is the escape hatch when humanising mangles a name — e.g. " +
+        '{"SpanAttributes.http.route": "Route"}.',
+      acceptsDataFrom: ["query"] as const,
+    },
+
     MetricDiscovery: {
       props: z.object({}),
       hasChildren: false,

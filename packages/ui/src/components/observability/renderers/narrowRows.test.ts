@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   narrowRows,
   narrowQueryRows,
+  narrowAggregateRows,
   hasMetricRowShape,
   hasLogRowShape,
   hasTraceRowShape,
+  hasAggregateRowShape,
 } from "./narrowRows.js";
 
 // L6/L9: the polymorphic `query` dataSource can feed any of the six result
@@ -160,5 +162,114 @@ describe("row shape guards", () => {
     expect(hasTraceRowShape({ SpanId: "s", TraceId: "t", SpanName: "x" })).toBe(
       false
     );
+  });
+
+  it("hasAggregateRowShape accepts flat scalar rows and rejects raw rows", () => {
+    // Dimension + measure columns, all scalar.
+    expect(hasAggregateRowShape({ SpanName: "trpc.x", calls: 3 })).toBe(true);
+    expect(hasAggregateRowShape({ StatusCode: "Error", requests: 0 })).toBe(
+      true
+    );
+    // timeSeries aggregate adds a scalar bucket_start.
+    expect(hasAggregateRowShape({ bucket_start: "2024-01-01", value: 1 })).toBe(
+      true
+    );
+    expect(hasAggregateRowShape({ value: null })).toBe(true);
+    // Raw rows carry object/array-valued fields — must NOT pass.
+    expect(hasAggregateRowShape({ ...metricRow, Attributes: {} })).toBe(false);
+    expect(
+      hasAggregateRowShape({ SpanName: "x", ResourceAttributes: {} })
+    ).toBe(false);
+    expect(
+      hasAggregateRowShape({ MetricName: "m", "Exemplars.Value": [] })
+    ).toBe(false);
+    expect(hasAggregateRowShape(null)).toBe(false);
+    // Scalar-only rows that still match a raw-signal guard are rejected, so a
+    // raw result bound to an aggregate renderer surfaces the config error
+    // rather than rendering silently.
+    expect(
+      hasAggregateRowShape({ TimeUnix: "1", MetricName: "m", Value: 1 })
+    ).toBe(false);
+    expect(
+      hasAggregateRowShape({ Timestamp: "1", Body: "hi", SeverityText: "INFO" })
+    ).toBe(false);
+    expect(
+      hasAggregateRowShape({
+        Timestamp: "1",
+        SpanId: "s",
+        TraceId: "t",
+        SpanName: "x",
+        Duration: 5,
+        StatusCode: "Ok",
+      })
+    ).toBe(false);
+  });
+
+  // An aggregate may group by a column the raw guards key on. Verified against
+  // a live backend: `kq.metrics("Gauge").aggregate().dimension("TimeUnix")`
+  // returns `{ TimeUnix: "1786017799669000000", n: 101 }`, which the bare
+  // TimeUnix check would misread as a raw metric row and send to the error path.
+  it("hasAggregateRowShape accepts aggregates grouped by raw-signal columns", () => {
+    expect(
+      hasAggregateRowShape({ TimeUnix: "1786017799669000000", n: 101 })
+    ).toBe(true);
+    // Log/trace-flavoured dimensions likewise: no raw Timestamp, so no veto.
+    expect(hasAggregateRowShape({ Body: "job failed", n: 3 })).toBe(true);
+    expect(hasAggregateRowShape({ SpanId: "0033932b485499f8", n: 1 })).toBe(
+      true
+    );
+    expect(hasAggregateRowShape({ StatusCode: "Error", Duration: 12 })).toBe(
+      true
+    );
+    // A real raw metric row still carries its value/identity columns and is
+    // still rejected — each companion key alone is enough to veto.
+    for (const companion of [
+      { Value: 1 },
+      { MetricName: "m" },
+      { MetricType: "Gauge" },
+      { StartTimeUnix: "1" },
+    ]) {
+      expect(
+        hasAggregateRowShape({ TimeUnix: "1786017799669000000", ...companion })
+      ).toBe(false);
+    }
+  });
+});
+
+// narrowAggregateRows is the inverse of narrowQueryRows: it forwards
+// aggregate-shaped rows and surfaces an explicit error when a *raw* result is
+// bound to an aggregate renderer by mistake.
+describe("narrowAggregateRows", () => {
+  it("forwards aggregate rows with no error", () => {
+    const res = { data: [{ SpanName: "trpc.uploadLogo", avg_duration: 2090 }] };
+    const out = narrowAggregateRows(res);
+    expect(out.rows).toHaveLength(1);
+    expect(out.error).toBeUndefined();
+  });
+
+  it("surfaces an error when a raw metric result reaches an aggregate renderer", () => {
+    const res = {
+      data: [{ TimeUnix: "1", Value: 1, Attributes: { a: "b" } }],
+    };
+    const out = narrowAggregateRows(res);
+    expect(out.rows).toEqual([]);
+    expect(out.error).toBeInstanceOf(Error);
+    expect(out.error?.message).toContain('mode: "aggregate"');
+  });
+
+  it("errors on a scalar-only raw result with no object-valued fields", () => {
+    // A raw metric row whose attribute columns are absent is all-scalar, but
+    // still matches the raw metric guard — it must not slip through as aggregate.
+    const out = narrowAggregateRows({
+      data: [{ TimeUnix: "1", MetricName: "m", Value: 1 }],
+    });
+    expect(out.rows).toEqual([]);
+    expect(out.error).toBeInstanceOf(Error);
+  });
+
+  it("does NOT error on empty or null responses", () => {
+    expect(narrowAggregateRows({ data: [] }).error).toBeUndefined();
+    expect(narrowAggregateRows(null).error).toBeUndefined();
+    expect(narrowAggregateRows({ data: undefined }).error).toBeUndefined();
   });
 });

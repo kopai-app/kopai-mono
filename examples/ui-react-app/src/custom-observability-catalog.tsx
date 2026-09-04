@@ -14,7 +14,8 @@
  *   2. <RequestState> / <NoSource> helpers used by every data-backed renderer
  *   3. Primitive renderers:   Stack, Grid, Card, Heading, Text, Badge, Divider, Empty
  *   4. Data-backed renderers: MetricStat, MetricTimeSeries, MetricHistogram,
- *                             MetricTable, MetricDiscovery, LogTimeline, TraceDetail
+ *                             MetricTable, AggregateTable, MetricDiscovery,
+ *                             LogTimeline, TraceDetail
  *   5. Kitchen-sink `UITree` exercising every component
  *   6. Provider-wrapped <ExampleObservabilityCatalog /> export
  */
@@ -24,6 +25,7 @@
 // =============================================================================
 import {
   KopaiClient,
+  kq,
   type AggregatedMetricRow,
   type OtelLogsRow,
   type OtelMetricsRow,
@@ -470,6 +472,79 @@ function MetricTable(props: RendererProps<"MetricTable">) {
   );
 }
 
+// ---------- AggregateTable --------------------------------------------------
+// The mirror image of the raw renderers: an aggregate `query` returns dynamic
+// dimension/measure rows (KopaiAggregateRow — a flat scalar record), so the
+// columns come from the rows themselves. Raw rows carry object-valued fields,
+// so "every value is scalar" separates an aggregate result from a raw one.
+function hasAggregateRowShape(
+  v: unknown
+): v is Record<string, string | number | null> {
+  if (!isRecord(v)) return false;
+  // A scalar-only object can still be a raw signal row (e.g. a metric row with
+  // no attributes); defer to the raw-row guards first so a raw result bound
+  // here surfaces the shape error instead of rendering silently. Matches
+  // production `hasAggregateRowShape` in @kopai/ui's narrowRows.ts — including
+  // the companion-key check, without which a metrics aggregate grouping by
+  // TimeUnix would be misread as a raw metric row.
+  const looksRawMetric =
+    hasMetricRowShape(v) &&
+    ["Value", "MetricName", "MetricType", "StartTimeUnix"].some((k) => k in v);
+  if (looksRawMetric || hasLogRowShape(v) || hasTraceRowShape(v)) {
+    return false;
+  }
+  return Object.values(v).every(
+    (val) => val === null || typeof val === "string" || typeof val === "number"
+  );
+}
+
+function AggregateTable(props: RendererProps<"AggregateTable">) {
+  if (!props.hasData) return <NoSource name="AggregateTable" />;
+  const maxRows = props.element.props.maxRows ?? 10;
+  const rows = narrowRows(props.response, hasAggregateRowShape);
+  if (rows === null) {
+    return (
+      <RequestState loading={props.loading} error={props.error}>
+        <UnsupportedShape name="AggregateTable" />
+      </RequestState>
+    );
+  }
+  const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  const shown = rows.slice(0, maxRows);
+  return (
+    <RequestState loading={props.loading} error={props.error}>
+      {shown.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#999" }}>(no rows)</div>
+      ) : (
+        <table
+          style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}
+        >
+          <thead>
+            <tr style={{ textAlign: "left", color: "#666" }}>
+              {columns.map((c) => (
+                <th key={c} style={{ padding: "4px 8px" }}>
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r, i) => (
+              <tr key={i} style={{ borderTop: "1px solid #eee" }}>
+                {columns.map((c) => (
+                  <td key={c} style={{ padding: "4px 8px" }}>
+                    {String(r[c] ?? "—")}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </RequestState>
+  );
+}
+
 // ---------- MetricDiscovery -------------------------------------------------
 // Unlike the paginated endpoints, `discoverMetrics` returns `{ metrics: [...] }`
 // — the shape is different, and the renderer reads `response.metrics` (not
@@ -633,7 +708,7 @@ function TraceDetail(props: TraceDetailProps) {
 }
 
 // =============================================================================
-// Register all 15 renderers with the catalog. `createRendererFromCatalog`
+// Register all 16 renderers with the catalog. `createRendererFromCatalog`
 // enforces at compile time that the registry matches the catalog shape.
 // =============================================================================
 const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
@@ -651,6 +726,7 @@ const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
   MetricTimeSeries,
   MetricHistogram,
   MetricTable,
+  AggregateTable,
   MetricDiscovery,
   LogTimeline,
   TraceDetail,
@@ -659,6 +735,21 @@ const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
 // =============================================================================
 // 5. Kitchen-sink UITree — exercises every component in one layout.
 // =============================================================================
+
+// The other tiles below use the legacy per-signal methods, which only ever
+// return raw rows. AggregateTable is the one component bound exclusively to the
+// polymorphic `query` method, so its tile needs a real aggregate-mode query —
+// built with `kq` so the dimension/measure columns are checked at compile time
+// rather than hand-written as a KopaiQuery literal.
+const topSpansByCalls = kq.traces
+  .aggregate()
+  .dimension("SpanName")
+  .measure((m) => m.count("calls"))
+  .measure((m) => m.avg("Duration", "avg_duration"))
+  .timeRelative("1h")
+  .summary()
+  .build();
+
 const kitchenSinkTree = {
   root: "root",
   elements: {
@@ -774,6 +865,7 @@ const kitchenSinkTree = {
         "c-timeseries",
         "c-histogram",
         "c-table",
+        "c-aggregate",
         "c-discovery",
         "c-logs",
         "c-traces",
@@ -907,6 +999,32 @@ const kitchenSinkTree = {
         params: { metricType: "Sum" as const, limit: 10 },
       },
       props: { maxRows: 5 },
+    },
+
+    "c-aggregate": {
+      key: "c-aggregate",
+      type: "Card" as const,
+      parentKey: "grid",
+      children: ["aggtable"],
+      props: {
+        title: "AggregateTable",
+        description: "query (aggregate mode)",
+        padding: null,
+      },
+    },
+    aggtable: {
+      key: "aggtable",
+      type: "AggregateTable" as const,
+      parentKey: "c-aggregate",
+      children: [],
+      dataSource: {
+        method: "query" as const,
+        params: topSpansByCalls,
+      },
+      // Duration is stored in nanoseconds; without the unit the cell reads
+      // "23.07M" rather than "23.07 ms". Headers humanise on their own, so
+      // `labels` stays null here.
+      props: { maxRows: 5, units: { avg_duration: "ns" }, labels: null },
     },
 
     "c-discovery": {

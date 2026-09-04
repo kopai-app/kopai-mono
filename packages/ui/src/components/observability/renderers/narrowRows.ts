@@ -1,8 +1,9 @@
-import type { denormalizedSignals } from "@kopai/core";
+import type { denormalizedSignals, kopaiQuery } from "@kopai/core";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 type OtelLogsRow = denormalizedSignals.OtelLogsRow;
 type OtelMetricsRow = denormalizedSignals.OtelMetricsRow;
+type KopaiAggregateRow = kopaiQuery.KopaiAggregateRow;
 
 // The polymorphic `query` dataSource method can return any of the six
 // KopaiQuery result shapes. A signal-specific renderer must therefore validate
@@ -55,6 +56,28 @@ export function narrowQueryRows<T>(
       `This panel displays raw ${signal} rows, but the query returned a different ` +
         `row shape — typically an aggregate-mode query, or a query for another signal. ` +
         `Use a raw ${signal} query, or a renderer that supports aggregate results.`
+    ),
+  };
+}
+
+// The inverse of the raw-row narrowers: an *aggregate* renderer accepts the
+// dynamic dimension/measure rows produced by a `mode: "aggregate"` query and
+// must reject a raw signal result bound to it by mistake. `narrowAggregateRows`
+// returns null → an explicit error when the rows are raw-shaped, matching the
+// raw renderers' behaviour so the misconfiguration is visible rather than
+// silently rendering object-valued columns as JSON.
+export function narrowAggregateRows(
+  response: { data?: unknown } | null | undefined
+): { rows: KopaiAggregateRow[]; error?: Error } {
+  const rows = narrowRows(response, hasAggregateRowShape);
+  if (rows !== null) return { rows };
+  if (!Array.isArray(response?.data)) return { rows: [] };
+  return {
+    rows: [],
+    error: new Error(
+      `This panel displays aggregate query results, but the query returned rows ` +
+        `with a raw (non-scalar) shape — typically a raw-mode query or a raw ` +
+        `metric/trace/log source. Use an aggregate-mode query (mode: "aggregate").`
     ),
   };
 }
@@ -117,4 +140,47 @@ export function hasTraceRowShape(v: unknown): v is OtelTracesRow {
     hasAnyKey(v, SPAN_ONLY_KEYS) &&
     !hasAnyKey(v, LOG_ONLY_KEYS)
   );
+}
+
+// `hasMetricRowShape` keys on TimeUnix alone, which is right for raw rendering
+// but too broad here: a metrics aggregate may legitimately group by TimeUnix,
+// producing `{ TimeUnix, <measures> }` — a valid aggregate row that the metric
+// guard would veto, routing a working query to the mismatch error. A genuine
+// raw metric row always carries its value/identity columns alongside the
+// timestamp (both datasources SELECT every column), so require one of those
+// before treating a TimeUnix-bearing row as raw. The log and trace guards need
+// no such narrowing — they already demand a raw `Timestamp` plus a
+// signal-exclusive key, which no aggregate row carries.
+const RAW_METRIC_COMPANION_KEYS = [
+  "Value",
+  "MetricName",
+  "MetricType",
+  "StartTimeUnix",
+];
+
+function looksRawMetric(v: Record<string, unknown>): boolean {
+  return hasMetricRowShape(v) && hasAnyKey(v, RAW_METRIC_COMPANION_KEYS);
+}
+
+// Aggregate rows (KopaiAggregateRow) are flat records of scalar cells — the
+// query's dimension and measure columns. Raw signal rows normally carry a
+// non-scalar field (Attributes/ResourceAttributes objects, Exemplars arrays),
+// but a raw row can also be all-scalar (e.g. a metric row with no attributes)
+// and would then match a raw-signal guard. Reject anything the raw guards
+// already claim before accepting a scalar-only record, so a raw result bound
+// to an aggregate renderer surfaces the config error instead of rendering
+// silently. This is safe for real aggregate rows: the raw guards require a raw
+// TimeUnix/Timestamp column, which aggregate results never have (they use
+// bucket_start).
+export function hasAggregateRowShape(v: unknown): v is KopaiAggregateRow {
+  if (!isRecord(v)) return false;
+  if (looksRawMetric(v) || hasLogRowShape(v) || hasTraceRowShape(v)) {
+    return false;
+  }
+  for (const val of Object.values(v)) {
+    if (val !== null && typeof val !== "string" && typeof val !== "number") {
+      return false;
+    }
+  }
+  return true;
 }
