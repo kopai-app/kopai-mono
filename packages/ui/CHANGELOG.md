@@ -1,5 +1,69 @@
 # @kopai/ui
 
+## 0.16.0
+
+### Minor Changes
+
+- 2868f27: Add an `AggregateTable` dashboard component that renders aggregate-mode `query` results (dimension + measure columns) as a table, with unit-aware cells and humanised headers.
+
+  Previously every data-bound SDUI renderer validated for raw signal rows, so an aggregate query (e.g. top spans by `AVG(Duration)`, request counts grouped by `StatusCode`) had no renderer and, if bound to `MetricTable`, failed at render with "This panel displays raw metric rows…". `AggregateTable` accepts the polymorphic aggregate result and derives its columns from the rows, so any signal's aggregate output can be displayed.
+
+  Because the columns come from the query rather than a fixed schema, the component carries no unit or naming metadata of its own. Two further props supply it, alongside the existing `maxRows`. Following the rest of the catalog, both are nullable but must be present — pass `null` when unused.
+
+  **`units`** maps a column name to its OTel unit, so the cell renders in human terms:
+
+  ```ts
+  props: {
+    maxRows: 10,
+    units: { avg_duration_ns: "ns", error_rate: "1" },
+    labels: null,
+  }
+  ```
+
+  This matters most for durations. OTel stores span `Duration` in nanoseconds, so an unannotated `AVG(Duration)` of `23070000` renders as `23.07M` — digits that coincidentally match the millisecond value, which is what makes the bare SI suffix misleading. Annotated, the same cell reads `23.07 ms`. Units resolve through the same scale resolver the charts and `MetricStat` already use, so `ns`/`us`/`ms`/`s` render as durations, `By` as bytes, `"1"` as a percentage, and an unknown unit as a scaled number with the unit appended (`{spans}` → `2.50 M spans`). Unannotated columns keep plain K/M/G scaling.
+
+  **`labels`** overrides the header for any column. Headers are otherwise derived automatically: snake_case, dotted and PascalCase names become Title Case (`span_count` → "Span Count", `service.name` → "Service Name", `SpanName` → "Span Name"), acronym runs stay whole (`HTTPRoute` → "HTTP Route"), and a trailing unit token is dropped when the column is unit-annotated (`avg_duration_ns` + `ns` → "Avg Duration") since the unit already appears in the cell. The drop only fires when name and annotation agree — `avg_duration_ms` annotated `ns` keeps its suffix rather than being relabelled to something the values contradict. Humanising flattens dotted OTel attribute names (`SpanAttributes.http.route` → "Span Attributes Http Route"), which is the case `labels` exists to fix.
+
+  Separately, nanoseconds gained a scale family in the shared unit resolver. Any metric whose OTel unit is `ns` previously fell through to generic scaling and rendered as `23.1 M ns`; it now renders as `23.1 ms`. This affects `MetricStat`, `MetricTimeSeries`, and `MetricHistogram` as well as the new table. No other unit changes behaviour.
+
+### Patch Changes
+
+- 5d04644: Update runtime dependencies. Notable upgrades: zod 4.5.4, fastify 5.12.1, @fastify/vite 10 (which moves to @fastify/static 10), @fastify/swagger-ui 6.1.1, @bufbuild/protobuf 2.14, kysely 0.29.5, @tanstack/react-virtual 3.14.10 and recharts 3.10.1. No public API changes in any @kopai package.
+- b7ecda1: Update runtime dependencies. Notable upgrades: OpenTelemetry JS SDK 2.10 / experimental 0.221 (log record processors now take an options object), fastify-type-provider-zod 7, fastify-plugin 6, @fastify/swagger-ui 6, kysely 0.29.4, and recharts 3.10. @kopai/clickhouse-datasource also bumps @clickhouse/client to 1.23, which raises its Node.js requirement to >=20. @kopai/ui and @kopai/ui-core now require react >=19.2.8 as a peer. No public API changes in any @kopai package.
+- b013ebb: Fix service chips on the traces page rendering as solid blocks with unreadable
+  labels in Safari (KOP-29).
+
+  The chip tint was built by appending a hex alpha suffix to the `hsl()` string
+  from `getServiceColor()`, which is not a valid CSS colour. Chromium drops the
+  declaration, leaving no tint at all; WebKit accepts it on the property-assignment
+  path React uses and resolves it to the opaque colour, painting each chip over its
+  own same-coloured label.
+
+  `colors.ts` now owns the palette and exposes `getServiceTint(name, alpha)` and
+  `getServiceLabelColor(name)`, so fill and label are derived separately. The label
+  lightness also lifts it above the WCAG AA contrast threshold on the dark
+  background, which the previous 50% did not meet for many hues.
+
+- b013ebb: Make the Tags filter on the traces page actually filter.
+
+  Two silent failures stacked: the parsed tags were sent under a `tags` key, which
+  `traceSummariesFilterSchema` does not define, so zod stripped it before the
+  request left the SDK; and the logfmt key pattern excluded `.`, clipping dotted
+  OpenTelemetry attribute names to their last segment
+  (`http.request.method=GET` parsed as `{ method: "GET" }`).
+
+  Tags are now sent as `spanAttributes` with their keys intact. Note that they
+  match span attributes only — resource-level attributes such as
+  `deployment.environment` are not searched by this box.
+
+- e78c7af: Fixed the trace search form keeping filters from a previous search after browser back/forward. The form now rebuilds itself whenever the committed search changes, so a service can no longer be paired with an operation belonging to a different one. Filters carried in the URL — operation, tags, lookback, durations and limit — are also restored into the form on load, where previously only the service was and the rest were silently dropped on the next submit. The operation list now waits for the service picker to settle before fetching, instead of issuing a request per service arrowed past.
+- 6881047: Fixed the trace search operation picker staying empty until a search had already been run. Operations now load from the service selected in the form rather than the one in the URL, which only catches up on submit. Changing the service also clears any operation held over from the previous one, the picker is disabled until a service is chosen, and selecting "All Services" now actually clears the service filter instead of re-applying the current one.
+- Updated dependencies [2868f27]
+- Updated dependencies [5d04644]
+- Updated dependencies [b7ecda1]
+  - @kopai/ui-core@0.3.0
+  - @kopai/sdk@0.9.1
+
 ## 0.15.0
 
 ### Minor Changes
