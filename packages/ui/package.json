@@ -41,31 +41,31 @@
     "@kopai/sdk": "workspace:*",
     "@kopai/ui-core": "workspace:*",
     "@tanstack/react-query": "^5",
-    "@tanstack/react-virtual": "^3.14.10",
+    "@tanstack/react-virtual": "^3.14.12",
     "recharts": "^3.10.1"
   },
   "peerDependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
-    "@storybook/addon-docs": "^10.5.10",
-    "@storybook/react": "^10.5.10",
-    "@storybook/react-vite": "^10.5.10",
+    "@storybook/addon-docs": "^10.6.0",
+    "@storybook/react": "^10.6.0",
+    "@storybook/react-vite": "^10.6.0",
     "@testing-library/react": "^16.3.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "@tailwindcss/postcss": "^4.3.3",
     "jsdom": "^30.0.1",
-    "postcss": "^8.5.26",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "storybook": "^10.5.10",
+    "postcss": "^8.5.28",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "storybook": "^10.6.0",
     "tailwindcss": "^4.3.3",
-    "tsdown": "^0.22.14",
+    "tsdown": "^0.23.0",
     "typescript": "^6.0.3",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   }
 }
