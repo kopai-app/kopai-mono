@@ -44,7 +44,7 @@
     "@kopai/sqlite-datasource": "workspace:*",
     "fastify": "^5.12.4",
     "fastify-type-provider-zod": "^7.0.0",
-    "zod": "^4.6.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@jest/globals": "^30.5.1",
@@ -63,7 +63,7 @@
     "@opentelemetry/sdk-trace-base": "^2.11.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "@tapjs/tsx": "^3.4.10",
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.1",
     "jest": "^30.5.1",
     "tap": "^21.8.0",
     "ts-jest": "^29.4.12",

@@ -24,14 +24,14 @@
     "test:publish": "./scripts/test-publish.sh"
   },
   "devDependencies": {
-    "@changesets/cli": "^3.0.2",
+    "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.1",
     "eslint": "^10.10.0",
-    "lefthook": "^2.1.12",
+    "lefthook": "^2.1.14",
     "lint-staged": "^17.5.1",
     "prettier": "^3.9.6",
-    "turbo": "^2.10.12",
+    "turbo": "^2.10.13",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.11"
@@ -46,6 +46,6 @@
     ]
   },
   "dependencies": {
-    "zod": "^4.6.4"
+    "zod": "^4.6.5"
   }
 }

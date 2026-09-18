@@ -42,7 +42,7 @@
     "@kopai/core": "workspace:*",
     "@kopai/sdk": "workspace:*",
     "@tanstack/react-query": "^5",
-    "zod": "^4.6.4"
+    "zod": "^4.6.5"
   },
   "peerDependencies": {
     "react": "^19.3.0"
