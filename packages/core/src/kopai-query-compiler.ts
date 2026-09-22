@@ -2,12 +2,17 @@
 // Each datasource (sqlite, clickhouse) wraps these with its own dialect.
 
 import {
+  branchSchemaFor,
+  isQueryMode,
+  isSignal,
   LogColumn,
   METRIC_STRUCTURAL_COLUMNS_BY_TYPE,
   METRIC_TYPES,
   MetricColumn,
+  MODES,
   NUMERIC_STRUCTURAL_COLUMNS,
   Signal,
+  SIGNALS,
   TraceColumn,
   type FilterExpr,
   type KopaiQuery,
@@ -751,4 +756,102 @@ export function validateKopaiQuery(q: KopaiQuery): void {
       );
     }
   }
+}
+
+// ============================================================
+// Parse + validate, as one step
+// ============================================================
+
+/** One problem with a query, at a dotted path; `""` is the query as a whole. */
+export interface KopaiQueryIssue {
+  path: string;
+  message: string;
+}
+
+export type ParseKopaiQueryResult =
+  { ok: true; data: KopaiQuery } | { ok: false; issues: KopaiQueryIssue[] };
+
+/**
+ * Parses unknown input into a `KopaiQuery` and runs the cross-field checks
+ * `validateKopaiQuery` holds, reporting problems as issues instead of
+ * throwing.
+ *
+ * WHY return rather than throw: the callers want different error types from
+ * the same checks. The SDK query builder wraps these issues in a
+ * `KopaiQueryBuildError`; the MCP tool maps them into an `invalid_input`
+ * result with each path prefixed `query.` and the root path renamed. Handing
+ * back a plain list leaves that choice to the caller and keeps one
+ * dispatch-and-validate path shared instead of one copy per surface.
+ */
+export function parseKopaiQuery(input: unknown): ParseKopaiQueryResult {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return {
+      ok: false,
+      issues: [{ path: "", message: "Expected a query object." }],
+    };
+  }
+
+  const { signal, mode } = input as { signal?: unknown; mode?: unknown };
+
+  // Both halves are reported together: a caller that got one wrong has often
+  // got the other wrong too, and neither can be diagnosed by a branch schema
+  // because no branch can be selected without both.
+  const pairIssues: KopaiQueryIssue[] = [];
+  if (!isSignal(signal)) {
+    pairIssues.push({
+      path: "signal",
+      message: `Expected one of ${SIGNALS.join(", ")}.`,
+    });
+  }
+  if (!isQueryMode(mode)) {
+    pairIssues.push({
+      path: "mode",
+      message: `Expected one of ${MODES.join(", ")}.`,
+    });
+  }
+  if (pairIssues.length > 0) return { ok: false, issues: pairIssues };
+
+  const schema = branchSchemaFor(signal, mode);
+  if (!schema) {
+    // Unreachable while the branch table stays total over the pair above.
+    // Kept so that adding a signal or mode to one and not the other surfaces
+    // as an issue rather than as a crash.
+    return {
+      ok: false,
+      issues: [
+        {
+          path: "",
+          message: `No query shape for signal "${String(signal)}" in "${String(mode)}" mode.`,
+        },
+      ],
+    };
+  }
+
+  const parsed = schema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      issues: parsed.error.issues.map((i) => ({
+        path: i.path.join("."),
+        message: i.message,
+      })),
+    };
+  }
+
+  // Cross-field semantic checks the zod schema cannot express (required
+  // MetricType filter, having/orderBy alias and dimension references, numeric
+  // column typing). They throw on the first failure, so this is one issue
+  // against the query as a whole rather than a field.
+  try {
+    validateKopaiQuery(parsed.data as KopaiQuery);
+  } catch (e) {
+    return {
+      ok: false,
+      issues: [
+        { path: "", message: e instanceof Error ? e.message : String(e) },
+      ],
+    };
+  }
+
+  return { ok: true, data: parsed.data as KopaiQuery };
 }

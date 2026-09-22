@@ -1160,6 +1160,62 @@ export type LogRawQuery = z.infer<typeof LogRawQuery>;
 export type MetricAggregateQuery = z.infer<typeof MetricAggregateQuery>;
 export type MetricRawQuery = z.infer<typeof MetricRawQuery>;
 
+// ============================================================
+// Branch dispatch
+// ============================================================
+
+// The six branches of the `KopaiQuery` union, keyed by the `signal` x `mode`
+// pair that selects one.
+//
+// WHY: parsing an input against the whole union makes zod report every
+// branch's failures at once — six schemas' worth of issues for one wrong
+// field, with the useful one buried. A caller that can read `signal` and
+// `mode` off the input parses that single branch instead, and the issues it
+// gets back name the field actually got wrong. The pair is the union's own
+// discriminator in all but name; this table is the one place it is written
+// down as data rather than as a chain of conditionals.
+const BRANCH_SCHEMAS = {
+  traces: { aggregate: TraceAggregateQuery, raw: TraceRawQuery },
+  logs: { aggregate: LogAggregateQuery, raw: LogRawQuery },
+  metrics: { aggregate: MetricAggregateQuery, raw: MetricRawQuery },
+} as const;
+
+/** Every accepted `signal`, for listing back to a caller that sent another. */
+export const SIGNALS = Signal.options;
+
+/** Every accepted `mode`, for listing back to a caller that sent another. */
+export const MODES = ["aggregate", "raw"] as const;
+
+export type QueryMode = (typeof MODES)[number];
+
+export function isSignal(value: unknown): value is Signal {
+  return (
+    typeof value === "string" && (SIGNALS as readonly string[]).includes(value)
+  );
+}
+
+export function isQueryMode(value: unknown): value is QueryMode {
+  return (
+    typeof value === "string" && (MODES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * The one branch of `KopaiQuery` a `signal` x `mode` pair selects, or
+ * `undefined` when the pair names no branch.
+ *
+ * Callers that hold a validated pair can index the result directly; callers
+ * holding unvalidated input should treat `undefined` as "report which field
+ * is wrong", using `SIGNALS` and `MODES` for the accepted values.
+ */
+export function branchSchemaFor(
+  signal: unknown,
+  mode: unknown
+): (typeof BRANCH_SCHEMAS)[Signal][QueryMode] | undefined {
+  if (!isSignal(signal) || !isQueryMode(mode)) return undefined;
+  return BRANCH_SCHEMAS[signal][mode];
+}
+
 // Per-signal narrow types — exposed so backends + tooling can consume
 // them directly instead of redefining looser shapes locally.
 
@@ -1186,11 +1242,7 @@ export type NumericOp = z.infer<typeof NumericOp>;
 // MetricType literal — must stay in sync with telemetry-datasource so
 // backends can use either type as a single source of metric storage.
 export type MetricType =
-  | "Gauge"
-  | "Sum"
-  | "Histogram"
-  | "ExponentialHistogram"
-  | "Summary";
+  "Gauge" | "Sum" | "Histogram" | "ExponentialHistogram" | "Summary";
 
 export const METRIC_TYPES = [
   "Gauge",
