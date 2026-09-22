@@ -37,3 +37,13 @@ export interface McpRoutesOptions {
   /** Called once per completed tool call. Errors thrown here are swallowed. */
   onToolCall?: (event: ToolCallEvent) => void;
 }
+
+// Mirrors the identical augmentation in `@kopai/api`. Both packages mount into
+// the same Fastify instance and neither depends on the other, so each declares
+// what it reads. The declarations are structurally identical, which is what
+// keeps them compatible when both are present.
+declare module "fastify" {
+  interface FastifyRequest {
+    requestContext?: unknown;
+  }
+}

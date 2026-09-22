@@ -6,6 +6,7 @@ export {
   UNORDERED_OVERFLOW_REMEDIES,
 } from "./limits.js";
 export { registerTools, type RegisterToolsOptions } from "./register.js";
+export { mcpRoutes } from "./routes.js";
 export {
   errorResult,
   okResult,

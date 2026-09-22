@@ -10,6 +10,7 @@ import {
   runQueryTool,
   type ToolContext,
 } from "./tools.js";
+import type { ToolCallOutcome } from "./types.js";
 import { passThroughValidator } from "./validator.js";
 
 /**
@@ -47,7 +48,7 @@ export interface RegisterToolsOptions extends ToolContext {
    */
   onToolCall?: (event: {
     tool: string;
-    outcome: string;
+    outcome: ToolCallOutcome;
     durationMs: number;
     rowCount?: number;
   }) => void;
@@ -60,7 +61,7 @@ export function registerTools(
   const observe = (
     tool: string,
     startedAt: number,
-    outcome: string,
+    outcome: ToolCallOutcome,
     rowCount?: number
   ): void => {
     if (!opts.onToolCall) return;
