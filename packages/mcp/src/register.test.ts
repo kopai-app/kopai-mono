@@ -86,6 +86,12 @@ describe("registerTools", () => {
     expect(query?.config.description).toMatch(/signal/);
     expect(query?.config.description).toMatch(/200/);
     expect(query?.config.description).toMatch(/500/);
+    // The levers, stated where a model reads before it writes a query.
+    expect(query?.config.description).toMatch(
+      /multiplied by the number of time buckets/
+    );
+    expect(query?.config.description).toMatch(/two calls/);
+    expect(query?.config.description).toMatch(/metrics_discover/);
     expect(tools.find((t) => t.name === "metrics_discover")?.config.title).toBe(
       "Discover metrics"
     );

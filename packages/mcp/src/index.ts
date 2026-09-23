@@ -17,6 +17,12 @@ export {
   type ToolResult,
 } from "./results.js";
 export {
+  applyDescriptions,
+  descriptionOverrides,
+  type DescriptionOverride,
+} from "./describe.js";
+export {
+  DESCRIPTION_OVERRIDES_APPLIED,
   METRICS_DISCOVER_TOOL_INPUT_SCHEMA,
   QUERY_TOOL_INPUT_SCHEMA,
 } from "./schema.js";

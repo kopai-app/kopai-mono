@@ -1069,7 +1069,12 @@ const LogAggregateQuery = z
     signal: z.literal("logs"),
     mode: z.literal("aggregate"),
     measures: z.array(LogMeasureExpr).min(1),
-    dimensions: z.array(LogColumnRef).optional(),
+    dimensions: z
+      .array(LogColumnRef)
+      .optional()
+      .describe(
+        "GROUP BY columns. Omit for a single aggregated row across all matched log records."
+      ),
     filters: z.array(LogFilterExpr).optional(),
     havings: z.array(HavingExpr).optional(),
     timeDimension: TimeDimension,
@@ -1104,7 +1109,12 @@ const MetricAggregateQuery = z
     signal: z.literal("metrics"),
     mode: z.literal("aggregate"),
     measures: z.array(MetricMeasureExpr).min(1),
-    dimensions: z.array(MetricColumnRef).optional(),
+    dimensions: z
+      .array(MetricColumnRef)
+      .optional()
+      .describe(
+        "GROUP BY columns. Omit for a single aggregated row across all matched data points."
+      ),
     filters: z.array(MetricFilterExpr).optional(),
     havings: z.array(HavingExpr).optional(),
     timeDimension: TimeDimension,

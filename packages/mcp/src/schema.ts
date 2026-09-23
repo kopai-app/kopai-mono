@@ -2,6 +2,8 @@ import { kopaiQuery } from "@kopai/core";
 import { z } from "zod";
 
 import { dedupe } from "./dedupe.js";
+import { applyDescriptions, descriptionOverrides } from "./describe.js";
+import { LIMITS } from "./limits.js";
 
 /**
  * The `query` tool's input: the KopaiQuery body under a single `query`
@@ -19,8 +21,23 @@ const QueryToolInput = z.object({ query: kopaiQuery.KopaiQuery });
  * times a request's own work. The document depends on nothing request-scoped,
  * so it is built once per process and shared.
  */
+const OVERRIDES = descriptionOverrides(
+  LIMITS.raw.max,
+  LIMITS.aggregate.max,
+  LIMITS.raw.fallback,
+  LIMITS.aggregate.fallback
+);
+
+const described = applyDescriptions(
+  z.toJSONSchema(QueryToolInput, { io: "input" }) as Record<string, unknown>,
+  OVERRIDES
+);
+
+/** How many nodes each override matched. Asserted in the tests, not at runtime. */
+export const DESCRIPTION_OVERRIDES_APPLIED = described.applied;
+
 export const QUERY_TOOL_INPUT_SCHEMA: Record<string, unknown> = dedupe(
-  z.toJSONSchema(QueryToolInput, { io: "input" }) as Record<string, unknown>
+  described.document
 );
 
 /**

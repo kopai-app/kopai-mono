@@ -34,6 +34,12 @@ const QUERY_DESCRIPTION = [
   "Takes one KopaiQuery object under `query`, keyed on `signal` (traces, logs, metrics) and `mode` (raw, aggregate); the rest of the shape follows from that pair.",
   `Row caps are ${LIMITS.raw.max} in raw mode and ${LIMITS.aggregate.max} in aggregate mode, and a result above ${MAX_RESULT_CHARACTERS.toLocaleString("en-US")} characters is refused rather than truncated.`,
   "Aggregate is the compact shape; raw returns whole records and is for inspecting individual spans, logs or data points.",
+  // What decides whether a query fits. Stated here because the cost is a
+  // product of two fields, and a field-level description can only speak for
+  // one of them.
+  "An aggregate returns one row per distinct grouping, multiplied by the number of time buckets when `output` is a time series; that product is what the row cap applies to, not the number of records scanned.",
+  "Ranking over time takes two calls: a `summary` ordered by the measure to find the top groups, then a `timeSeries` filtered to those groups with `in`. One query cannot do both, because the ordering that picks them and the bucketing that draws them compete for the same `limit`.",
+  "For metrics, `metrics_discover` lists each metric's attribute keys and the values seen on them, which is how to judge a grouping column's cardinality before querying.",
 ].join(" ");
 
 const METRICS_DISCOVER_DESCRIPTION = [
