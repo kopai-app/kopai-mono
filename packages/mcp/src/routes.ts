@@ -1,4 +1,7 @@
-import { hostHeaderValidation } from "@modelcontextprotocol/fastify";
+import {
+  hostHeaderValidation,
+  originValidation,
+} from "@modelcontextprotocol/fastify";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
@@ -22,10 +25,29 @@ export const mcpRoutes: FastifyPluginAsync<McpRoutesOptions> =
     // on another origin from resolving a name it controls to 127.0.0.1 and
     // reaching a local server through the browser — the request arrives with
     // the attacker's hostname in `Host`, and that is what is checked.
-    //
-    // Origin validation is deliberately not mounted here: see the Q10 note in
-    // ADR-058. It is undecided, not forgotten.
     fastify.addHook("onRequest", hostHeaderValidation(opts.allowedHosts));
+
+    // Origin validation is opt-in, because the two mounts have different
+    // threat models. An unauthenticated local app has nothing but these
+    // headers between a web page and the data, and there the host and origin
+    // lists genuinely coincide — both are loopback. A deployed, authenticated
+    // mount has the credential as its boundary and usually already runs a CORS
+    // policy; adding a second, independently configured origin list there buys
+    // little and strands a future browser client behind a validator nobody
+    // remembers configuring.
+    //
+    // Host validation alone does not close this: a page that simply fetches
+    // http://127.0.0.1:<port>/mcp sends a genuinely loopback `Host`, and only
+    // `Origin` says who asked. That such a request is blocked today is
+    // incidental — it needs a CORS preflight, `OPTIONS` is unrouted, and the
+    // local app registers no CORS — and it stops being true the moment any of
+    // those three changes.
+    if (opts.allowedOriginHostnames !== undefined) {
+      fastify.addHook(
+        "onRequest",
+        originValidation(opts.allowedOriginHostnames)
+      );
+    }
 
     const handleMcp = async (
       request: FastifyRequest,

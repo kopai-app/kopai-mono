@@ -17,7 +17,11 @@ interface Harness {
 }
 
 async function start(
-  opts: { allowedHosts?: string[]; withContext?: boolean } = {}
+  opts: {
+    allowedHosts?: string[];
+    allowedOriginHostnames?: string[];
+    withContext?: boolean;
+  } = {}
 ): Promise<Harness> {
   const events: ToolCallEvent[] = [];
   const seenContexts: unknown[] = [];
@@ -40,6 +44,7 @@ async function start(
   await app.register(mcpRoutes, {
     readTelemetryDatasource,
     allowedHosts: opts.allowedHosts ?? ["localhost", "127.0.0.1"],
+    allowedOriginHostnames: opts.allowedOriginHostnames,
     onToolCall: (e) => events.push(e),
   });
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -331,5 +336,123 @@ describe("mcpRoutes — concurrency", () => {
     await app.close();
     expect(seen).toHaveLength(200);
     expect(seen.filter((s) => s.got !== s.sent)).toEqual([]);
+  });
+});
+
+describe("mcpRoutes — origin validation", () => {
+  const body = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: {
+      name: "query",
+      arguments: {
+        query: {
+          signal: "traces",
+          mode: "raw",
+          timeDimension: { type: "relative", lookback: "1h" },
+        },
+      },
+    },
+  });
+
+  const post = (port: number, headers: Record<string, string>) =>
+    raw(
+      port,
+      "POST",
+      "/mcp",
+      {
+        "content-type": "application/json",
+        accept: MCP_ACCEPT,
+        "content-length": String(Buffer.byteLength(body)),
+        ...headers,
+      },
+      body
+    );
+
+  describe("not configured — the default", () => {
+    let h: Harness;
+    beforeAll(async () => {
+      h = await start();
+    });
+    afterAll(async () => {
+      await h.app.close();
+    });
+
+    it("lets a page on any origin through, which is why a local mount opts in", async () => {
+      const res = await post(h.port, {
+        host: `127.0.0.1:${h.port}`,
+        origin: "https://evil.example.com",
+      });
+      expect(res.status).toBe(200);
+      expect(res.text).toContain("SpanId");
+    });
+  });
+
+  describe("configured", () => {
+    let h: Harness;
+    beforeAll(async () => {
+      h = await start({ allowedOriginHostnames: ["localhost", "127.0.0.1"] });
+    });
+    afterAll(async () => {
+      await h.app.close();
+    });
+
+    it("refuses a page on a foreign origin, with no data", async () => {
+      const res = await post(h.port, {
+        host: `127.0.0.1:${h.port}`,
+        origin: "https://evil.example.com",
+      });
+      expect(res.status).toBe(403);
+      expect(res.text).not.toContain("SpanId");
+    });
+
+    it("admits a page on an allow-listed origin, whatever its port", async () => {
+      const res = await post(h.port, {
+        host: `127.0.0.1:${h.port}`,
+        origin: "http://localhost:5173",
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("admits a client that sends no Origin — only browsers are constrained", async () => {
+      const res = await post(h.port, { host: `127.0.0.1:${h.port}` });
+      expect(res.status).toBe(200);
+    });
+
+    it("still refuses a forged Host, whatever the Origin says", async () => {
+      const res = await post(h.port, {
+        host: "evil.example.com",
+        origin: "http://localhost:5173",
+      });
+      expect(res.status).toBe(403);
+    });
+  });
+
+  // The trap the option's name exists to avoid. The validator compares
+  // hostnames; anything shaped like a CORS origin list silently refuses the
+  // very origins it was meant to admit, and both shapes are valid string[].
+  describe("the hostname-versus-origin trap", () => {
+    it("refuses the legitimate origin when given origins instead of hostnames", async () => {
+      const h = await start({
+        allowedOriginHostnames: ["http://localhost:5173"],
+      });
+      const res = await post(h.port, {
+        host: `127.0.0.1:${h.port}`,
+        origin: "http://localhost:5173",
+      });
+      await h.app.close();
+      expect(res.status).toBe(403);
+    });
+
+    it('refuses everything when given "*", which is not a wildcard here', async () => {
+      const h = await start({ allowedOriginHostnames: ["*"] });
+      const res = await post(h.port, {
+        host: `127.0.0.1:${h.port}`,
+        origin: "http://localhost:5173",
+      });
+      await h.app.close();
+      expect(res.status).toBe(403);
+    });
   });
 });

@@ -34,6 +34,29 @@ export interface McpRoutesOptions {
    * a DNS-rebinding page from reaching a local server.
    */
   allowedHosts: string[];
+  /**
+   * Hostnames that may appear in a browser's `Origin` header. Omit to mount no
+   * origin validation at all, which is the default.
+   *
+   * WHY hostnames, and why a separate list from {@link allowedHosts}: the two
+   * answer different questions. `allowedHosts` is the hostname this server is
+   * reached at; this is the hostname of a page allowed to reach it. On a local
+   * app they coincide, both being loopback. On a deployed one they do not —
+   * the API and the dashboard live at different names — so conflating them
+   * either refuses the dashboard or forces the host list wide enough to weaken
+   * the rebinding check.
+   *
+   * WHY hostnames and not origins: the underlying validator compares
+   * hostnames, port-agnostically. Passing a full origin such as
+   * `"https://app.example.com"` refuses that very origin, and passing `"*"`
+   * refuses everything — both silently, since either is a valid `string[]`.
+   * Anything shaped like a CORS `origin` list belongs in a CORS plugin, not
+   * here.
+   *
+   * A request with no `Origin` header passes by design, so non-browser clients
+   * are unaffected; only browsers are constrained.
+   */
+  allowedOriginHostnames?: string[];
   /** Called once per completed tool call. Errors thrown here are swallowed. */
   onToolCall?: (event: ToolCallEvent) => void;
 }
