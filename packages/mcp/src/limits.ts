@@ -56,15 +56,23 @@ export const SIZE_REMEDIES = [
 ] as const;
 
 /**
- * Remedies offered when an aggregate query overruns its cap with no `orderBy`.
+ * Remedies for an aggregate query that overran its cap.
  *
- * WHY these and not simply "raise the limit": the cap is the limit. Without an
- * ordering the database has no defined notion of which rows to keep, so the
- * caller has to make the result smaller or say which rows matter.
+ * WHY there is no "add an `orderBy`" line: an ordering does not change the
+ * outcome. An overflow is refused whether or not the query is ordered, because
+ * a live page cannot act on a remedy — its query was fixed at authoring time
+ * and its viewer did not write it — so a truncated result would be drawn as
+ * though it were the whole set. Suggesting an ordering would be suggesting
+ * something that still fails.
+ *
+ * Raising `limit` is offered only when there is headroom below the cap; at the
+ * cap the only way out is a smaller result.
  */
-export const UNORDERED_OVERFLOW_REMEDIES = [
-  'Use a coarser `granularity` — "30m" yields six buckets over an hour where "5m" yields thirty-six.',
-  "Narrow the time window.",
-  "Group by fewer dimensions, or filter to the groups you care about.",
-  "Add an `orderBy`, which makes the truncation defined and returns the top rows.",
-] as const;
+export function overflowRemedies(limit: number, max: number): string[] {
+  return [
+    ...(limit < max ? [`Raise \`limit\`, up to ${max}.`] : []),
+    'Use a coarser `granularity` — "30m" yields six buckets over an hour where "5m" yields thirty-six.',
+    "Narrow the time window.",
+    "Group by fewer dimensions, or filter to the groups you care about.",
+  ];
+}

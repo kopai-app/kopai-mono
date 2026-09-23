@@ -168,10 +168,14 @@ describe("runQueryTool — aggregate overflow", () => {
     const payload = payloadOf(run.result);
     expect(payload.error).toBe("result_too_large");
     expect(payload.data).toBeUndefined();
-    expect((payload.remedies as string[]).join(" ")).toMatch(/orderBy/);
+    expect((payload.remedies as string[]).join(" ")).toMatch(/granularity/);
   });
 
-  it("truncates an ordered overflow and says so", async () => {
+  // An ordering makes truncation well defined, and it is still refused: a page
+  // cannot act on a remedy, so a partial result would be drawn as the whole
+  // set. Refusing is what makes ADR-059's "never draw a partial chart" hold
+  // without every page having to check a flag.
+  it("refuses an ordered overflow too, rather than truncating", async () => {
     const { ds } = fakeDatasource(() => ({ data: rows(11) }));
     const run = await runQueryTool(
       aggQuery({
@@ -180,10 +184,41 @@ describe("runQueryTool — aggregate overflow", () => {
       }),
       { readTelemetryDatasource: ds }
     );
-    expect(run.outcome).toBe("ok");
+    expect(run.outcome).toBe("result_too_large");
     const payload = payloadOf(run.result);
-    expect((payload.data as unknown[]).length).toBe(10);
-    expect(payload.truncated).toBe(true);
+    expect(payload.data).toBeUndefined();
+    expect(payload.truncated).toBeUndefined();
+  });
+
+  it("never suggests adding an `orderBy`, which would not help", async () => {
+    const { ds } = fakeDatasource(() => ({ data: rows(11) }));
+    const run = await runQueryTool(aggQuery({ limit: 10 }), {
+      readTelemetryDatasource: ds,
+    });
+    expect((payloadOf(run.result).remedies as string[]).join(" ")).not.toMatch(
+      /orderBy/
+    );
+  });
+
+  it("offers a higher limit only when there is headroom below the cap", async () => {
+    const { ds } = fakeDatasource(() => ({
+      data: rows(LIMITS.aggregate.max + 1),
+    }));
+
+    const withRoom = await runQueryTool(aggQuery({ limit: 10 }), {
+      readTelemetryDatasource: ds,
+    });
+    expect((payloadOf(withRoom.result).remedies as string[]).join(" ")).toMatch(
+      /Raise `limit`/
+    );
+
+    const atCap = await runQueryTool(
+      aggQuery({ limit: LIMITS.aggregate.max }),
+      { readTelemetryDatasource: ds }
+    );
+    expect(
+      (payloadOf(atCap.result).remedies as string[]).join(" ")
+    ).not.toMatch(/Raise `limit`/);
   });
 });
 

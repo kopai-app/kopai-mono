@@ -13,6 +13,5 @@ as `invalid_input` at `query`. And the success payload is asserted
 byte-identical to what the REST route returns for the same query — the
 same-JSON-as-REST promise, now checked rather than stated.
 
-Overflow behaviour is exercised against real rows too: an unordered aggregate
-over its cap is refused with no rows, and an ordered one is truncated and says
-so.
+Overflow behaviour is exercised against real rows too: an aggregate over its
+cap is refused with no rows, ordered or not.

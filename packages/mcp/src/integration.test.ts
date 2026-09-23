@@ -274,10 +274,12 @@ describe("against a real SQLite datasource", () => {
     expect(res.isError).toBe(true);
     expect(res.structured?.error).toBe("result_too_large");
     expect(res.structured?.data).toBeUndefined();
-    expect((res.structured?.remedies as string[]).join(" ")).toMatch(/orderBy/);
+    expect((res.structured?.remedies as string[]).join(" ")).toMatch(
+      /granularity/
+    );
   });
 
-  it("truncates a real ordered aggregate overflow and says so", async () => {
+  it("refuses a real ordered aggregate overflow too", async () => {
     for (let i = 0; i < 4; i++) {
       await writeSpan({
         traceId: `trace${i}`,
@@ -296,9 +298,10 @@ describe("against a real SQLite datasource", () => {
         orderBy: [{ type: "measure", alias: "spans", direction: "desc" }],
       })
     );
-    expect(res.isError).toBe(false);
-    expect((res.structured?.data as unknown[]).length).toBe(2);
-    expect(res.structured?.truncated).toBe(true);
+    expect(res.isError).toBe(true);
+    expect(res.structured?.error).toBe("result_too_large");
+    expect(res.structured?.data).toBeUndefined();
+    expect(res.structured?.truncated).toBeUndefined();
   });
 
   it("rejects an over-cap raw limit before reaching the database", async () => {

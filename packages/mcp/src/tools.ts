@@ -3,8 +3,8 @@ import { kopaiQuery, kopaiQueryCompiler, type datasource } from "@kopai/core";
 import {
   LIMITS,
   MAX_RESULT_CHARACTERS,
+  overflowRemedies,
   SIZE_REMEDIES,
-  UNORDERED_OVERFLOW_REMEDIES,
 } from "./limits.js";
 import {
   errorResult,
@@ -136,25 +136,29 @@ export async function runQueryTool(
   if (isAggregate) {
     const rows = (payload as { data?: unknown[] }).data ?? [];
     if (rows.length > limit) {
-      // WHY an unordered overflow is refused rather than truncated: the
-      // aggregate compiler emits no ORDER BY when `orderBy` is absent, so a
-      // LIMIT drops an arbitrary subset. For a time series — whose rows are
-      // groups times buckets — that yields a scatter of (group, bucket) pairs
-      // that reads as real data and is not. `bucket_start` cannot rescue it:
-      // it is a computed SELECT alias, neither a dimension nor a measure, so
-      // a time series cannot be sorted by time at all.
-      if (query.orderBy === undefined || query.orderBy.length === 0) {
-        return tooLarge(
-          `The query returned more than ${limit} rows with no \`orderBy\`, so there is no defined way to choose which to keep.`,
-          UNORDERED_OVERFLOW_REMEDIES
-        );
-      }
-      // Ordered: the caller chose which rows matter, so truncation is defined.
-      payload = {
-        ...(payload as Record<string, unknown>),
-        data: rows.slice(0, limit),
-        truncated: true,
-      };
+      // An aggregate that overruns its cap is refused outright, with no rows,
+      // whether or not it carries an `orderBy`.
+      //
+      // WHY refuse rather than truncate, even when an ordering makes the
+      // truncation well defined: a live page cannot act on a remedy. Its query
+      // was fixed when the page was authored and its viewer did not write it,
+      // so a partial result would simply be drawn as though it were the whole
+      // set — the top N groups rendered as if they were all the groups.
+      // ADR-059 requires a page to show an explicit "outgrew its query" state
+      // and never draw a partial chart, and refusing is what makes that hold
+      // without every page having to check a flag it may not know about.
+      //
+      // Without an ordering it would be worse still: the aggregate compiler
+      // emits no ORDER BY when `orderBy` is absent, so a LIMIT drops an
+      // arbitrary subset — and for a time series, whose rows are groups times
+      // buckets, that is a scatter of (group, bucket) pairs that reads as real
+      // data. `bucket_start` cannot rescue it either: it is a computed SELECT
+      // alias, neither a dimension nor a measure, so a time series cannot be
+      // sorted by time at all.
+      return tooLarge(
+        `The query returned more than the ${limit} rows it asked for.`,
+        overflowRemedies(limit, max)
+      );
     }
   }
 

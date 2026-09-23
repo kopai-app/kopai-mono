@@ -2,8 +2,8 @@ export { dedupe } from "./dedupe.js";
 export {
   LIMITS,
   MAX_RESULT_CHARACTERS,
+  overflowRemedies,
   SIZE_REMEDIES,
-  UNORDERED_OVERFLOW_REMEDIES,
 } from "./limits.js";
 export { registerTools, type RegisterToolsOptions } from "./register.js";
 export { mcpRoutes } from "./routes.js";
