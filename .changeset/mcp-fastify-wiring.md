@@ -27,7 +27,8 @@ once the reply is hijacked, so `reply.header()` is silently dropped here.
 
 Host-header validation is mounted as an `onRequest` hook over a port-agnostic
 allow-list, which is what refuses a DNS-rebinding request. Origin validation is
-deliberately not mounted; that decision is still open.
+mounted the same way, but only when `allowedOriginHostnames` is set — see the
+note on that option for why it is opt-in.
 
 `responseMode` is not passed to `createMcpHandler`: it is byte-identical to the
 `auto` default across every combination measured, its only observable effect is

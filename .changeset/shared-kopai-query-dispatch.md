@@ -1,6 +1,6 @@
 ---
 "@kopai/core": minor
-"@kopai/sdk": patch
+"@kopai/sdk": minor
 ---
 
 Share the KopaiQuery branch dispatch and validation between the query builder
@@ -24,6 +24,12 @@ different error types from the same checks — the query builder wraps them in a
 `KopaiQueryBuildError`, and other surfaces map them into their own error shape.
 
 `@kopai/sdk`'s query builder now delegates to it and drops its private
-`SCHEMA_MAP`. `kq`, `KopaiQueryBuildError` and every issue path are unchanged;
-this is an internal refactor with no behaviour change, and the builder's tests
-pass untouched.
+`SCHEMA_MAP`. `kq` and `KopaiQueryBuildError` are unchanged and the builder's
+tests pass untouched, but the issues that error carries are not. The builder
+used to map zod's raw output straight through; it now receives what
+`explainIssues` rewrote, so both paths and messages move — `filters.0` becomes
+`filters.0.column`, and `dimensions.0`'s bare `Invalid input` becomes
+`Unknown value "ServiceName". Did you mean "service.name"?`. Nothing changes
+about what is accepted or rejected, but a caller matching on `issue.path` or
+`issue.message` sees different values, which is why `@kopai/sdk` takes a minor
+bump rather than a patch.
