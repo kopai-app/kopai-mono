@@ -182,9 +182,22 @@ function explainCommonKey(
   };
 }
 
-/** How many of the value's own keys this member actually declares. */
+/**
+ * How many of the value's own keys this member actually declares.
+ *
+ * A member may itself be a union — the filter expression mixes the
+ * discriminated leaf set with the `and`/`or` shapes — and a union has no shape
+ * of its own. Scoring it zero put the leaf level with wrappers that declare
+ * none of its keys, so a leaf with two mistakes lost on issue count to a
+ * wrapper's single "expected array", and the caller was told to add an `and`
+ * they never meant to write. Its best member's score is the union's.
+ */
 function keyOverlap(option: Schema, value: unknown): number {
-  const shape = def(unwrap(option))?.shape;
+  const d = def(unwrap(option));
+  if (d?.type === "union") {
+    return Math.max(0, ...(d.options ?? []).map((o) => keyOverlap(o, value)));
+  }
+  const shape = d?.shape;
   if (!shape || value === null || typeof value !== "object") return 0;
   return Object.keys(value as Record<string, unknown>).filter((k) => k in shape)
     .length;

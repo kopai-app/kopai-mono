@@ -33,6 +33,23 @@ describe("union issues name the field, not the union", () => {
     expect(issues[0]?.message).not.toBe("Invalid input");
   });
 
+  // The leaf and the `and`/`or` wrappers are siblings in the same union, and a
+  // wrapper rejects any leaf with a single "expected array" issue. Counting
+  // issues alone therefore hands a two-mistake leaf to the wrapper, and the
+  // caller is told to add an `and` array they never meant to write.
+  it("keeps a leaf filter with two mistakes out of the `and` wrapper", () => {
+    const issues = issuesFor({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: td,
+      filters: [{ column: "NoSuchColumn", op: "eq", value: {} }],
+    });
+    expect(issues.map((i) => i.path)).toEqual([
+      "filters.0.column",
+      "filters.0.value",
+    ]);
+  });
+
   it("descends through the self-referential filter schema", () => {
     const issues = issuesFor({
       signal: "traces",
