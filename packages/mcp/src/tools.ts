@@ -157,7 +157,7 @@ export async function runQueryTool(
       // sorted by time at all.
       return tooLarge(
         `The query returned more than the ${limit} rows it asked for.`,
-        overflowRemedies(limit, max)
+        overflowRemedies(query, limit, max)
       );
     }
   }

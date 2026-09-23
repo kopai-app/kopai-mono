@@ -36,6 +36,13 @@ would be worse again, since the aggregate compiler emits no `ORDER BY` when
 `orderBy` is absent and a limit would drop an arbitrary subset — for a time
 series, a scatter of (group, bucket) pairs that reads as real data.
 
+Overflow remedies are ordered by whichever factor caused the overflow. An
+aggregate returns groups times buckets rows, and the two need opposite advice:
+a summary query grouping by a high-cardinality column has no granularity to
+coarsen, while a window cut into more buckets than the cap allows cannot be
+regrouped out of. The bucket count is derived from the window and the
+granularity, which is enough to tell the two apart.
+
 Errors are `isError: true` with a `{ error, message, issues?, remedies? }`
 payload, `error` first so the serialized JSON opens with the code. Codes reuse
 the four outcome labels. A `KopaiQueryValidationError` becomes `invalid_input`

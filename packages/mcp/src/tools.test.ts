@@ -172,7 +172,48 @@ describe("runQueryTool — aggregate overflow", () => {
     const payload = payloadOf(run.result);
     expect(payload.error).toBe("result_too_large");
     expect(payload.data).toBeUndefined();
-    expect((payload.remedies as string[]).join(" ")).toMatch(/granularity/);
+    expect((payload.remedies as string[]).length).toBeGreaterThan(0);
+  });
+
+  // The two causes of an overflow need opposite advice, and the query itself
+  // says which one is in play.
+  const remediesFor = async (extra: Record<string, unknown>) => {
+    const { ds } = fakeDatasource(() => ({ data: rows(11) }));
+    const run = await runQueryTool(aggQuery({ limit: 10, ...extra }), {
+      readTelemetryDatasource: ds,
+    });
+    return (payloadOf(run.result).remedies as string[]) ?? [];
+  };
+
+  it("says nothing about granularity for a summary query, which has none", async () => {
+    const remedies = await remediesFor({ dimensions: ["SpanName"] });
+    expect(remedies.join(" ")).not.toMatch(/granularity/);
+    expect(remedies[0]).toMatch(/Raise `limit`/);
+    expect(remedies[1]).toMatch(/fewer dimensions/);
+  });
+
+  it("leads with granularity when the buckets alone exceed the cap", async () => {
+    const remedies = await remediesFor({
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "timeSeries", granularity: "1s" },
+    });
+    // 3,600 buckets against a limit of 10: no amount of regrouping helps.
+    expect(remedies.find((r) => /granularity/.test(r))).toMatch(
+      /3,600 buckets/
+    );
+    expect(remedies.join(" ")).not.toMatch(/fewer dimensions/);
+  });
+
+  it("leads with grouping when the buckets fit and the groups do not", async () => {
+    const remedies = await remediesFor({
+      dimensions: ["SpanName"],
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "timeSeries", granularity: "10m" },
+    });
+    const groupsAt = remedies.findIndex((r) => /fewer dimensions/.test(r));
+    const granularityAt = remedies.findIndex((r) => /granularity/.test(r));
+    expect(groupsAt).toBeGreaterThanOrEqual(0);
+    expect(granularityAt).toBeGreaterThan(groupsAt);
   });
 
   // An ordering makes truncation well defined, and it is still refused: a page

@@ -1,3 +1,5 @@
+import { kopaiQuery } from "@kopai/core";
+
 /**
  * Row caps, per mode.
  *
@@ -56,23 +58,90 @@ export const SIZE_REMEDIES = [
 ] as const;
 
 /**
- * Remedies for an aggregate query that overran its cap.
+ * How many time buckets the window will be cut into, or 1 for a summary.
+ *
+ * WHY this is worth computing: an aggregate's row count is groups times
+ * buckets, and the two need opposite advice. Buckets are exactly derivable
+ * from the window and the granularity, which is enough to tell the two causes
+ * apart — if the buckets alone exceed the cap then no amount of regrouping
+ * will help, and if they do not then the group cardinality is what overran.
+ */
+function bucketCount(query: kopaiQuery.KopaiQuery): number {
+  if (query.mode !== "aggregate" || query.output.type !== "timeSeries")
+    return 1;
+
+  const granularityNs = kopaiQuery.durationStringToNanos(
+    query.output.granularity
+  );
+  if (typeof granularityNs !== "number" || granularityNs <= 0) return 1;
+
+  const window = query.timeDimension;
+  let windowNs: number;
+  if (window.type === "relative") {
+    const lookbackNs = kopaiQuery.durationStringToNanos(window.lookback);
+    if (typeof lookbackNs !== "number") return 1;
+    windowNs = lookbackNs;
+  } else {
+    const span = Date.parse(window.endTime) - Date.parse(window.startTime);
+    if (!Number.isFinite(span) || span <= 0) return 1;
+    windowNs = span * 1e6;
+  }
+
+  return Math.max(1, Math.ceil(windowNs / granularityNs));
+}
+
+/**
+ * Remedies for an aggregate query that overran its cap, ordered by whichever
+ * factor actually caused it.
+ *
+ * WHY ordered rather than a fixed list: an aggregate returns groups times
+ * buckets rows, and advice for one is useless for the other. Telling someone
+ * grouping by a high-cardinality column in a `summary` query to use a coarser
+ * granularity names a field their query does not have; telling someone whose
+ * window is cut into more buckets than the cap allows to group by less will
+ * not help them either.
  *
  * WHY there is no "add an `orderBy`" line: an ordering does not change the
  * outcome. An overflow is refused whether or not the query is ordered, because
  * a live page cannot act on a remedy — its query was fixed at authoring time
  * and its viewer did not write it — so a truncated result would be drawn as
- * though it were the whole set. Suggesting an ordering would be suggesting
- * something that still fails.
- *
- * Raising `limit` is offered only when there is headroom below the cap; at the
- * cap the only way out is a smaller result.
+ * though it were the whole set.
  */
-export function overflowRemedies(limit: number, max: number): string[] {
-  return [
-    ...(limit < max ? [`Raise \`limit\`, up to ${max}.`] : []),
-    'Use a coarser `granularity` — "30m" yields six buckets over an hour where "5m" yields thirty-six.',
-    "Narrow the time window.",
-    "Group by fewer dimensions, or filter to the groups you care about.",
-  ];
+export function overflowRemedies(
+  query: kopaiQuery.KopaiQuery,
+  limit: number,
+  max: number
+): string[] {
+  const buckets = bucketCount(query);
+  const isTimeSeries = buckets > 1;
+  const grouped =
+    query.mode === "aggregate" && (query.dimensions?.length ?? 0) > 0;
+
+  const raiseLimit = limit < max ? [`Raise \`limit\`, up to ${max}.`] : [];
+  // States what the declared window spans, not how many rows came back: a
+  // bucket only materialises where there is data, so this is an upper bound.
+  // It is still the useful number, because it is the one the caller chose.
+  const coarser = `Use a coarser \`granularity\`: at this granularity the window spans up to ${buckets.toLocaleString("en-US")} buckets, and every group is counted once per bucket.`;
+  const fewerGroups =
+    "Group by fewer dimensions, or filter to the groups you care about — a high-cardinality column such as a span name or a route produces a row per distinct value.";
+  const narrower = "Narrow the time window.";
+  const summarise_ =
+    'Use `output: { type: "summary" }` if the trend over time is not what you need.';
+
+  // The buckets alone exceed the cap, so this cannot be regrouped out of.
+  if (isTimeSeries && buckets > limit) {
+    return [...raiseLimit, coarser, narrower, summarise_];
+  }
+
+  if (isTimeSeries) {
+    // Rows are groups times buckets and the buckets fit, so the groups are
+    // what overran — but a coarser granularity still divides the total, so it
+    // stays on the list, second.
+    return grouped
+      ? [...raiseLimit, fewerGroups, coarser, narrower, summarise_]
+      : [...raiseLimit, coarser, narrower];
+  }
+
+  // A summary query has no granularity at all; naming one would be noise.
+  return [...raiseLimit, fewerGroups, narrower];
 }

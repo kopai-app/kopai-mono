@@ -274,8 +274,9 @@ describe("against a real SQLite datasource", () => {
     expect(res.isError).toBe(true);
     expect(res.structured?.error).toBe("result_too_large");
     expect(res.structured?.data).toBeUndefined();
+    // A summary query has no granularity, so the advice is about grouping.
     expect((res.structured?.remedies as string[]).join(" ")).toMatch(
-      /granularity/
+      /fewer dimensions/
     );
   });
 
