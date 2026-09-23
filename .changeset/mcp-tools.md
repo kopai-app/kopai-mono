@@ -41,7 +41,13 @@ aggregate returns groups times buckets rows, and the two need opposite advice:
 a summary query grouping by a high-cardinality column has no granularity to
 coarsen, while a window cut into more buckets than the cap allows cannot be
 regrouped out of. The bucket count is derived from the window and the
-granularity, which is enough to tell the two apart.
+granularity, which is enough to tell the two apart. It counts boundaries rather
+than whole spans: both backends snap a timestamp to a fixed offset from the
+epoch, so a window that does not start on a boundary straddles one bucket more
+than it has whole granularities — an hour at `5m` starting at :02:30 is
+thirteen buckets, not twelve. An absolute window is counted exactly; a relative
+one ends at the clock reading taken when the query runs, so it carries the
+extra bucket unconditionally.
 
 Errors are `isError: true` with a `{ error, message, issues?, remedies? }`
 payload, `error` first so the serialized JSON opens with the code. Codes reuse

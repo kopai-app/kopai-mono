@@ -65,6 +65,15 @@ export const SIZE_REMEDIES = [
  * from the window and the granularity, which is enough to tell the two causes
  * apart — if the buckets alone exceed the cap then no amount of regrouping
  * will help, and if they do not then the group cardinality is what overran.
+ *
+ * WHY boundaries rather than whole spans: neither backend cuts the window into
+ * granularity-sized pieces starting at its own start. Both snap each timestamp
+ * to a fixed boundary measured from the epoch — `(ts / g) * g` in SQLite,
+ * `toStartOfInterval(ts, INTERVAL n SECOND)` in ClickHouse — so a window that
+ * does not begin on a boundary straddles one more bucket than it has whole
+ * granularities. Measured against a real SQLite datasource: an hour at `5m`
+ * starting at :02:30 produces thirteen distinct `bucket_start` values, not
+ * twelve. Counting whole spans understated every unaligned window by one.
  */
 function bucketCount(query: kopaiQuery.KopaiQuery): number {
   if (query.mode !== "aggregate" || query.output.type !== "timeSeries")
@@ -76,18 +85,30 @@ function bucketCount(query: kopaiQuery.KopaiQuery): number {
   if (typeof granularityNs !== "number" || granularityNs <= 0) return 1;
 
   const window = query.timeDimension;
-  let windowNs: number;
+
   if (window.type === "relative") {
     const lookbackNs = kopaiQuery.durationStringToNanos(window.lookback);
-    if (typeof lookbackNs !== "number") return 1;
-    windowNs = lookbackNs;
-  } else {
-    const span = Date.parse(window.endTime) - Date.parse(window.startTime);
-    if (!Number.isFinite(span) || span <= 0) return 1;
-    windowNs = span * 1e6;
+    if (typeof lookbackNs !== "number" || lookbackNs <= 0) return 1;
+    // A relative window ends at the clock reading taken when the query runs,
+    // so where it falls against the boundaries is not knowable from the query
+    // alone. One extra bucket is the bound that holds for every alignment.
+    return Math.ceil(lookbackNs / granularityNs) + 1;
   }
 
-  return Math.max(1, Math.ceil(windowNs / granularityNs));
+  // An absolute window is exact. Work in milliseconds: a granularity is a
+  // whole number of seconds, and epoch nanoseconds are past the range a
+  // double represents exactly.
+  const startMs = Date.parse(window.startTime);
+  const endMs = Date.parse(window.endTime);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs)
+    return 1;
+  const granularityMs = granularityNs / 1e6;
+
+  // The window is half-open (`>= start AND < end` in both backends), so the
+  // last bucket is the last boundary strictly below `endTime`.
+  const firstBoundary = Math.floor(startMs / granularityMs);
+  const lastBoundary = Math.ceil(endMs / granularityMs) - 1;
+  return Math.max(1, lastBoundary - firstBoundary + 1);
 }
 
 /**

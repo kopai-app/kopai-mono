@@ -197,11 +197,44 @@ describe("runQueryTool — aggregate overflow", () => {
       timeDimension: { type: "relative", lookback: "1h" },
       output: { type: "timeSeries", granularity: "1s" },
     });
-    // 3,600 buckets against a limit of 10: no amount of regrouping helps.
+    // 3,601 buckets against a limit of 10: no amount of regrouping helps.
+    // A relative window ends at the clock reading taken when the query runs,
+    // so it lands on a boundary only by chance — the count carries the extra
+    // bucket that an unaligned window touches.
     expect(remedies.find((r) => /granularity/.test(r))).toMatch(
-      /3,600 buckets/
+      /3,601 buckets/
     );
     expect(remedies.join(" ")).not.toMatch(/fewer dimensions/);
+  });
+
+  // Both backends bucket on fixed boundaries — `(ts / g) * g` in SQLite,
+  // `toStartOfInterval(ts, INTERVAL n SECOND)` in ClickHouse — so the count is
+  // how many boundaries the half-open window touches, not how many whole
+  // granularities fit inside it.
+  it("counts the boundaries an unaligned window touches, not the whole spans", async () => {
+    const remedies = await remediesFor({
+      timeDimension: {
+        type: "absolute",
+        startTime: "2026-01-01T00:02:30.000Z",
+        endTime: "2026-01-01T01:02:30.000Z",
+      },
+      output: { type: "timeSeries", granularity: "5m" },
+    });
+    // 00:00 through 01:00 inclusive: twelve whole 5m spans, thirteen buckets.
+    expect(remedies.find((r) => /granularity/.test(r))).toMatch(/13 buckets/);
+  });
+
+  it("counts an aligned window exactly, without an edge bucket", async () => {
+    const remedies = await remediesFor({
+      timeDimension: {
+        type: "absolute",
+        startTime: "2026-01-01T00:00:00.000Z",
+        endTime: "2026-01-01T01:00:00.000Z",
+      },
+      output: { type: "timeSeries", granularity: "5m" },
+    });
+    // The window ends exactly on a boundary, and `< end` excludes it.
+    expect(remedies.find((r) => /granularity/.test(r))).toMatch(/12 buckets/);
   });
 
   it("leads with grouping when the buckets fit and the groups do not", async () => {
