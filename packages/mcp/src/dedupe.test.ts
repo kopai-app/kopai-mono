@@ -107,4 +107,30 @@ describe("dedupe", () => {
       type: "integer",
     });
   });
+
+  it("does not let a hoisted definition collide with an existing name", () => {
+    // A caller's document may already use the generated naming scheme. The
+    // hoisted body and the existing definition then claim the same name, and
+    // whichever is written second silently wins — leaving every $ref the
+    // hoist inserted pointing at an unrelated schema.
+    const repeated = {
+      type: "string",
+      description: "repeated across two properties, long enough to hoist",
+    };
+    const doc = dedupe({
+      type: "object",
+      properties: { a: { ...repeated }, b: { ...repeated } },
+      $defs: { s0: { type: "integer", description: "the caller's own s0" } },
+    });
+
+    const defs = doc.$defs as Record<string, Record<string, unknown>>;
+    expect(defs.s0).toEqual({
+      type: "integer",
+      description: "the caller's own s0",
+    });
+
+    const props = doc.properties as Record<string, { $ref?: string }>;
+    const ref = props.a?.$ref ?? "";
+    expect(defs[ref.replace("#/$defs/", "")]).toEqual(repeated);
+  });
 });

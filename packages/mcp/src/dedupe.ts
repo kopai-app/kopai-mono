@@ -128,7 +128,13 @@ export function dedupe(doc: SchemaNode, minLen = 60): SchemaNode {
     (a, b) => b[0].length - a[0].length
   )) {
     if (seen < 2) continue;
-    const name = `s${next++}`;
+    // Step over any name the document already defines. The write loop below
+    // lets an existing definition win, so a collision would drop the hoisted
+    // body and leave every `$ref` substituted for it pointing at an
+    // unrelated schema — a document that still compiles but accepts
+    // different input.
+    let name = `s${next++}`;
+    while (Object.hasOwn(existingDefs, name)) name = `s${next++}`;
     refNames.set(key, name);
     newDefs[name] = JSON.parse(key) as SchemaNode;
   }
