@@ -73,8 +73,12 @@ describe("runQueryTool — input validation", () => {
       { readTelemetryDatasource: ds }
     );
     expect(run.outcome).toBe("invalid_input");
-    const issues = payloadOf(run.result).issues as { path: string }[];
-    expect(issues.map((i) => i.path)).toEqual(["query.measures.0"]);
+    const issues = payloadOf(run.result).issues as {
+      path: string;
+      message: string;
+    }[];
+    expect(issues.map((i) => i.path)).toEqual(["query.measures.0.column"]);
+    expect(issues[0]?.message).toMatch(/NoSuchColumn/);
   });
 
   it("maps a cross-field compiler rejection to one issue at `query`", async () => {

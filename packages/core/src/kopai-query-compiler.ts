@@ -21,6 +21,9 @@ import {
   type MetricType,
   type TraceColumnRef,
 } from "./kopai-query.js";
+import { explainIssues } from "./kopai-query-issues.js";
+export type { KopaiQueryIssue } from "./kopai-query-compiler-types.js";
+import type { KopaiQueryIssue } from "./kopai-query-compiler-types.js";
 
 // Union of every per-signal narrow column ref — used by internal
 // walkers that need to introspect filter/order/measure column values.
@@ -762,12 +765,6 @@ export function validateKopaiQuery(q: KopaiQuery): void {
 // Parse + validate, as one step
 // ============================================================
 
-/** One problem with a query, at a dotted path; `""` is the query as a whole. */
-export interface KopaiQueryIssue {
-  path: string;
-  message: string;
-}
-
 export type ParseKopaiQueryResult =
   { ok: true; data: KopaiQuery } | { ok: false; issues: KopaiQueryIssue[] };
 
@@ -829,12 +826,12 @@ export function parseKopaiQuery(input: unknown): ParseKopaiQueryResult {
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
+    // Issues that land on a nested union arrive as a bare "Invalid input",
+    // because zod cannot know which member was meant. explainIssues answers
+    // that question so the caller is told the field it actually got wrong.
     return {
       ok: false,
-      issues: parsed.error.issues.map((i) => ({
-        path: i.path.join("."),
-        message: i.message,
-      })),
+      issues: explainIssues(schema, input, parsed.error.issues),
     };
   }
 

@@ -429,8 +429,8 @@ describe("parseKopaiQuery — branch dispatch, shared by the builder and the MCP
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.issues).toHaveLength(1);
-    expect(r.issues[0].path).toBe("signal");
-    expect(r.issues[0].message).toMatch(/traces.*logs.*metrics/);
+    expect(r.issues[0]?.path).toBe("signal");
+    expect(r.issues[0]?.message).toMatch(/traces.*logs.*metrics/);
   });
 
   it("reports an unknown mode on `mode`, listing the accepted values", () => {
@@ -438,8 +438,8 @@ describe("parseKopaiQuery — branch dispatch, shared by the builder and the MCP
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.issues).toHaveLength(1);
-    expect(r.issues[0].path).toBe("mode");
-    expect(r.issues[0].message).toMatch(/aggregate.*raw/);
+    expect(r.issues[0]?.path).toBe("mode");
+    expect(r.issues[0]?.message).toMatch(/aggregate.*raw/);
   });
 
   it("reports both halves of the pair at once when neither selects a branch", () => {
@@ -455,7 +455,7 @@ describe("parseKopaiQuery — branch dispatch, shared by the builder and the MCP
       expect(r.ok).toBe(false);
       if (r.ok) continue;
       expect(r.issues).toHaveLength(1);
-      expect(r.issues[0].path).toBe("");
+      expect(r.issues[0]?.path).toBe("");
     }
   });
 
@@ -472,8 +472,9 @@ describe("parseKopaiQuery — branch dispatch, shared by the builder and the MCP
     });
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    // Only the offending field, and nothing from the other five branches.
-    expect(r.issues.map((i) => i.path)).toEqual(["measures.0"]);
+    // Not just the offending branch — the offending field inside it, named.
+    expect(r.issues.map((i) => i.path)).toEqual(["measures.0.column"]);
+    expect(r.issues[0]?.message).toMatch(/NoSuchColumn/);
   });
 
   it("surfaces a cross-field compiler rejection as one issue at the root", () => {
@@ -487,8 +488,8 @@ describe("parseKopaiQuery — branch dispatch, shared by the builder and the MCP
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.issues).toHaveLength(1);
-    expect(r.issues[0].path).toBe("");
-    expect(r.issues[0].message).toMatch(/MetricType/);
+    expect(r.issues[0]?.path).toBe("");
+    expect(r.issues[0]?.message).toMatch(/MetricType/);
   });
 
   it("agrees with validateKopaiQuery on a query the schema alone accepts", () => {
@@ -505,6 +506,6 @@ describe("parseKopaiQuery — branch dispatch, shared by the builder and the MCP
     const r = parseKopaiQuery(q);
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.issues[0].message).toMatch(/measure is not allowed/);
+    expect(r.issues[0]?.message).toMatch(/measure is not allowed/);
   });
 });
