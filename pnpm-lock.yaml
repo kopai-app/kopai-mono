@@ -356,6 +356,9 @@ importers:
       '@kopai/core':
         specifier: workspace:*
         version: link:../core
+      '@kopai/sqlite-datasource':
+        specifier: workspace:*
+        version: link:../sqlite-datasource
       '@kopai/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
