@@ -37,7 +37,7 @@ export function descriptionOverrides(
     {
       prefix: "Maximum rows to return.",
       mode: "replace",
-      text: `Maximum rows to return. This tool caps it at ${rawMax} in raw mode and ${aggregateMax} in aggregate mode, and refuses a higher value rather than quietly lowering it. Omit it to get ${rawDefault} in raw mode and ${aggregateDefault} in aggregate mode.`,
+      text: `Maximum rows to return. This tool caps it at ${rawMax} in raw mode and ${aggregateMax} in aggregate mode, and refuses a higher value rather than quietly lowering it. Omit it for ${rawDefault} in raw mode and ${aggregateDefault} in aggregate mode. The two modes then differ: raw mode truncates to the limit and returns a cursor for the rest, while aggregate mode refuses a result that exceeds it outright, returning no rows.`,
     },
     {
       prefix: "Bucket width.",

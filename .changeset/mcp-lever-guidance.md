@@ -12,11 +12,14 @@ said was true there and false here: its `limit` field advertised
 text nearest the decision — wrote a limit it would be refused for.
 
 `@kopai/mcp` now rewrites descriptions in the copy of the schema it advertises,
-leaving the shared one alone. `limit` states the caps this tool enforces and
-that it refuses rather than lowers; `granularity` says a time series returns a
-row per group per bucket, so halving it doubles the rows; `dimensions` says the
-row count is the distinct groupings multiplied by the bucket count, and that a
-high-cardinality column can exceed the cap by itself. Matching is by
+leaving the shared one alone. `limit` states the caps this tool enforces, that
+it refuses rather than lowers, and that the two modes part company once a
+result overruns — raw truncates and returns a cursor, aggregate refuses
+outright — so the default is not read as a row count the tool will hand back;
+`granularity` says a time series returns a row per group per bucket, so halving
+it doubles the rows; `dimensions` says the row count is the distinct groupings
+multiplied by the bucket count, and that a high-cardinality column can exceed
+the cap by itself. Matching is by
 description prefix, and a test asserts every override still matches something,
 so a reworded schema fails loudly instead of quietly dropping the guidance.
 

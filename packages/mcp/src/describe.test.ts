@@ -89,6 +89,15 @@ describe("the advertised schema's guidance", () => {
     expect(limit).toMatch(/refuses/);
   });
 
+  // The two modes handle an overrun in opposite ways, and a description that
+  // names only one number reads as a promise of rows. `runQueryTool` returns
+  // no rows at all when an aggregate exceeds its limit.
+  it("says an aggregate over the cap is refused rather than truncated", () => {
+    const limit = all().find((d) => d.startsWith("Maximum rows to return."));
+    expect(limit).toMatch(/aggregate mode refuses/);
+    expect(limit).toMatch(/cursor/);
+  });
+
   it("ties granularity to the row count", () => {
     const granularity = all().find((d) => d.startsWith("Bucket width."));
     expect(granularity).toMatch(/one row per group per bucket/);
