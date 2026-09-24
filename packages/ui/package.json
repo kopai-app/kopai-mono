@@ -41,7 +41,7 @@
     "@kopai/sdk": "workspace:*",
     "@kopai/ui-core": "workspace:*",
     "@tanstack/react-query": "^5",
-    "@tanstack/react-virtual": "^3.14.12",
+    "@tanstack/react-virtual": "^3.14.13",
     "recharts": "^3.10.1"
   },
   "peerDependencies": {
