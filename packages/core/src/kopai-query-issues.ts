@@ -248,11 +248,13 @@ function isNearMiss(sent: string, declared: string): boolean {
  * because naming one of them would be a guess.
  */
 function nearestKey(key: string, declared: string[]): string | undefined {
-  const exact = didYouMean(key, declared);
+  // A key is never a correction for itself, however it got into the list.
+  const candidates = declared.filter((candidate) => candidate !== key);
+  const exact = didYouMean(key, candidates);
   if (exact) return exact;
 
   const folded = fold(key);
-  const near = declared.filter((candidate) =>
+  const near = candidates.filter((candidate) =>
     isNearMiss(folded, fold(candidate))
   );
   return near.length === 1 ? near[0] : undefined;
@@ -273,6 +275,47 @@ function declaredKeys(schema: Schema | undefined): string[] {
 }
 
 /**
+ * The union members the value could still be, given what it already says.
+ *
+ * WHY narrowing matters here: `declaredKeys` merges every member's keys, which
+ * answers "what may appear at this node" — but a caller who wrote `op: "in"`
+ * has already chosen a member, and offering them `value` because a sibling
+ * member accepts it is how `Unknown key "value". Did you mean "value"?` came to
+ * be printed. A member is out when a literal or enum key it declares rejects
+ * what the value carries there, and out when it shares no key with the value at
+ * all — the `and`/`or` wrapper beside a leaf. Where nothing survives, nothing
+ * is known about the caller's intent, so the whole union answers.
+ */
+function plausibleMembers(
+  schema: Schema | undefined,
+  value: unknown
+): Schema[] {
+  const d = def(unwrap(schema));
+  if (d?.type !== "union") return schema ? [unwrap(schema) as Schema] : [];
+
+  const members = (d.options ?? []).flatMap((option) =>
+    plausibleMembers(option, value)
+  );
+  const fits = members.filter((member) => {
+    if (keyOverlap(member, value) === 0) return false;
+    const shape = def(unwrap(member))?.shape ?? {};
+    return Object.entries(shape).every(([key, declared]) => {
+      const accepted = literalOrEnumValues(declared);
+      const sent = valueAt(value, [key]);
+      return !accepted || typeof sent !== "string" || accepted.includes(sent);
+    });
+  });
+  return fits.length ? fits : members;
+}
+
+/** The keys accepted at a node, for the value that is actually there. */
+function acceptedKeysAt(schema: Schema | undefined, value: unknown): string[] {
+  const members = plausibleMembers(schema, value);
+  if (!members.length) return declaredKeys(schema);
+  return [...new Set(members.flatMap(declaredKeys))];
+}
+
+/**
  * An unrecognized key, reported one issue per key.
  *
  * zod reports these on the enclosing object with the keys only in the
@@ -282,9 +325,10 @@ function declaredKeys(schema: Schema | undefined): string[] {
 function explainUnknownKeys(
   keys: readonly string[],
   target: Schema | undefined,
+  value: unknown,
   path: string
 ): KopaiQueryIssue[] {
-  const declared = declaredKeys(target);
+  const declared = acceptedKeysAt(target, value);
   return keys.map((key) => {
     const suggestion = nearestKey(key, declared);
     const accepted = declared.length
@@ -469,7 +513,10 @@ function explainAt(
   const explained = new Set<string>();
   for (const issue of issues) {
     if (issue.code !== "unrecognized_keys") continue;
-    const declared = declaredKeys(schemaAt(schema, issue.path));
+    const declared = acceptedKeysAt(
+      schemaAt(schema, issue.path),
+      valueAt(value, issue.path)
+    );
     for (const key of issue.keys ?? []) {
       const suggestion = nearestKey(key, declared);
       if (!suggestion) continue;
@@ -496,7 +543,7 @@ function explainAt(
     // what is wrong, and re-parsing the value against each member to find out
     // why would only rediscover the same key in every one of them.
     if (issue.code === "unrecognized_keys" && issue.keys?.length) {
-      return explainUnknownKeys(issue.keys, target, fullPath);
+      return explainUnknownKeys(issue.keys, target, targetValue, fullPath);
     }
 
     if (target && kind === "union" && depth < MAX_DEPTH) {

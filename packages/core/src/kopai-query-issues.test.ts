@@ -350,6 +350,44 @@ describe("an unrecognized key is named and, where possible, corrected", () => {
     ]);
   });
 
+  // Raised in review on PR #180: the candidate list was every member's keys
+  // merged, so a key a sibling member declares was offered as a correction for
+  // itself — `Unknown key "value". Did you mean "value"?` on an `in` filter.
+  it.each([
+    ["in", { column: "SpanName", op: "in", value: ["a"] }, "value", "values"],
+    ["eq", { column: "SpanName", op: "eq", values: ["a"] }, "values", "value"],
+    ["gt", { column: "Duration", op: "gt", values: [1] }, "values", "value"],
+  ])(
+    "suggests the key the chosen %s member declares, never the key itself",
+    (_op, filter, sent, expected) => {
+      const issues = issuesFor({
+        signal: "traces",
+        mode: "raw",
+        timeDimension: td,
+        filters: [filter],
+      });
+      expect(issues.map((i) => i.path)).toEqual([`filters.0.${sent}`]);
+      expect(issues[0]?.message).toBe(
+        `Unknown key "${sent}". Did you mean "${expected}"?`
+      );
+    }
+  );
+
+  it("offers no value key at all to an operator that takes none", () => {
+    // isNull accepts neither `value` nor `values`, so suggesting either would
+    // send the caller to write a key that is also refused.
+    const issues = issuesFor({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: td,
+      filters: [{ column: "ParentSpanId", op: "isNull", value: "x" }],
+    });
+    expect(issues.map((i) => i.path)).toEqual(["filters.0.value"]);
+    expect(issues[0]?.message).toBe(
+      'Unknown key "value". Accepted keys here: "column", "op".'
+    );
+  });
+
   it("does not guess when the folded key matches nothing near", () => {
     const issues = issuesFor({
       signal: "traces",
