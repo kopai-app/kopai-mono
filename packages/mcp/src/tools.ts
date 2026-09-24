@@ -85,6 +85,27 @@ export function fromThrown(error: unknown, logger?: ToolLogger): ToolRun {
   };
 }
 
+/**
+ * The branch a query was judged against, when the pair selects one.
+ *
+ * WHY the message names it: the issues name fields, and the six shapes share
+ * field names — `measures` is on three of them, `filters` on all six. A caller
+ * told only `query.measures.0.column` does not know which shape its query was
+ * read as, and the `signal`/`mode` pair that decides that is the one thing it
+ * can get wrong without any issue pointing at it. Where the pair itself is
+ * wrong there is no branch to name, and the issues on `signal` and `mode` say
+ * so instead.
+ */
+function branchOf(query: unknown): string | undefined {
+  const { signal, mode } = (query ?? {}) as {
+    signal?: unknown;
+    mode?: unknown;
+  };
+  return kopaiQuery.isSignal(signal) && kopaiQuery.isQueryMode(mode)
+    ? `${signal}/${mode}`
+    : undefined;
+}
+
 /** Rows in a payload, for the observer. Aggregate and raw both key on `data`. */
 function rowsOf(payload: unknown): number | undefined {
   const data = (payload as { data?: unknown })?.data;
@@ -122,12 +143,12 @@ export async function runQueryTool(
     );
   }
 
-  const parsed = kopaiQueryCompiler.parseKopaiQuery(
-    (input as { query?: unknown }).query
-  );
+  const query_ = (input as { query?: unknown }).query;
+  const parsed = kopaiQueryCompiler.parseKopaiQuery(query_);
   if (!parsed.ok) {
+    const branch = branchOf(query_);
     return invalidInput(
-      "The query is not valid.",
+      branch ? `The ${branch} query is not valid.` : "The query is not valid.",
       prefixIssuePaths(parsed.issues)
     );
   }

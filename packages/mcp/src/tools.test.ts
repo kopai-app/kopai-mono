@@ -163,6 +163,45 @@ describe("runQueryTool — input validation", () => {
     expect(issues[0]?.message).toContain("`query.limit`");
   });
 
+  // KOP-106's acceptance gate reads back "an error naming the traces/aggregate
+  // branch and that field, nothing from another branch". The issues carry the
+  // field; the message carries the branch, because six shapes share field names
+  // and nothing else in the payload says which one was applied.
+  it("names the branch a failed query was judged against", async () => {
+    const { ds } = fakeDatasource(() => ({ data: [] }));
+    const run = await runQueryTool(
+      aggQuery({ measures: [{ op: "AVG", column: "NoSuchColumn", as: "x" }] }),
+      { readTelemetryDatasource: ds }
+    );
+    const payload = payloadOf(run.result);
+    expect(payload.message).toBe("The traces/aggregate query is not valid.");
+    const issues = payload.issues as { path: string }[];
+    expect(issues.map((i) => i.path)).toEqual(["query.measures.0.column"]);
+  });
+
+  it("names the raw branch too, and says nothing of a branch when the pair is wrong", async () => {
+    const { ds } = fakeDatasource(() => ({ data: [] }));
+    const raw = await runQueryTool(rawQuery({ limitt: 5 }), {
+      readTelemetryDatasource: ds,
+    });
+    expect(payloadOf(raw.result).message).toBe(
+      "The traces/raw query is not valid."
+    );
+
+    // No branch is selected, so there is none to name — and the issues on
+    // `signal` and `mode` are what the caller needs instead.
+    const noBranch = await runQueryTool(
+      { query: { signal: "spans", mode: "raw", timeDimension: td } },
+      { readTelemetryDatasource: ds }
+    );
+    expect(payloadOf(noBranch.result).message).toBe("The query is not valid.");
+    expect(
+      (payloadOf(noBranch.result).issues as { path: string }[]).map(
+        (i) => i.path
+      )
+    ).toEqual(["query.signal"]);
+  });
+
   it("maps a cross-field compiler rejection to one issue at `query`", async () => {
     const { ds } = fakeDatasource(() => ({ data: [] }));
     // Metric queries require a MetricType filter — a check the zod schema
