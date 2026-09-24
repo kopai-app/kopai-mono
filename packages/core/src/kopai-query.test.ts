@@ -186,10 +186,11 @@ describe("KopaiQuery schema — FilterExpr op-discriminated leaves", () => {
     expect(r.success).toBe(true);
   });
 
-  it("8. old kind-tagged shape no longer carries the kind field", () => {
-    // Zod v4 z.object defaults to strip — extra `kind` is silently dropped.
-    // Confirm the parsed result is the new shape (no `kind`), so any old
-    // caller payload still round-trips but loses the dead discriminator.
+  it("8. the removed kind tag is reported, not silently dropped", () => {
+    // The leaves are z.strictObject, so a key the shape does not declare is
+    // an issue naming that key. Earlier this parsed and dropped `kind`, which
+    // told an old caller its payload was understood when a field it sent had
+    // stopped meaning anything.
     const r = KopaiQuery.safeParse(
       tracesAggWithFilter({
         kind: "string",
@@ -198,22 +199,15 @@ describe("KopaiQuery schema — FilterExpr op-discriminated leaves", () => {
         value: "x",
       })
     );
-    expect(r.success).toBe(true);
-    if (!r.success) return;
-    // Round-trip through JSON to drop the strict KopaiQuery typing and
-    // probe for a `kind` field that should no longer be present on the
-    // parsed leaf. Avoids casting and exercises the actual on-the-wire
-    // shape.
-    const parsed: unknown = JSON.parse(JSON.stringify(r.data));
-    expect(parsed).toMatchObject({
-      filters: [{ column: "SpanName", op: "eq", value: "x" }],
-    });
-    expect(parsed).not.toHaveProperty(["filters", 0, "kind"]);
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    const issues = collectIssues(r.error.issues);
+    expect(issues.some((i) => /kind/.test(i.message))).toBe(true);
   });
 
-  it("8b. mismatched old kind (kind:'string' with op:'in') is rejected because values is missing", () => {
-    // Stripping `kind` exposes the leaf as `{ column, op:'in', value:'x' }`
-    // which fails the `in/notIn` shape that requires `values`.
+  it("8b. mismatched old kind (kind:'string' with op:'in') is rejected", () => {
+    // Two mistakes now: `kind` is not a leaf field, and the `in/notIn` shape
+    // requires `values` rather than `value`.
     const r = KopaiQuery.safeParse(
       tracesAggWithFilter({
         kind: "string",
@@ -227,7 +221,10 @@ describe("KopaiQuery schema — FilterExpr op-discriminated leaves", () => {
 });
 
 describe("KopaiQuery schema — TimeDimension.compareOffset removed", () => {
-  it("9a. relative compareOffset is stripped (not present on parsed query)", () => {
+  // A caller sending compareOffset wants a comparison window. Dropping the
+  // key answered a different question than the one asked, with nothing to
+  // say so; the field is gone, so the answer is to name it.
+  it("9a. relative compareOffset is reported as an unknown key", () => {
     const r = KopaiQuery.safeParse({
       signal: "traces",
       mode: "aggregate",
@@ -235,15 +232,13 @@ describe("KopaiQuery schema — TimeDimension.compareOffset removed", () => {
       timeDimension: { type: "relative", lookback: "2h", compareOffset: "7d" },
       output: { type: "summary" },
     });
-    expect(r.success).toBe(true);
-    if (!r.success) return;
-    // JSON round-trip removes the strict KopaiQuery union typing so we
-    // can probe for a field that should no longer exist after parsing.
-    const parsed: unknown = JSON.parse(JSON.stringify(r.data));
-    expect(parsed).not.toHaveProperty(["timeDimension", "compareOffset"]);
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    const issues = collectIssues(r.error.issues);
+    expect(issues.some((i) => /compareOffset/.test(i.message))).toBe(true);
   });
 
-  it("9b. absolute compareOffset is stripped", () => {
+  it("9b. absolute compareOffset is reported as an unknown key", () => {
     const r = KopaiQuery.safeParse({
       signal: "traces",
       mode: "aggregate",
@@ -256,10 +251,10 @@ describe("KopaiQuery schema — TimeDimension.compareOffset removed", () => {
       },
       output: { type: "summary" },
     });
-    expect(r.success).toBe(true);
-    if (!r.success) return;
-    const parsed: unknown = JSON.parse(JSON.stringify(r.data));
-    expect(parsed).not.toHaveProperty(["timeDimension", "compareOffset"]);
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    const issues = collectIssues(r.error.issues);
+    expect(issues.some((i) => /compareOffset/.test(i.message))).toBe(true);
   });
 });
 

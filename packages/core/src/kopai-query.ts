@@ -10,6 +10,19 @@ import {
   type OtelTracesRow,
 } from "./denormalized-signals-zod.js";
 
+// Every object in the query language is a closed shape, so all of them are
+// `z.strictObject` rather than `z.object`.
+//
+// WHY: `z.object` drops an unrecognized key silently. A caller that sent
+// `filter` for `filters` got back the whole unfiltered window with no issue
+// raised — the query ran, so it read as an answer rather than as a mistake,
+// and that is the one failure mode a query language cannot afford. The MCP
+// tool is written to be driven by a model, which makes a near-miss key the
+// normal case rather than a rare one. `z.strictObject` reports the key
+// instead, `explainIssues` names the one it was probably meant to be, and
+// `z.toJSONSchema` renders it as `additionalProperties: false`, so the
+// advertised schema states the same rule the parser enforces.
+
 // ============================================================
 // Primitives
 // ============================================================
@@ -621,7 +634,7 @@ const MetricColumn = z
 
 const buildAttrRef = <C extends z.ZodEnum>(container: C) =>
   z
-    .object({
+    .strictObject({
       container,
       key: z
         .string()
@@ -691,20 +704,20 @@ const NumericOp = z
 const TraceMeasureExpr = z
   .union([
     z
-      .object({ op: z.literal("COUNT"), as: Alias })
+      .strictObject({ op: z.literal("COUNT"), as: Alias })
       .describe("Row count over the matched span set."),
     z
-      .object({ op: z.literal("ERROR_RATE"), as: Alias })
+      .strictObject({ op: z.literal("ERROR_RATE"), as: Alias })
       .describe(
         "Fraction of spans with StatusCode=ERROR. Result is in [0, 1]."
       ),
     z
-      .object({ op: z.literal("THROUGHPUT"), as: Alias })
+      .strictObject({ op: z.literal("THROUGHPUT"), as: Alias })
       .describe(
         "Spans per second over the time bucket (or the full window if output=summary)."
       ),
     z
-      .object({
+      .strictObject({
         op: z.literal("COUNT_DISTINCT"),
         column: TraceColumnRef,
         as: Alias,
@@ -713,7 +726,7 @@ const TraceMeasureExpr = z
         "Approximate count of distinct non-null values of the column (HyperLogLog-style — backed by ClickHouse `uniq`). Use COUNT with a filter if exact deduplication is required."
       ),
     z
-      .object({ op: NumericOp, column: TraceColumnRef, as: Alias })
+      .strictObject({ op: NumericOp, column: TraceColumnRef, as: Alias })
       .describe(
         "Numeric aggregation. Column must be numeric (e.g. Duration, or a numeric attribute)."
       ),
@@ -723,10 +736,10 @@ const TraceMeasureExpr = z
 const LogMeasureExpr = z
   .union([
     z
-      .object({ op: z.literal("COUNT"), as: Alias })
+      .strictObject({ op: z.literal("COUNT"), as: Alias })
       .describe("Row count over the matched log set."),
     z
-      .object({
+      .strictObject({
         op: z.literal("COUNT_DISTINCT"),
         column: LogColumnRef,
         as: Alias,
@@ -735,7 +748,7 @@ const LogMeasureExpr = z
         "Approximate count of distinct non-null values of the column (HyperLogLog-style — backed by ClickHouse `uniq`). Use COUNT with a filter if exact deduplication is required."
       ),
     z
-      .object({ op: NumericOp, column: LogColumnRef, as: Alias })
+      .strictObject({ op: NumericOp, column: LogColumnRef, as: Alias })
       .describe(
         "Numeric aggregation. Column must be numeric (e.g. SeverityNumber, or a numeric attribute)."
       ),
@@ -745,10 +758,10 @@ const LogMeasureExpr = z
 const MetricMeasureExpr = z
   .union([
     z
-      .object({ op: z.literal("COUNT"), as: Alias })
+      .strictObject({ op: z.literal("COUNT"), as: Alias })
       .describe("Row count over the matched metric data-point set."),
     z
-      .object({
+      .strictObject({
         op: z.literal("COUNT_DISTINCT"),
         column: MetricColumnRef,
         as: Alias,
@@ -757,7 +770,7 @@ const MetricMeasureExpr = z
         "Approximate count of distinct non-null values of the column (HyperLogLog-style — backed by ClickHouse `uniq`). Use COUNT with a filter if exact deduplication is required."
       ),
     z
-      .object({ op: NumericOp, column: MetricColumnRef, as: Alias })
+      .strictObject({ op: NumericOp, column: MetricColumnRef, as: Alias })
       .describe(
         "Numeric aggregation. For heterogeneous MetricType, filter by MetricType so the chosen column exists for every matched row."
       ),
@@ -805,22 +818,22 @@ const buildFilterExpr = <C extends z.ZodType>(
 ): z.ZodType<FilterExpr<z.infer<C>>> => {
   const Leaf = z
     .discriminatedUnion("op", [
-      z.object({
+      z.strictObject({
         column: columnRef,
         op: z.enum(["eq", "neq"]),
         value: z.union([z.string(), z.number(), z.boolean()]),
       }),
-      z.object({
+      z.strictObject({
         column: columnRef,
         op: z.enum(["contains", "notContains", "startsWith", "endsWith"]),
         value: z.string(),
       }),
-      z.object({
+      z.strictObject({
         column: columnRef,
         op: z.enum(["gt", "gte", "lt", "lte"]),
         value: z.number(),
       }),
-      z.object({
+      z.strictObject({
         column: columnRef,
         op: z.enum(["in", "notIn"]),
         // Homogeneous array — all strings OR all numbers. A mixed array is
@@ -834,7 +847,7 @@ const buildFilterExpr = <C extends z.ZodType>(
             "Non-empty array of match values. All elements must be the same type — either all strings or all numbers."
           ),
       }),
-      z.object({
+      z.strictObject({
         column: columnRef,
         op: z.enum(["isNull", "isNotNull"]),
       }),
@@ -851,10 +864,10 @@ const buildFilterExpr = <C extends z.ZodType>(
     z.union([
       Leaf,
       z
-        .object({ and: z.array(Expr).min(1) })
+        .strictObject({ and: z.array(Expr).min(1) })
         .describe("All children must match (AND)."),
       z
-        .object({ or: z.array(Expr).min(1) })
+        .strictObject({ or: z.array(Expr).min(1) })
         .describe("Any child matches (OR)."),
     ])
   ) as z.ZodType<FilterExpr<z.infer<C>>>;
@@ -873,7 +886,7 @@ const MetricFilterExpr = buildFilterExpr(MetricColumnRef);
 // its `as` alias defined in the same query.
 
 export const HavingExpr = z
-  .object({
+  .strictObject({
     measure: z
       .string()
       .min(1)
@@ -896,12 +909,12 @@ export type HavingExpr = z.infer<typeof HavingExpr>;
 const buildOrderExpr = (columnRef: z.ZodType) =>
   z
     .discriminatedUnion("type", [
-      z.object({
+      z.strictObject({
         type: z.literal("dimension"),
         column: columnRef,
         direction: z.enum(["asc", "desc"]),
       }),
-      z.object({
+      z.strictObject({
         type: z.literal("measure"),
         alias: z
           .string()
@@ -925,7 +938,7 @@ const MetricOrderExpr = buildOrderExpr(MetricColumnRef);
 // ============================================================
 
 const RelativeTimeDimension = z
-  .object({
+  .strictObject({
     type: z.literal("relative"),
     lookback: DurationString.describe(
       'Window length ending now. Example: "2h" = the last 2 hours.'
@@ -934,7 +947,7 @@ const RelativeTimeDimension = z
   .describe("Relative time window ending at query time.");
 
 const AbsoluteTimeDimension = z
-  .object({
+  .strictObject({
     type: z.literal("absolute"),
     startTime: ISODateString.describe("Window start (inclusive)."),
     endTime: ISODateString.describe("Window end (exclusive)."),
@@ -960,12 +973,12 @@ export type TimeDimension = z.infer<typeof TimeDimension>;
 const AggregateOutput = z
   .discriminatedUnion("type", [
     z
-      .object({ type: z.literal("summary") })
+      .strictObject({ type: z.literal("summary") })
       .describe(
         "Single aggregated value per group, across the entire time window."
       ),
     z
-      .object({
+      .strictObject({
         type: z.literal("timeSeries"),
         granularity: DurationString.describe(
           'Bucket width. Example: "5m" = 5-minute buckets across the time window.'
@@ -1009,7 +1022,7 @@ const Cursor = z
   );
 
 const TraceAggregateQuery = z
-  .object({
+  .strictObject({
     signal: z.literal("traces"),
     mode: z.literal("aggregate"),
     measures: z
@@ -1045,7 +1058,7 @@ const TraceAggregateQuery = z
   .describe("Aggregate query over traces (spans).");
 
 const TraceRawQuery = z
-  .object({
+  .strictObject({
     signal: z.literal("traces"),
     mode: z.literal("raw"),
     dimensions: z
@@ -1065,7 +1078,7 @@ const TraceRawQuery = z
   );
 
 const LogAggregateQuery = z
-  .object({
+  .strictObject({
     signal: z.literal("logs"),
     mode: z.literal("aggregate"),
     measures: z.array(LogMeasureExpr).min(1),
@@ -1085,7 +1098,7 @@ const LogAggregateQuery = z
   .describe("Aggregate query over logs.");
 
 const LogRawQuery = z
-  .object({
+  .strictObject({
     signal: z.literal("logs"),
     mode: z.literal("raw"),
     dimensions: z
@@ -1105,7 +1118,7 @@ const LogRawQuery = z
   );
 
 const MetricAggregateQuery = z
-  .object({
+  .strictObject({
     signal: z.literal("metrics"),
     mode: z.literal("aggregate"),
     measures: z.array(MetricMeasureExpr).min(1),
@@ -1125,7 +1138,7 @@ const MetricAggregateQuery = z
   .describe("Aggregate query over metrics data points.");
 
 const MetricRawQuery = z
-  .object({
+  .strictObject({
     signal: z.literal("metrics"),
     mode: z.literal("raw"),
     dimensions: z
