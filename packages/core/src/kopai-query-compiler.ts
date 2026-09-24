@@ -601,6 +601,34 @@ export function extractMetricType(q: KopaiQuery): MetricType {
 }
 
 export function validateKopaiQuery(q: KopaiQuery): void {
+  // An absolute window must run forwards. `endTime` is exclusive, so bounds
+  // that are inverted — or equal — match nothing.
+  //
+  // WHY this is a validation error rather than an empty result: the two are
+  // indistinguishable to the caller, and the wrong one is the one they assume.
+  // A model handed `{ok, data: []}` concludes there is no telemetry in the
+  // window and widens it, which returns empty again; nothing in the answer
+  // ever points at the bounds. The schema cannot express this — it sees two
+  // independently valid datetimes — so the shared gate is the place for it.
+  if (q.timeDimension.type === "absolute") {
+    const { startTime, endTime } = q.timeDimension;
+    const startMs = Date.parse(startTime);
+    const endMs = Date.parse(endTime);
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+      throw new KopaiQueryValidationError(
+        `timeDimension.${Number.isNaN(startMs) ? "startTime" : "endTime"} "${
+          Number.isNaN(startMs) ? startTime : endTime
+        }" is not a valid ISO 8601 UTC datetime.`
+      );
+    }
+    if (startMs >= endMs) {
+      throw new KopaiQueryValidationError(
+        `timeDimension.startTime "${startTime}" is not before endTime "${endTime}"; ` +
+          `endTime is exclusive, so this window matches nothing. Swap the bounds if they are reversed.`
+      );
+    }
+  }
+
   // Metric queries require a MetricType filter — both backends store
   // each metric type in a separate table, so the compiler needs an
   // unambiguous target.

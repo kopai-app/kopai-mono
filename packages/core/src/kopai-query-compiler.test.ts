@@ -394,6 +394,73 @@ describe("validateKopaiQuery — aggregate cross-field references", () => {
   });
 });
 
+describe("validateKopaiQuery — absolute window must run forwards", () => {
+  const absolute = (startTime: string, endTime: string) =>
+    asTestQuery({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: { type: "absolute", startTime, endTime },
+    });
+
+  it("rejects a window whose bounds are reversed", () => {
+    expect(() =>
+      validateKopaiQuery(
+        absolute("2026-02-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z")
+      )
+    ).toThrow(KopaiQueryValidationError);
+  });
+
+  it("says the bounds may be reversed rather than reporting no data", () => {
+    // The whole point: an empty result is indistinguishable from "no
+    // telemetry in that window", and the caller acts on the wrong one.
+    expect(() =>
+      validateKopaiQuery(
+        absolute("2026-02-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z")
+      )
+    ).toThrow(/not before endTime|Swap the bounds/);
+  });
+
+  it("rejects equal bounds, because endTime is exclusive", () => {
+    expect(() =>
+      validateKopaiQuery(
+        absolute("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z")
+      )
+    ).toThrow(/matches nothing/);
+  });
+
+  it("accepts a forward window, to the millisecond", () => {
+    expect(() =>
+      validateKopaiQuery(
+        absolute("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.001Z")
+      )
+    ).not.toThrow();
+  });
+
+  it("reports an unparseable datetime rather than passing it through", () => {
+    // Reachable only by calling the validator directly — the schema's pattern
+    // catches this first — but the gate is called directly by both datasources.
+    expect(() =>
+      validateKopaiQuery(absolute("not-a-date", "2026-01-01T00:00:00.000Z"))
+    ).toThrow(/startTime "not-a-date"/);
+  });
+
+  it("is reached through parseKopaiQuery, which both surfaces share", () => {
+    const r = parseKopaiQuery({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: {
+        type: "absolute",
+        startTime: "2026-02-01T00:00:00.000Z",
+        endTime: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.issues[0]?.path).toBe("");
+    expect(r.issues[0]?.message).toMatch(/endTime/);
+  });
+});
+
 describe("parseKopaiQuery — branch dispatch, shared by the builder and the MCP tool", () => {
   it("parses a valid raw query and returns it", () => {
     const r = parseKopaiQuery({
