@@ -43,6 +43,31 @@ export const mcpRoutes: FastifyPluginAsync<McpRoutesOptions> =
     // local app registers no CORS — and it stops being true the moment any of
     // those three changes.
     if (opts.allowedOriginHostnames !== undefined) {
+      // Checked rather than trusted, and refused here rather than absorbed:
+      // every wrong shape fails silently at request time, and two of them fail
+      // permissively.
+      //
+      // `null` — what a config read from JSON or an env var yields where a
+      // list is missing — counts as "configured", and the validator then calls
+      // `null.includes(hostname)` inside an `onRequest` hook, so every request
+      // to the endpoint 500s with nothing naming the option that did it. A
+      // bare string is worse than broken: `String.prototype.includes` matches
+      // substrings, so `"localhost"` would admit an origin whose hostname is
+      // `"host"`.
+      //
+      // WHY a throw and not a no-op: this option exists to restrict, and the
+      // caller who passed it believes they are protected. Quietly mounting
+      // nothing would leave them unprotected and unaware — the one outcome
+      // worse than a startup failure. Registration runs once, at boot, so this
+      // cannot fire on live traffic.
+      if (
+        !Array.isArray(opts.allowedOriginHostnames) ||
+        opts.allowedOriginHostnames.some((name) => typeof name !== "string")
+      ) {
+        throw new TypeError(
+          'allowedOriginHostnames must be an array of hostname strings, e.g. ["localhost", "127.0.0.1"]. Omit it to mount no origin validation.'
+        );
+      }
       fastify.addHook(
         "onRequest",
         originValidation(opts.allowedOriginHostnames)
@@ -90,6 +115,9 @@ export const mcpRoutes: FastifyPluginAsync<McpRoutesOptions> =
         registerTools(server, {
           readTelemetryDatasource: opts.readTelemetryDatasource,
           requestContext: request.requestContext,
+          // Per-request, so an upstream failure is logged with the same
+          // request id as everything else Fastify wrote about that call.
+          logger: opts.logger ?? request.log,
           // The request is attached here rather than inside the tool layer,
           // which knows nothing about HTTP.
           onToolCall: opts.onToolCall

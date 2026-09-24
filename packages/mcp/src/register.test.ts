@@ -126,6 +126,56 @@ describe("registerTools", () => {
     expect(events.map((e) => e.outcome)).toEqual(["invalid_input"]);
   });
 
+  // Nothing in the tools is expected to throw. The point is that the reporting
+  // does not depend on that holding: a datasource is supplied by the host, and
+  // a throw that skipped the observer would lose exactly the calls most worth
+  // seeing — while reaching the SDK as a bare message with no structured
+  // payload.
+  it("reports a tool that throws, rather than losing the call", async () => {
+    const events: { tool: string; outcome: string }[] = [];
+    const logged: unknown[] = [];
+    const { server, tools } = recordingServer();
+    registerTools(server, {
+      readTelemetryDatasource: {
+        query: async () => {
+          throw new TypeError("a bug below the tool layer");
+        },
+        discoverMetrics: async () => ({ metrics: [] }),
+      } as unknown as datasource.ReadTelemetryDatasource,
+      logger: { error: (payload) => logged.push(payload) },
+      onToolCall: (e) => events.push(e),
+    });
+
+    const result = (await tools[0]?.handler(rawInput)) as {
+      isError?: true;
+      structuredContent?: { error?: string };
+    };
+    expect(events.map((e) => e.outcome)).toEqual(["upstream_error"]);
+    expect(result.isError).toBe(true);
+    // A structured payload, not the SDK's bare text — a page reads this
+    // channel and nothing else.
+    expect(result.structuredContent?.error).toBe("upstream_error");
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toBeInstanceOf(TypeError);
+  });
+
+  it("reports a discovery tool that throws outside its own catch", async () => {
+    const events: { tool: string; outcome: string }[] = [];
+    const { server, tools } = recordingServer();
+    registerTools(server, {
+      readTelemetryDatasource: {
+        query: async () => ({ data: [] }),
+        // A datasource that does not honour the contract: `metrics` is what
+        // every stage of the listing reads, and those reads are deliberately
+        // outside the call's own try.
+        discoverMetrics: async () => ({}),
+      } as unknown as datasource.ReadTelemetryDatasource,
+      onToolCall: (e) => events.push(e),
+    });
+    await tools[1]?.handler({});
+    expect(events.map((e) => e.outcome)).toEqual(["upstream_error"]);
+  });
+
   it("survives an observer that throws — the host's bug is not the caller's", async () => {
     const { server, tools } = recordingServer();
     registerTools(server, {

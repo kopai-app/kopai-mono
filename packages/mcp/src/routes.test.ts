@@ -21,6 +21,8 @@ async function start(
     allowedHosts?: string[];
     allowedOriginHostnames?: string[];
     withContext?: boolean;
+    failQuery?: boolean;
+    logged?: unknown[];
   } = {}
 ): Promise<Harness> {
   const events: ToolCallEvent[] = [];
@@ -29,6 +31,7 @@ async function start(
   const readTelemetryDatasource = {
     query: async (q: { requestContext?: unknown }) => {
       seenContexts.push(q.requestContext);
+      if (opts.failQuery) throw new Error("connect ECONNREFUSED");
       return { data: [{ SpanId: "abc" }], nextCursor: null };
     },
     discoverMetrics: async () => ({ metrics: [] }),
@@ -45,6 +48,9 @@ async function start(
     readTelemetryDatasource,
     allowedHosts: opts.allowedHosts ?? ["localhost", "127.0.0.1"],
     allowedOriginHostnames: opts.allowedOriginHostnames,
+    ...(opts.logged
+      ? { logger: { error: (payload: unknown) => opts.logged?.push(payload) } }
+      : {}),
     onToolCall: (e) => events.push(e),
   });
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -159,6 +165,38 @@ describe("mcpRoutes — POST", () => {
     h.seenContexts.length = 0;
     await rpc(h.url, toolsCall("query", rawQuery), { "x-tenant": "acme" });
     expect(h.seenContexts).toEqual([{ tenant: "acme" }]);
+  });
+
+  it("writes an upstream failure to a log, not only to the caller", async () => {
+    // The model is told the query could not be completed, and that is all it
+    // can act on. Whoever runs the server needs the cause, and before this
+    // there was nowhere for it to go.
+    const logged: unknown[] = [];
+    const failing = await start({ failQuery: true, logged });
+    try {
+      const res = await rpc(failing.url, toolsCall("query", rawQuery));
+      expect(res.text).toContain("upstream_error");
+      expect(logged).toHaveLength(1);
+      expect((logged[0] as Error).message).toContain("ECONNREFUSED");
+      expect(failing.events.map((e) => e.outcome)).toEqual(["upstream_error"]);
+    } finally {
+      await failing.app.close();
+    }
+  });
+
+  it("falls back to the request's own logger when none is configured", async () => {
+    // The default path: `request.log` is what carries the request id, so an
+    // upstream failure lands beside everything else Fastify wrote about that
+    // call. Asserted through behaviour — the failure is answered, not turned
+    // into a 500 by a logger that isn't there.
+    const failing = await start({ failQuery: true });
+    try {
+      const res = await rpc(failing.url, toolsCall("query", rawQuery));
+      expect(res.status).toBe(200);
+      expect(res.text).toContain("upstream_error");
+    } finally {
+      await failing.app.close();
+    }
   });
 
   it("reports the call to onToolCall with the request attached", async () => {
@@ -384,6 +422,73 @@ describe("mcpRoutes — origin validation", () => {
         host: `127.0.0.1:${h.port}`,
         origin: "https://evil.example.com",
       });
+      expect(res.status).toBe(200);
+      expect(res.text).toContain("SpanId");
+    });
+  });
+
+  describe("misconfigured", () => {
+    const register = async (allowedOriginHostnames: unknown) => {
+      const app = Fastify({ logger: false });
+      try {
+        await app.register(mcpRoutes, {
+          readTelemetryDatasource: {
+            query: async () => ({ data: [], nextCursor: null }),
+            discoverMetrics: async () => ({ metrics: [] }),
+          } as unknown as datasource.ReadTelemetryDatasource,
+          allowedHosts: ["127.0.0.1"],
+          allowedOriginHostnames: allowedOriginHostnames as string[],
+        });
+      } finally {
+        await app.close();
+      }
+    };
+
+    // `null` is what a config read from JSON or an env var yields where the
+    // list is missing. It used to register as "configured" and then throw
+    // inside the hook, so every request to the endpoint 500s.
+    it.each([
+      ["null", null],
+      ["a bare hostname string", "localhost"],
+      ["a list holding a non-string", ["localhost", null]],
+    ])(
+      "refuses %s at registration, naming the option",
+      async (_label, value) => {
+        await expect(register(value)).rejects.toThrow(
+          /allowedOriginHostnames must be an array of hostname strings/
+        );
+      }
+    );
+
+    it("says how to ask for no validation, since that is the likely intent", async () => {
+      await expect(register(null)).rejects.toThrow(/Omit it/);
+    });
+  });
+
+  // An empty list is coherent — refuse every browser, admit every non-browser
+  // client — and is left mounted rather than treated as "not configured":
+  // silently dropping a security control because its list came back empty is
+  // the one reading that leaves a caller unprotected and unaware.
+  describe("configured with an empty list", () => {
+    let h: Harness;
+    beforeAll(async () => {
+      h = await start({ allowedOriginHostnames: [] });
+    });
+    afterAll(async () => {
+      await h.app.close();
+    });
+
+    it("refuses every browser origin", async () => {
+      const res = await post(h.port, {
+        host: `127.0.0.1:${h.port}`,
+        origin: "http://localhost:3000",
+      });
+      expect(res.status).toBe(403);
+      expect(res.text).not.toContain("SpanId");
+    });
+
+    it("still admits a client that sends no Origin", async () => {
+      const res = await post(h.port, { host: `127.0.0.1:${h.port}` });
       expect(res.status).toBe(200);
       expect(res.text).toContain("SpanId");
     });

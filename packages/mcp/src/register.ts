@@ -5,10 +5,13 @@ import {
   METRICS_DISCOVER_TOOL_INPUT_SCHEMA,
   QUERY_TOOL_INPUT_SCHEMA,
 } from "./schema.js";
+import type { ToolResult } from "./results.js";
 import {
+  fromThrown,
   runMetricsDiscoverTool,
   runQueryTool,
   type ToolContext,
+  type ToolRun,
 } from "./tools.js";
 import type { ToolCallOutcome } from "./types.js";
 import { passThroughValidator } from "./validator.js";
@@ -45,6 +48,10 @@ const QUERY_DESCRIPTION = [
 const METRICS_DISCOVER_DESCRIPTION = [
   "List the metrics present in this workspace, with each metric's type, unit, description and the attribute keys and values seen on it.",
   "Takes no arguments.",
+  // Stated because the tool promises attribute values above, and a caller that
+  // gets a response without them is owed the reason in the description as well
+  // as in the response.
+  `A listing above ${MAX_RESULT_CHARACTERS.toLocaleString("en-US")} characters is returned without its attribute values, or without its attributes, and the response names what was omitted.`,
 ].join(" ");
 
 export interface RegisterToolsOptions extends ToolContext {
@@ -85,6 +92,32 @@ export function registerTools(
     }
   };
 
+  /**
+   * Runs one tool call and reports it, whatever happens.
+   *
+   * WHY the catch: a throw out of a tool used to skip `observe` altogether, so
+   * the host's counter lost exactly the calls most worth seeing — and the SDK
+   * turned it into a bare message with no `structuredContent`, which is the
+   * one error shape a page cannot read. Nothing in the tools is expected to
+   * throw; that is the reason to handle it here rather than to assume it, and
+   * converting it gives an unexpected failure the same contract as an expected
+   * one: a structured payload, a logged cause, and one observer event.
+   */
+  const call = async (
+    tool: string,
+    execute: () => Promise<ToolRun>
+  ): Promise<ToolResult> => {
+    const startedAt = Date.now();
+    let run: ToolRun;
+    try {
+      run = await execute();
+    } catch (error) {
+      run = fromThrown(error, opts.logger);
+    }
+    observe(tool, startedAt, run.outcome, run.rowCount);
+    return run.result;
+  };
+
   server.registerTool(
     "query",
     {
@@ -96,12 +129,7 @@ export function registerTools(
       ),
       annotations: READ_ONLY,
     },
-    async (input: unknown) => {
-      const startedAt = Date.now();
-      const run = await runQueryTool(input, opts);
-      observe("query", startedAt, run.outcome, run.rowCount);
-      return run.result;
-    }
+    async (input: unknown) => call("query", () => runQueryTool(input, opts))
   );
 
   server.registerTool(
@@ -115,11 +143,6 @@ export function registerTools(
       ),
       annotations: READ_ONLY,
     },
-    async () => {
-      const startedAt = Date.now();
-      const run = await runMetricsDiscoverTool(opts);
-      observe("metrics_discover", startedAt, run.outcome, run.rowCount);
-      return run.result;
-    }
+    async () => call("metrics_discover", () => runMetricsDiscoverTool(opts))
   );
 }
