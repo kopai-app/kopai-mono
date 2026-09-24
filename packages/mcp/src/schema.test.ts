@@ -255,6 +255,34 @@ describe("QUERY_TOOL_INPUT_SCHEMA", () => {
     expect(QUERY_TOOL_INPUT_SCHEMA.type).toBe("object");
   });
 
+  it("closes every object, so an unknown key is a schema violation", () => {
+    // In `io: "input"` mode zod leaves a plain `z.object` open, which
+    // advertised a tool that would accept a misspelled key and then run the
+    // query without it. The query shapes are strict, so the document says so.
+    const doc = JSON.stringify(QUERY_TOOL_INPUT_SCHEMA);
+    expect(QUERY_TOOL_INPUT_SCHEMA.additionalProperties).toBe(false);
+    expect(
+      doc.split('"additionalProperties":false').length - 1
+    ).toBeGreaterThan(50);
+    const validate = compile(QUERY_TOOL_INPUT_SCHEMA);
+    expect(
+      validate({
+        query: {
+          signal: "traces",
+          mode: "raw",
+          timeDimension: td,
+          filter: [{ column: "StatusCode", op: "eq", value: "Error" }],
+        },
+      })
+    ).toBe(false);
+    expect(
+      validate({
+        query: { signal: "traces", mode: "raw", timeDimension: td },
+        limit: 5,
+      })
+    ).toBe(false);
+  });
+
   it("compiles under a 2020-12 validator — every $ref resolves", () => {
     expect(() => compile(QUERY_TOOL_INPUT_SCHEMA)).not.toThrow();
   });

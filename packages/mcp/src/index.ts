@@ -1,5 +1,6 @@
 export { dedupe } from "./dedupe.js";
 export {
+  DISCOVERY_SIZE_REMEDIES,
   LIMITS,
   MAX_RESULT_CHARACTERS,
   overflowRemedies,

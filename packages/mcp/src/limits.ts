@@ -50,6 +50,20 @@ export const LIMITS = {
  */
 export const MAX_RESULT_CHARACTERS = 150_000;
 
+/**
+ * Remedies for a discovery listing too large even with the attributes gone.
+ *
+ * WHY its own list: `metrics_discover` takes no arguments, so every line in
+ * `SIZE_REMEDIES` names a field the caller cannot set — a `limit`, a window, a
+ * `granularity`. Offering those turned an over-size listing into a dead end
+ * dressed up as advice. Nothing the caller writes can shrink this result, so
+ * the honest answer is what remains possible without it.
+ */
+export const DISCOVERY_SIZE_REMEDIES = [
+  "Query a metric by name with the `query` tool — discovery is not a prerequisite for it.",
+  "Ask an operator to reduce what this deployment ingests: this workspace holds more metrics than one response can carry.",
+] as const;
+
 /** Remedies offered when a result is too large once serialized. */
 export const SIZE_REMEDIES = [
   "Lower `limit`.",
@@ -133,8 +147,15 @@ export function overflowRemedies(
   limit: number,
   max: number
 ): string[] {
+  // Read off the query rather than inferred from the bucket count: a window
+  // that happens to span one bucket is still a time series, and classifying it
+  // as a summary dropped the one remedy that always works on it — asking for a
+  // summary instead — while offering advice about a `granularity` the caller
+  // was told the query does not have. `output.type` is the authoritative
+  // discriminator; the bucket count only orders the advice.
+  const isTimeSeries =
+    query.mode === "aggregate" && query.output.type === "timeSeries";
   const buckets = bucketCount(query);
-  const isTimeSeries = buckets > 1;
   const grouped =
     query.mode === "aggregate" && (query.dimensions?.length ?? 0) > 0;
 
@@ -157,10 +178,13 @@ export function overflowRemedies(
   if (isTimeSeries) {
     // Rows are groups times buckets and the buckets fit, so the groups are
     // what overran — but a coarser granularity still divides the total, so it
-    // stays on the list, second.
+    // stays on the list, second. Not where the window spans a single bucket,
+    // though: there is nothing for a coarser one to merge, and the line would
+    // read "spans up to 1 buckets".
+    const coarserIfItHelps = buckets > 1 ? [coarser] : [];
     return grouped
-      ? [...raiseLimit, fewerGroups, coarser, narrower, summarise_]
-      : [...raiseLimit, coarser, narrower];
+      ? [...raiseLimit, fewerGroups, ...coarserIfItHelps, narrower, summarise_]
+      : [...raiseLimit, ...coarserIfItHelps, narrower, summarise_];
   }
 
   // A summary query has no granularity at all; naming one would be noise.

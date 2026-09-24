@@ -10,6 +10,18 @@ export type ToolCallOutcome =
   "ok" | "invalid_input" | "result_too_large" | "upstream_error";
 
 /**
+ * The one method this package calls on a logger.
+ *
+ * Structural rather than Fastify's own type: the tool layer knows nothing
+ * about HTTP, and a host that mounts this plugin somewhere else should not
+ * have to produce a `FastifyBaseLogger` to get its failures written down.
+ * `routes.ts` passes `request.log`, which satisfies it.
+ */
+export interface ToolLogger {
+  error(payload: unknown, message?: string): void;
+}
+
+/**
  * One completed tool call, handed to `onToolCall`.
  *
  * WHY the raw request is included: this plugin is open source and mounts in
@@ -38,6 +50,14 @@ export interface McpRoutesOptions {
    * Hostnames that may appear in a browser's `Origin` header. Omit to mount no
    * origin validation at all, which is the default.
    *
+   * An empty list is not the same as omitting it: it mounts a validator that
+   * refuses every browser origin, which is a coherent thing to ask for and a
+   * surprising thing to arrive at by accident. Non-browser clients send no
+   * `Origin` and pass either way, so an accidental `[]` looks like "works for
+   * my MCP client, broken for every page". Omit the option when the intent is
+   * no validation. Any other wrong shape — `null` from a config that had no
+   * list, a bare string — is refused at registration rather than mounted.
+   *
    * WHY hostnames, and why a separate list from {@link allowedHosts}: the two
    * answer different questions. `allowedHosts` is the hostname this server is
    * reached at; this is the hostname of a page allowed to reach it. On a local
@@ -57,6 +77,11 @@ export interface McpRoutesOptions {
    * are unaffected; only browsers are constrained.
    */
   allowedOriginHostnames?: string[];
+  /**
+   * Where an upstream failure is written. Defaults to the Fastify instance's
+   * own request logger; pass one only to send these somewhere else.
+   */
+  logger?: ToolLogger;
   /** Called once per completed tool call. Errors thrown here are swallowed. */
   onToolCall?: (event: ToolCallEvent) => void;
 }

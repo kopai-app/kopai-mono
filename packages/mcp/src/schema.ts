@@ -9,8 +9,13 @@ import { LIMITS } from "./limits.js";
  * The `query` tool's input: the KopaiQuery body under a single `query`
  * property, because an MCP tool's input schema must have an object root and
  * KopaiQuery is a union.
+ *
+ * Strict, so the document says `additionalProperties: false` on the root as
+ * well as on every node inside it. In `io: "input"` mode zod leaves a plain
+ * `z.object` open, which advertised a tool that accepted arguments it would
+ * then ignore; `runQueryTool` rejects them, and the schema now agrees.
  */
-const QueryToolInput = z.object({ query: kopaiQuery.KopaiQuery });
+const QueryToolInput = z.strictObject({ query: kopaiQuery.KopaiQuery });
 
 /**
  * The advertised input schema for the `query` tool, deduplicated into `$defs`.

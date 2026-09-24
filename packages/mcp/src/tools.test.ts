@@ -81,6 +81,88 @@ describe("runQueryTool — input validation", () => {
     expect(issues[0]?.message).toMatch(/NoSuchColumn/);
   });
 
+  it("rejects a misspelled query field rather than running without it", async () => {
+    // The failure this pins: `filter` was dropped, the query ran over the
+    // whole window, and the tool answered `ok` with every row in it.
+    const { ds, calls } = fakeDatasource(() => ({
+      data: rows(5),
+      nextCursor: null,
+    }));
+    const run = await runQueryTool(
+      {
+        query: {
+          signal: "traces",
+          mode: "raw",
+          timeDimension: td,
+          filter: [{ column: "StatusCode", op: "eq", value: "Error" }],
+        },
+      },
+      { readTelemetryDatasource: ds }
+    );
+    expect(run.outcome).toBe("invalid_input");
+    expect(calls).toHaveLength(0);
+    const issues = payloadOf(run.result).issues as {
+      path: string;
+      message: string;
+    }[];
+    expect(issues.map((i) => i.path)).toEqual(["query.filter"]);
+    expect(issues[0]?.message).toContain('Did you mean "filters"?');
+  });
+
+  it("rejects an inverted absolute window instead of answering `ok` with no rows", async () => {
+    // Measured before the fix: the tool ran the query, got zero rows and
+    // answered `ok`, which a caller reads as "no telemetry in that window".
+    const { ds, calls } = fakeDatasource(() => ({
+      data: [],
+      nextCursor: null,
+    }));
+    const run = await runQueryTool(
+      {
+        query: {
+          signal: "traces",
+          mode: "raw",
+          timeDimension: {
+            type: "absolute",
+            startTime: "2026-02-01T00:00:00.000Z",
+            endTime: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+      { readTelemetryDatasource: ds }
+    );
+    expect(run.outcome).toBe("invalid_input");
+    expect(calls).toHaveLength(0);
+    const issues = payloadOf(run.result).issues as {
+      path: string;
+      message: string;
+    }[];
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.path).toBe("query");
+    expect(issues[0]?.message).toMatch(/endTime/);
+  });
+
+  it("rejects an argument beside `query` instead of ignoring it", async () => {
+    // `limit` written one level too high. The handler reads only `query`, and
+    // the pass-through validator checks nothing, so this was silently dropped
+    // and the query ran with the fallback limit.
+    const { ds, calls } = fakeDatasource(() => ({
+      data: rows(5),
+      nextCursor: null,
+    }));
+    const run = await runQueryTool(
+      { ...rawQuery(), limit: 500 },
+      { readTelemetryDatasource: ds }
+    );
+    expect(run.outcome).toBe("invalid_input");
+    expect(calls).toHaveLength(0);
+    const issues = payloadOf(run.result).issues as {
+      path: string;
+      message: string;
+    }[];
+    expect(issues.map((i) => i.path)).toEqual(["limit"]);
+    expect(issues[0]?.message).toContain("`query.limit`");
+  });
+
   it("maps a cross-field compiler rejection to one issue at `query`", async () => {
     const { ds } = fakeDatasource(() => ({ data: [] }));
     // Metric queries require a MetricType filter — a check the zod schema
@@ -235,6 +317,35 @@ describe("runQueryTool — aggregate overflow", () => {
     });
     // The window ends exactly on a boundary, and `< end` excludes it.
     expect(remedies.find((r) => /granularity/.test(r))).toMatch(/12 buckets/);
+  });
+
+  it("treats a one-bucket time series as a time series, not a summary", async () => {
+    // Classified from the bucket count, a 30-second window at `5m` came out as
+    // a summary: the `output: {type: "summary"}` remedy — the one that always
+    // works on a time series — was dropped, and the query was described as
+    // having no granularity when it has one.
+    const remedies = await remediesFor({
+      dimensions: ["SpanName"],
+      timeDimension: {
+        type: "absolute",
+        startTime: "2026-01-01T00:00:00.000Z",
+        endTime: "2026-01-01T00:00:30.000Z",
+      },
+      output: { type: "timeSeries", granularity: "5m" },
+    });
+    expect(remedies.join(" ")).toMatch(/type: "summary"/);
+    expect(remedies.join(" ")).toMatch(/fewer dimensions/);
+    // Nothing for a coarser granularity to merge, so the line is left out
+    // rather than reading "spans up to 1 buckets".
+    expect(remedies.join(" ")).not.toMatch(/coarser `granularity`/);
+  });
+
+  it("offers a summary to an ungrouped time series as well", async () => {
+    const remedies = await remediesFor({
+      timeDimension: { type: "relative", lookback: "2h" },
+      output: { type: "timeSeries", granularity: "1m" },
+    });
+    expect(remedies.join(" ")).toMatch(/type: "summary"/);
   });
 
   it("leads with grouping when the buckets fit and the groups do not", async () => {
@@ -413,6 +524,48 @@ describe("runMetricsDiscoverTool", () => {
     expect(JSON.parse(run.result.content[0]?.text ?? "")).toEqual(discovery);
   });
 
+  it("writes the cause to the log the caller never sees", async () => {
+    // The caller is told only "The query could not be completed.", which is
+    // all a model can act on. Until this, that was also all anyone got: a
+    // datasource refusing connections left no line for whoever runs the
+    // server, in a product whose purpose is making failures visible.
+    const logged: { payload: unknown; message?: string }[] = [];
+    const boom = new Error("connect ECONNREFUSED 127.0.0.1:8123");
+    const { ds } = fakeDatasource(() => {
+      throw boom;
+    });
+    const run = await runQueryTool(rawQuery(), {
+      readTelemetryDatasource: ds,
+      logger: {
+        error: (payload, message) => logged.push({ payload, message }),
+      },
+    });
+    expect(run.outcome).toBe("upstream_error");
+    expect(payloadOf(run.result).message).toBe(
+      "The query could not be completed."
+    );
+    expect(logged).toHaveLength(1);
+    expect(logged[0]?.payload).toBe(boom);
+  });
+
+  it("does not log a validation error, which is reported back in full", async () => {
+    // A backend rejecting a query the shared gate allowed — a percentile on
+    // SQLite, say — reaches the same converter. It is the caller's mistake,
+    // answered in the result; logging every one would bury the outages this
+    // log exists for.
+    const logged: unknown[] = [];
+    const { ds } = fakeDatasource(() => {
+      throw new kopaiQueryCompiler.KopaiQueryValidationError("bad column Foo");
+    });
+    const run = await runQueryTool(rawQuery(), {
+      readTelemetryDatasource: ds,
+      logger: { error: (payload) => logged.push(payload) },
+    });
+    expect(run.outcome).toBe("invalid_input");
+    expect(payloadOf(run.result).message).toBe("bad column Foo");
+    expect(logged).toEqual([]);
+  });
+
   it("maps a failure to upstream_error", async () => {
     const { ds } = fakeDatasource(
       () => ({ data: [] }),
@@ -422,5 +575,87 @@ describe("runMetricsDiscoverTool", () => {
     );
     const run = await runMetricsDiscoverTool({ readTelemetryDatasource: ds });
     expect(run.outcome).toBe("upstream_error");
+  });
+
+  /** A listing of `count` metrics, each with `keys` attribute keys of `values`. */
+  const listing = (count: number, keys: number, values: number) => ({
+    metrics: Array.from({ length: count }, (_, m) => ({
+      name: `metric.number.${m}.with.a.reasonably.long.name`,
+      type: "Gauge",
+      unit: "1",
+      description: "A metric that exists in this workspace.",
+      attributes: {
+        values: Object.fromEntries(
+          Array.from({ length: keys }, (_, k) => [
+            `attribute.key.${k}`,
+            Array.from({ length: values }, (_, v) =>
+              `value-${v}`.padEnd(40, "x")
+            ),
+          ])
+        ),
+      },
+      resourceAttributes: { values: { "service.name": ["checkout"] } },
+    })),
+  });
+
+  const discoverWith = async (result: unknown) => {
+    const { ds } = fakeDatasource(
+      () => ({ data: [] }),
+      () => result
+    );
+    const run = await runMetricsDiscoverTool({ readTelemetryDatasource: ds });
+    return { run, payload: payloadOf(run.result) };
+  };
+
+  // A caller cannot shrink this result — the tool takes no arguments — so
+  // refusing it left them unable to learn a metric name, which the `query`
+  // tool's description tells them to do first.
+  it("drops attribute values rather than refusing an over-size listing", async () => {
+    const { run, payload } = await discoverWith(listing(40, 20, 60));
+    expect(run.outcome).toBe("ok");
+    expect(run.rowCount).toBe(40);
+    expect(payload.omitted).toBe("attributeValues");
+    const first = (payload.metrics as Record<string, unknown>[])[0];
+    expect(first?.name).toBe("metric.number.0.with.a.reasonably.long.name");
+    expect(first?.attributeKeys).toHaveLength(20);
+    expect(first).not.toHaveProperty("attributes");
+    expect(JSON.stringify(payload).length).toBeLessThanOrEqual(
+      MAX_RESULT_CHARACTERS
+    );
+  });
+
+  it("drops the attributes too when the keys alone do not fit", async () => {
+    const { run, payload } = await discoverWith(listing(900, 30, 40));
+    expect(run.outcome).toBe("ok");
+    expect(payload.omitted).toBe("attributes");
+    const first = (payload.metrics as Record<string, unknown>[])[0];
+    expect(first).toEqual({
+      name: "metric.number.0.with.a.reasonably.long.name",
+      type: "Gauge",
+      unit: "1",
+      description: "A metric that exists in this workspace.",
+    });
+    expect(JSON.stringify(payload).length).toBeLessThanOrEqual(
+      MAX_RESULT_CHARACTERS
+    );
+  });
+
+  it("returns the listing untouched when it fits", async () => {
+    const full = listing(5, 3, 4);
+    const { run, payload } = await discoverWith(full);
+    expect(run.outcome).toBe("ok");
+    expect(payload).toEqual(full);
+    expect(payload).not.toHaveProperty("omitted");
+  });
+
+  it("refuses only when the names alone overrun, and names real remedies", async () => {
+    const { run, payload } = await discoverWith(listing(3000, 2, 2));
+    expect(run.outcome).toBe("result_too_large");
+    expect(payload.message).toMatch(/3,000 metrics/);
+    // Every remedy must name something this tool's caller can actually do:
+    // it takes no arguments, so no `limit`, window or `granularity`.
+    const remedies = (payload.remedies as string[]).join(" ");
+    expect(remedies).not.toMatch(/`limit`|granularity|time window/);
+    expect(remedies).toMatch(/`query` tool/);
   });
 });
