@@ -616,7 +616,16 @@ describe("runMetricsDiscoverTool", () => {
     expect(run.outcome).toBe("upstream_error");
   });
 
-  /** A listing of `count` metrics, each with `keys` attribute keys of `values`. */
+  /**
+   * A listing of `count` metrics, each with `keys` attribute keys of `values`.
+   *
+   * Keep `values` at the smallest number that still crosses the threshold under
+   * test. Only the undegraded stage carries them, and that stage is over the
+   * ceiling from the keys alone in every case here, so a larger number buys no
+   * coverage and costs real time: at 40 values a key this built 1.08M strings
+   * and the degradation loop serialized 47 MB of them, which fits inside the
+   * 5-second default on a developer machine and does not on a 2-vCPU runner.
+   */
   const listing = (count: number, keys: number, values: number) => ({
     metrics: Array.from({ length: count }, (_, m) => ({
       name: `metric.number.${m}.with.a.reasonably.long.name`,
@@ -650,7 +659,7 @@ describe("runMetricsDiscoverTool", () => {
   // refusing it left them unable to learn a metric name, which the `query`
   // tool's description tells them to do first.
   it("drops attribute values rather than refusing an over-size listing", async () => {
-    const { run, payload } = await discoverWith(listing(40, 20, 60));
+    const { run, payload } = await discoverWith(listing(40, 20, 20));
     expect(run.outcome).toBe("ok");
     expect(run.rowCount).toBe(40);
     expect(payload.omitted).toBe("attributeValues");
@@ -664,7 +673,7 @@ describe("runMetricsDiscoverTool", () => {
   });
 
   it("drops the attributes too when the keys alone do not fit", async () => {
-    const { run, payload } = await discoverWith(listing(900, 30, 40));
+    const { run, payload } = await discoverWith(listing(900, 30, 1));
     expect(run.outcome).toBe("ok");
     expect(payload.omitted).toBe("attributes");
     const first = (payload.metrics as Record<string, unknown>[])[0];
