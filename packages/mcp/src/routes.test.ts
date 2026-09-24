@@ -330,6 +330,13 @@ describe("mcpRoutes — concurrency", () => {
   // FastifyRequest lexically, so a shared handler could misattribute one
   // caller's context to another. Two hundred interleaved calls across eight
   // tenants, each asserting its own context came back.
+  //
+  // Thirty seconds rather than the 5s default: the cost here is 200 real HTTP
+  // round trips, each building a fresh server, and a shared CI runner is far
+  // slower at that than a developer machine — 136 ms locally against 3,510 ms
+  // measured on a 2-vCPU runner, which then crossed the default under load.
+  // The volume is what makes the test worth having, so the budget moves and
+  // the call count does not.
   it("attributes every concurrent call to its own request", async () => {
     const seen: Array<{ sent: string; got: unknown }> = [];
     const readTelemetryDatasource = {
@@ -374,7 +381,7 @@ describe("mcpRoutes — concurrency", () => {
     await app.close();
     expect(seen).toHaveLength(200);
     expect(seen.filter((s) => s.got !== s.sent)).toEqual([]);
-  });
+  }, 30_000);
 });
 
 describe("mcpRoutes — origin validation", () => {
