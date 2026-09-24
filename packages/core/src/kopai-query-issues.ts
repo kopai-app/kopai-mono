@@ -22,6 +22,18 @@ import type { KopaiQueryIssue } from "./kopai-query-compiler-types.js";
 
 type Schema = z.ZodType;
 
+/**
+ * The part of a zod issue this module reads. `code` and `keys` are present
+ * only on an unrecognized-key issue, which names its keys in the message
+ * rather than in the path.
+ */
+interface IssueLike {
+  path: PropertyKey[];
+  message: string;
+  code?: string;
+  keys?: readonly string[];
+}
+
 /** How many accepted values to name before summarising the rest. */
 const SAMPLE_SIZE = 8;
 
@@ -70,13 +82,60 @@ function unwrap(schema: Schema | undefined): Schema | undefined {
 function schemaAt(root: Schema, path: PropertyKey[]): Schema | undefined {
   let current = unwrap(root);
   for (const key of path) {
-    const d = def(current);
-    if (d?.type === "object") current = unwrap(d.shape?.[String(key)]);
-    else if (d?.type === "array") current = unwrap(d.element);
-    else return undefined;
+    current = stepInto(current, key);
     if (!current) return undefined;
   }
   return current;
+}
+
+/** The schema governing `key` inside `current`, if it can be reached. */
+function stepInto(
+  current: Schema | undefined,
+  key: PropertyKey
+): Schema | undefined {
+  const d = def(current);
+  if (d?.type === "object") return unwrap(d.shape?.[String(key)]);
+  if (d?.type === "array") return unwrap(d.element);
+  if (d?.type === "union") return acrossMembers(d.options ?? [], key);
+  return undefined;
+}
+
+/**
+ * The schema at `key` across a union's members.
+ *
+ * WHY a union has to be walked into at all: zod reports a discriminator
+ * mismatch at the discriminator, not at the union — `filters.0.op`, not
+ * `filters.0`. Stopping at the union left every such issue with zod's own
+ * text, so the five discriminators in this schema (`op`, `orderBy.type`,
+ * `timeDimension.type`, `output.type`) and any enum inside a member
+ * (`direction`) kept a message this module exists to replace.
+ *
+ * A union has no shape of its own, so the answer is whatever its members
+ * declare at that key. Identical members collapse to one. A set of literals
+ * and enums collapses into a single enum over every value they accept, which
+ * is both the honest answer — any of them is accepted there — and the form the
+ * message layer can act on. Anything else is offered as a union, for the
+ * caller's value to be re-parsed against member by member.
+ */
+function acrossMembers(
+  options: readonly Schema[],
+  key: PropertyKey
+): Schema | undefined {
+  const members = [
+    ...new Set(
+      options
+        .map((option) => stepInto(unwrap(option), key))
+        .filter((schema): schema is Schema => !!schema)
+    ),
+  ];
+  if (members.length <= 1) return members[0];
+
+  const valueSets = members.map(literalOrEnumValues);
+  if (valueSets.every((values) => values?.length)) {
+    const values = [...new Set(valueSets.flat())] as string[];
+    return z.enum(values as [string, ...string[]]);
+  }
+  return z.union(members);
 }
 
 /** The value at `path` within `value`, if it can be reached. */
@@ -111,6 +170,18 @@ function enumValues(schema: Schema | undefined): string[] | undefined {
   return Object.keys(d.entries ?? {});
 }
 
+/** The string values a schema accepts, if it is a literal or an enum. */
+function literalOrEnumValues(schema: Schema | undefined): string[] | undefined {
+  const d = def(unwrap(schema));
+  if (d?.type === "literal") {
+    const values = (d.values ?? []).filter(
+      (value): value is string => typeof value === "string"
+    );
+    return values.length ? values : undefined;
+  }
+  return enumValues(schema);
+}
+
 /** "a, b, c and 129 others" — the whole list is already in the tool schema. */
 function summarise(values: string[]): string {
   if (values.length <= SAMPLE_SIZE)
@@ -132,14 +203,105 @@ function didYouMean(value: string, candidates: string[]): string | undefined {
   return candidates.find((candidate) => fold(candidate) === target);
 }
 
+/**
+ * Whether `sent` is `declared` with one character inserted, deleted or
+ * substituted, or with two adjacent characters swapped.
+ *
+ * A bounded edit distance rather than a general one: these are the slips keys
+ * actually attract — a dropped plural, a doubled letter, a transposition —
+ * and a wider budget starts renaming keys into ones the caller never wrote.
+ */
+function isNearMiss(sent: string, declared: string): boolean {
+  if (sent === declared) return true;
+  const [shorter, longer] =
+    sent.length <= declared.length ? [sent, declared] : [declared, sent];
+  if (longer.length - shorter.length > 1) return false;
+
+  let head = 0;
+  while (head < shorter.length && shorter[head] === longer[head]) head++;
+  let tail = 0;
+  while (
+    tail < shorter.length - head &&
+    shorter[shorter.length - 1 - tail] === longer[longer.length - 1 - tail]
+  )
+    tail++;
+
+  // One insertion or deletion: the differing run is the single extra
+  // character. Equal lengths: one substitution, or a swap of the two
+  // characters the run covers.
+  const run = shorter.length - head - tail;
+  if (longer.length !== shorter.length) return run === 0;
+  if (run <= 1) return true;
+  return (
+    run === 2 &&
+    shorter[head] === longer[head + 1] &&
+    shorter[head + 1] === longer[head]
+  );
+}
+
+/**
+ * The declared key a misspelling was probably reaching for.
+ *
+ * `didYouMean` alone is not enough here: it collapses case and punctuation,
+ * which catches `orderby` for `orderBy` but not a dropped plural (`filter`) or
+ * a doubled letter (`limitt`). A tie between two candidates yields nothing,
+ * because naming one of them would be a guess.
+ */
+function nearestKey(key: string, declared: string[]): string | undefined {
+  const exact = didYouMean(key, declared);
+  if (exact) return exact;
+
+  const folded = fold(key);
+  const near = declared.filter((candidate) =>
+    isNearMiss(folded, fold(candidate))
+  );
+  return near.length === 1 ? near[0] : undefined;
+}
+
+/**
+ * Every key the schema at a path declares. A union has no shape of its own,
+ * so it contributes each member's keys — a filter node accepts a leaf's keys
+ * or a wrapper's, and the caller is owed both.
+ */
+function declaredKeys(schema: Schema | undefined): string[] {
+  const d = def(unwrap(schema));
+  if (!d) return [];
+  if (d.type === "union") {
+    return [...new Set((d.options ?? []).flatMap((o) => declaredKeys(o)))];
+  }
+  return Object.keys(d.shape ?? {});
+}
+
+/**
+ * An unrecognized key, reported one issue per key.
+ *
+ * zod reports these on the enclosing object with the keys only in the
+ * message, which leaves the caller to find them; every other issue this
+ * module returns names its field in the path.
+ */
+function explainUnknownKeys(
+  keys: readonly string[],
+  target: Schema | undefined,
+  path: string
+): KopaiQueryIssue[] {
+  const declared = declaredKeys(target);
+  return keys.map((key) => {
+    const suggestion = nearestKey(key, declared);
+    const accepted = declared.length
+      ? ` Accepted keys here: ${summarise(declared)}.`
+      : "";
+    return {
+      path: path ? `${path}.${key}` : key,
+      message: suggestion
+        ? `Unknown key "${key}". Did you mean "${suggestion}"?`
+        : `Unknown key "${key}".${accepted}`,
+    };
+  });
+}
+
 /** Accepted values for `key` across a union member: a literal, or an enum. */
 function acceptedAt(option: Schema, key: string): string[] {
-  const member = unwrap(def(unwrap(option))?.shape?.[key]);
-  const d = def(member);
-  if (d?.type === "literal") {
-    return (d.values ?? []).filter((v): v is string => typeof v === "string");
-  }
-  return enumValues(member) ?? [];
+  return literalOrEnumValues(def(unwrap(option))?.shape?.[key]) ?? [];
 }
 
 /**
@@ -147,14 +309,21 @@ function acceptedAt(option: Schema, key: string): string[] {
  * something that no variant accepts — so the useful answer is the union of
  * what all of them would accept there, not one member's slice of it.
  */
+interface CommonKey {
+  issue: KopaiQueryIssue;
+  key: string;
+  /** The accepted value the caller was probably reaching for, if identifiable. */
+  suggestion?: string;
+}
+
 function explainCommonKey(
   attempts: readonly {
     option: Schema;
-    issues: readonly { path: PropertyKey[]; message: string }[];
+    issues: readonly IssueLike[];
   }[],
   value: unknown,
   path: string
-): KopaiQueryIssue | undefined {
+): CommonKey | undefined {
   if (!attempts.length) return undefined;
 
   const keysOf = (a: (typeof attempts)[number]) =>
@@ -175,10 +344,14 @@ function explainCommonKey(
   const sent = valueAt(value, [key]);
   const suggestion = didYouMean(String(sent), accepted);
   return {
-    path: path ? `${path}.${key}` : key,
-    message: suggestion
-      ? `Unknown ${key} ${typeof sent === "string" ? `"${sent}"` : String(sent)}. Did you mean "${suggestion}"?`
-      : `Expected ${key} to be one of ${summarise(accepted)}.`,
+    key,
+    suggestion,
+    issue: {
+      path: path ? `${path}.${key}` : key,
+      message: suggestion
+        ? `Unknown ${key} ${typeof sent === "string" ? `"${sent}"` : String(sent)}. Did you mean "${suggestion}"?`
+        : `Expected ${key} to be one of ${summarise(accepted)}.`,
+    },
   };
 }
 
@@ -205,7 +378,7 @@ function keyOverlap(option: Schema, value: unknown): number {
 
 interface Attempt {
   option: Schema;
-  issues: readonly { path: PropertyKey[]; message: string }[];
+  issues: readonly IssueLike[];
   wrongShape: boolean;
 }
 
@@ -250,6 +423,12 @@ function explainEnumMiss(
   path: string,
   hint: string
 ): KopaiQueryIssue {
+  if (value === undefined) {
+    return {
+      path,
+      message: `Required. Expected one of ${summarise(values)}.${hint}`,
+    };
+  }
   const suggestion =
     typeof value === "string" ? didYouMean(value, values) : undefined;
   const sent = typeof value === "string" ? `"${value}"` : String(value);
@@ -261,22 +440,64 @@ function explainEnumMiss(
   };
 }
 
-/** Recursion bound, because the filter schema refers to itself. */
-const MAX_DEPTH = 5;
+/**
+ * Recursion bound, because the filter schema refers to itself.
+ *
+ * Every `and`/`or` level spends one unit of this budget before any of it
+ * reaches the leaf, so at 5 a filter nested four wrappers deep fell back to
+ * the bare "Invalid input" this module exists to remove. The cost of a level
+ * is one member re-parse of a value that is shrinking as it descends, so the
+ * budget can be generous; 12 covers about ten levels of nesting, past anything
+ * a hand-written or generated filter reaches.
+ */
+const MAX_DEPTH = 12;
 
 function explainAt(
   schema: Schema,
   value: unknown,
-  issues: readonly { path: PropertyKey[]; message: string }[],
+  issues: readonly IssueLike[],
   prefix: PropertyKey[],
   depth: number,
   hint: string
 ): KopaiQueryIssue[] {
+  // A misspelled key also makes the key it was meant to be look missing:
+  // `valu` for `value` is reported both as an unrecognized key and as a
+  // missing `value`. Both describe one mistake, and the half worth reporting
+  // is the key the caller actually wrote — the other names a field they never
+  // sent. Suppressed only where the suggested key really is absent, so a
+  // genuine problem with a key they did send always survives.
+  const explained = new Set<string>();
+  for (const issue of issues) {
+    if (issue.code !== "unrecognized_keys") continue;
+    const declared = declaredKeys(schemaAt(schema, issue.path));
+    for (const key of issue.keys ?? []) {
+      const suggestion = nearestKey(key, declared);
+      if (!suggestion) continue;
+      const suggestedPath = [...issue.path, suggestion];
+      if (valueAt(value, suggestedPath) === undefined) {
+        explained.add(suggestedPath.map(String).join("."));
+      }
+    }
+  }
+
   return issues.flatMap((issue) => {
     const fullPath = [...prefix, ...issue.path].map(String).join(".");
+    if (
+      issue.code !== "unrecognized_keys" &&
+      explained.has(issue.path.map(String).join("."))
+    ) {
+      return [];
+    }
     const target = schemaAt(schema, issue.path);
     const targetValue = valueAt(value, issue.path);
     const kind = def(target)?.type;
+
+    // Ahead of the union branch: an unrecognized key is already precise about
+    // what is wrong, and re-parsing the value against each member to find out
+    // why would only rediscover the same key in every one of them.
+    if (issue.code === "unrecognized_keys" && issue.keys?.length) {
+      return explainUnknownKeys(issue.keys, target, fullPath);
+    }
 
     if (target && kind === "union" && depth < MAX_DEPTH) {
       // Does this union offer an attribute-reference escape hatch alongside a
@@ -290,7 +511,37 @@ function explainAt(
 
       const attempts = attemptAll(target, targetValue);
       const common = explainCommonKey(attempts, targetValue, fullPath);
-      if (common) return [common];
+      if (common) {
+        // The suggestion names the variant the caller was reaching for, so
+        // that variant's other issues apply and are worth reporting together:
+        // `{op: "avg", as: "c"}` is two mistakes, and answering only the `op`
+        // costs a round trip to discover the missing `column`.
+        //
+        // Without a suggestion there is no way to tell which variant was
+        // meant, and one member's requirements are not the others' — a COUNT
+        // measure needs no `column` — so reporting them would invent a rule
+        // the caller may not be subject to. The common key alone it is.
+        const variant = common.suggestion
+          ? attempts.find((attempt) =>
+              acceptedAt(attempt.option, common.key).includes(
+                common.suggestion as string
+              )
+            )
+          : undefined;
+        const siblings = variant
+          ? explainAt(
+              variant.option,
+              targetValue,
+              variant.issues.filter(
+                (i) => i.path.length === 0 || String(i.path[0]) !== common.key
+              ),
+              [...prefix, ...issue.path],
+              depth + 1,
+              nextHint
+            )
+          : [];
+        return [common.issue, ...siblings];
+      }
 
       const best = chooseOption(attempts, targetValue);
       if (best) {
@@ -323,7 +574,7 @@ function explainAt(
 export function explainIssues(
   branchSchema: Schema,
   value: unknown,
-  issues: readonly { path: PropertyKey[]; message: string }[]
+  issues: readonly IssueLike[]
 ): KopaiQueryIssue[] {
   return explainAt(branchSchema, value, issues, [], 0, "");
 }
