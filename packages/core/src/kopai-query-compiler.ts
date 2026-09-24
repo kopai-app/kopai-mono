@@ -2,12 +2,17 @@
 // Each datasource (sqlite, clickhouse) wraps these with its own dialect.
 
 import {
+  branchSchemaFor,
+  isQueryMode,
+  isSignal,
   LogColumn,
   METRIC_STRUCTURAL_COLUMNS_BY_TYPE,
   METRIC_TYPES,
   MetricColumn,
+  MODES,
   NUMERIC_STRUCTURAL_COLUMNS,
   Signal,
+  SIGNALS,
   TraceColumn,
   type FilterExpr,
   type KopaiQuery,
@@ -16,6 +21,9 @@ import {
   type MetricType,
   type TraceColumnRef,
 } from "./kopai-query.js";
+import { explainIssues } from "./kopai-query-issues.js";
+export type { KopaiQueryIssue } from "./kopai-query-compiler-types.js";
+import type { KopaiQueryIssue } from "./kopai-query-compiler-types.js";
 
 // Union of every per-signal narrow column ref — used by internal
 // walkers that need to introspect filter/order/measure column values.
@@ -593,6 +601,34 @@ export function extractMetricType(q: KopaiQuery): MetricType {
 }
 
 export function validateKopaiQuery(q: KopaiQuery): void {
+  // An absolute window must run forwards. `endTime` is exclusive, so bounds
+  // that are inverted — or equal — match nothing.
+  //
+  // WHY this is a validation error rather than an empty result: the two are
+  // indistinguishable to the caller, and the wrong one is the one they assume.
+  // A model handed `{ok, data: []}` concludes there is no telemetry in the
+  // window and widens it, which returns empty again; nothing in the answer
+  // ever points at the bounds. The schema cannot express this — it sees two
+  // independently valid datetimes — so the shared gate is the place for it.
+  if (q.timeDimension.type === "absolute") {
+    const { startTime, endTime } = q.timeDimension;
+    const startMs = Date.parse(startTime);
+    const endMs = Date.parse(endTime);
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+      throw new KopaiQueryValidationError(
+        `timeDimension.${Number.isNaN(startMs) ? "startTime" : "endTime"} "${
+          Number.isNaN(startMs) ? startTime : endTime
+        }" is not a valid ISO 8601 UTC datetime.`
+      );
+    }
+    if (startMs >= endMs) {
+      throw new KopaiQueryValidationError(
+        `timeDimension.startTime "${startTime}" is not before endTime "${endTime}"; ` +
+          `endTime is exclusive, so this window matches nothing. Swap the bounds if they are reversed.`
+      );
+    }
+  }
+
   // Metric queries require a MetricType filter — both backends store
   // each metric type in a separate table, so the compiler needs an
   // unambiguous target.
@@ -751,4 +787,96 @@ export function validateKopaiQuery(q: KopaiQuery): void {
       );
     }
   }
+}
+
+// ============================================================
+// Parse + validate, as one step
+// ============================================================
+
+export type ParseKopaiQueryResult =
+  { ok: true; data: KopaiQuery } | { ok: false; issues: KopaiQueryIssue[] };
+
+/**
+ * Parses unknown input into a `KopaiQuery` and runs the cross-field checks
+ * `validateKopaiQuery` holds, reporting problems as issues instead of
+ * throwing.
+ *
+ * WHY return rather than throw: the callers want different error types from
+ * the same checks. The SDK query builder wraps these issues in a
+ * `KopaiQueryBuildError`; the MCP tool maps them into an `invalid_input`
+ * result with each path prefixed `query.` and the root path renamed. Handing
+ * back a plain list leaves that choice to the caller and keeps one
+ * dispatch-and-validate path shared instead of one copy per surface.
+ */
+export function parseKopaiQuery(input: unknown): ParseKopaiQueryResult {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return {
+      ok: false,
+      issues: [{ path: "", message: "Expected a query object." }],
+    };
+  }
+
+  const { signal, mode } = input as { signal?: unknown; mode?: unknown };
+
+  // Both halves are reported together: a caller that got one wrong has often
+  // got the other wrong too, and neither can be diagnosed by a branch schema
+  // because no branch can be selected without both.
+  const pairIssues: KopaiQueryIssue[] = [];
+  if (!isSignal(signal)) {
+    pairIssues.push({
+      path: "signal",
+      message: `Expected one of ${SIGNALS.join(", ")}.`,
+    });
+  }
+  if (!isQueryMode(mode)) {
+    pairIssues.push({
+      path: "mode",
+      message: `Expected one of ${MODES.join(", ")}.`,
+    });
+  }
+  if (pairIssues.length > 0) return { ok: false, issues: pairIssues };
+
+  const schema = branchSchemaFor(signal, mode);
+  if (!schema) {
+    // Unreachable while the branch table stays total over the pair above.
+    // Kept so that adding a signal or mode to one and not the other surfaces
+    // as an issue rather than as a crash.
+    return {
+      ok: false,
+      issues: [
+        {
+          path: "",
+          message: `No query shape for signal "${String(signal)}" in "${String(mode)}" mode.`,
+        },
+      ],
+    };
+  }
+
+  const parsed = schema.safeParse(input);
+  if (!parsed.success) {
+    // Issues that land on a nested union arrive as a bare "Invalid input",
+    // because zod cannot know which member was meant. explainIssues answers
+    // that question so the caller is told the field it actually got wrong.
+    return {
+      ok: false,
+      issues: explainIssues(schema, input, parsed.error.issues),
+    };
+  }
+
+  // Cross-field semantic checks the zod schema cannot express (required
+  // MetricType filter, having/orderBy alias and dimension references, numeric
+  // column typing). They throw on the first failure, so this is one issue
+  // against the query as a whole rather than a field.
+  try {
+    validateKopaiQuery(parsed.data as KopaiQuery);
+  } catch (e) {
+    return {
+      ok: false,
+      issues: [
+        { path: "", message: e instanceof Error ? e.message : String(e) },
+      ],
+    };
+  }
+
+  return { ok: true, data: parsed.data as KopaiQuery };
 }

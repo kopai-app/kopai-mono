@@ -71,39 +71,35 @@ type MetricTypeSpecificColumn<M extends MetricType> = M extends "Gauge"
   : M extends "Sum"
     ? "Value" | "Flags" | "AggregationTemporality" | "IsMonotonic"
     : M extends "Histogram"
-      ?
-          | "Count"
+      ? | "Count"
+        | "Sum"
+        | "Min"
+        | "Max"
+        | "BucketCounts"
+        | "ExplicitBounds"
+        | "AggregationTemporality"
+      : M extends "ExponentialHistogram"
+        ? | "Count"
           | "Sum"
           | "Min"
           | "Max"
-          | "BucketCounts"
-          | "ExplicitBounds"
+          | "Scale"
+          | "ZeroCount"
+          | "PositiveBucketCounts"
+          | "PositiveOffset"
+          | "NegativeBucketCounts"
+          | "NegativeOffset"
           | "AggregationTemporality"
-      : M extends "ExponentialHistogram"
-        ?
-            | "Count"
-            | "Sum"
-            | "Min"
-            | "Max"
-            | "Scale"
-            | "ZeroCount"
-            | "PositiveBucketCounts"
-            | "PositiveOffset"
-            | "NegativeBucketCounts"
-            | "NegativeOffset"
-            | "AggregationTemporality"
         : M extends "Summary"
-          ?
-              | "Count"
-              | "Sum"
-              | "ValueAtQuantiles.Quantile"
-              | "ValueAtQuantiles.Value"
+          ? | "Count"
+            | "Sum"
+            | "ValueAtQuantiles.Quantile"
+            | "ValueAtQuantiles.Value"
           : never;
 
 /** All structural columns available on a given MetricType's table. */
 type MetricStructuralColumnFor<M extends MetricType> =
-  | MetricCommonColumn
-  | MetricTypeSpecificColumn<M>;
+  MetricCommonColumn | MetricTypeSpecificColumn<M>;
 
 /**
  * Every metric structural column across all types (the PascalCase members
@@ -287,12 +283,7 @@ function resolveColumn(input: unknown, signal: Signal): ColumnRef {
 export type StatusCodeValue = "Unset" | "Ok" | "Error";
 /** Stored SpanKind values (traces). */
 export type SpanKindValue =
-  | "Unspecified"
-  | "Internal"
-  | "Server"
-  | "Client"
-  | "Producer"
-  | "Consumer";
+  "Unspecified" | "Internal" | "Server" | "Client" | "Producer" | "Consumer";
 
 // Per-signal map from an enum-valued column literal to its allowed value
 // union. Used to (a) require the exact literals on eq/neq/in and (b) carve
@@ -628,46 +619,18 @@ function pruneState(s: State): Record<string, unknown> {
   return out;
 }
 
-const SCHEMA_MAP = {
-  traces: {
-    aggregate: kopaiQuery.TraceAggregateQuerySchema,
-    raw: kopaiQuery.TraceRawQuerySchema,
-  },
-  logs: {
-    aggregate: kopaiQuery.LogAggregateQuerySchema,
-    raw: kopaiQuery.LogRawQuerySchema,
-  },
-  metrics: {
-    aggregate: kopaiQuery.MetricAggregateQuerySchema,
-    raw: kopaiQuery.MetricRawQuerySchema,
-  },
-} as const;
-
 function validateAndReturn<T>(state: State): T {
-  const schema = SCHEMA_MAP[state.signal][state.mode];
-  const result = schema.safeParse(pruneState(state));
-  if (!result.success) {
-    throw new KopaiQueryBuildError(
-      result.error.issues.map((i) => ({
-        path: i.path.join("."),
-        message: i.message,
-      }))
-    );
+  // Branch dispatch, schema parse and the cross-field semantic checks all
+  // live in @kopai/core, so this builder and the MCP server report the same
+  // issues for the same query instead of each keeping its own copy of the
+  // (signal, mode) table. Only the error type is ours.
+  const result = kopaiQueryCompiler.parseKopaiQuery(pruneState(state));
+  if (!result.ok) {
+    throw new KopaiQueryBuildError(result.issues);
   }
-  // Cross-field semantic checks the Zod schema can't express (required
-  // MetricType filter, having/orderBy alias + dimension references, numeric
-  // column typing). Surface them locally as a build error instead of letting
-  // the query round-trip to a server 400.
-  try {
-    kopaiQueryCompiler.validateKopaiQuery(result.data as kopaiQuery.KopaiQuery);
-  } catch (e) {
-    throw new KopaiQueryBuildError([
-      { path: "", message: e instanceof Error ? e.message : String(e) },
-    ]);
-  }
-  // WHY: SCHEMA_MAP returns a union of schemas; TS cannot prove the inferred
-  // output narrows to the caller's T (AggregateQueryFor<S> / RawQueryFor<S>).
-  // The (signal, mode) -> schema mapping is the source of truth.
+  // WHY: core hands back the KopaiQuery union; TS cannot prove it narrows to
+  // the caller's T (AggregateQueryFor<S> / RawQueryFor<S>). The (signal, mode)
+  // pair the builder holds is what makes that narrowing sound.
   return result.data as T;
 }
 

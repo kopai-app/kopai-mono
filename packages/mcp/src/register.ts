@@ -1,0 +1,148 @@
+import { fromJsonSchema, type McpServer } from "@modelcontextprotocol/server";
+
+import { LIMITS, MAX_RESULT_CHARACTERS } from "./limits.js";
+import {
+  METRICS_DISCOVER_TOOL_INPUT_SCHEMA,
+  QUERY_TOOL_INPUT_SCHEMA,
+} from "./schema.js";
+import type { ToolResult } from "./results.js";
+import {
+  fromThrown,
+  runMetricsDiscoverTool,
+  runQueryTool,
+  type ToolContext,
+  type ToolRun,
+} from "./tools.js";
+import type { ToolCallOutcome } from "./types.js";
+import { passThroughValidator } from "./validator.js";
+
+/**
+ * Both tools read and never write, always return the same answer for the same
+ * arguments and window, and reach nothing outside this deployment.
+ */
+const READ_ONLY = {
+  readOnlyHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+/**
+ * Descriptions are deliberately flat: what the tool does, the shape of its
+ * input, and the limits. They carry no instructions aimed at the model —
+ * these strings are read by Directory review, and a tool description is not a
+ * place to steer behaviour.
+ */
+const QUERY_DESCRIPTION = [
+  "Query this workspace's OpenTelemetry traces, logs and metrics.",
+  "Takes one KopaiQuery object under `query`, keyed on `signal` (traces, logs, metrics) and `mode` (raw, aggregate); the rest of the shape follows from that pair.",
+  `Row caps are ${LIMITS.raw.max} in raw mode and ${LIMITS.aggregate.max} in aggregate mode, and a result above ${MAX_RESULT_CHARACTERS.toLocaleString("en-US")} characters is refused rather than truncated.`,
+  "Aggregate is the compact shape; raw returns whole records and is for inspecting individual spans, logs or data points.",
+  // What decides whether a query fits. Stated here because the cost is a
+  // product of two fields, and a field-level description can only speak for
+  // one of them.
+  "An aggregate returns one row per distinct grouping, multiplied by the number of time buckets when `output` is a time series; that product is what the row cap applies to, not the number of records scanned.",
+  "Ranking over time takes two calls: a `summary` ordered by the measure to find the top groups, then a `timeSeries` filtered to those groups with `in`. One query cannot do both, because the ordering that picks them and the bucketing that draws them compete for the same `limit`.",
+  "For metrics, `metrics_discover` lists each metric's attribute keys and the values seen on them, which is how to judge a grouping column's cardinality before querying.",
+].join(" ");
+
+const METRICS_DISCOVER_DESCRIPTION = [
+  "List the metrics present in this workspace, with each metric's type, unit, description and the attribute keys and values seen on it.",
+  "Takes no arguments.",
+  // Stated because the tool promises attribute values above, and a caller that
+  // gets a response without them is owed the reason in the description as well
+  // as in the response.
+  `A listing above ${MAX_RESULT_CHARACTERS.toLocaleString("en-US")} characters is returned without its attribute values, or without its attributes, and the response names what was omitted.`,
+].join(" ");
+
+export interface RegisterToolsOptions extends ToolContext {
+  /**
+   * Called once per completed tool call, after the result is built and before
+   * it is returned.
+   */
+  onToolCall?: (event: {
+    tool: string;
+    outcome: ToolCallOutcome;
+    durationMs: number;
+    rowCount?: number;
+  }) => void;
+}
+
+export function registerTools(
+  server: McpServer,
+  opts: RegisterToolsOptions
+): void {
+  const observe = (
+    tool: string,
+    startedAt: number,
+    outcome: ToolCallOutcome,
+    rowCount?: number
+  ): void => {
+    if (!opts.onToolCall) return;
+    // Guarded: an observer that throws is the host application's problem and
+    // must not turn a successful query into a failed tool call.
+    try {
+      opts.onToolCall({
+        tool,
+        outcome,
+        durationMs: Date.now() - startedAt,
+        rowCount,
+      });
+    } catch {
+      // deliberately swallowed
+    }
+  };
+
+  /**
+   * Runs one tool call and reports it, whatever happens.
+   *
+   * WHY the catch: a throw out of a tool used to skip `observe` altogether, so
+   * the host's counter lost exactly the calls most worth seeing — and the SDK
+   * turned it into a bare message with no `structuredContent`, which is the
+   * one error shape a page cannot read. Nothing in the tools is expected to
+   * throw; that is the reason to handle it here rather than to assume it, and
+   * converting it gives an unexpected failure the same contract as an expected
+   * one: a structured payload, a logged cause, and one observer event.
+   */
+  const call = async (
+    tool: string,
+    execute: () => Promise<ToolRun>
+  ): Promise<ToolResult> => {
+    const startedAt = Date.now();
+    let run: ToolRun;
+    try {
+      run = await execute();
+    } catch (error) {
+      run = fromThrown(error, opts.logger);
+    }
+    observe(tool, startedAt, run.outcome, run.rowCount);
+    return run.result;
+  };
+
+  server.registerTool(
+    "query",
+    {
+      title: "Query telemetry",
+      description: QUERY_DESCRIPTION,
+      inputSchema: fromJsonSchema(
+        QUERY_TOOL_INPUT_SCHEMA,
+        passThroughValidator
+      ),
+      annotations: READ_ONLY,
+    },
+    async (input: unknown) => call("query", () => runQueryTool(input, opts))
+  );
+
+  server.registerTool(
+    "metrics_discover",
+    {
+      title: "Discover metrics",
+      description: METRICS_DISCOVER_DESCRIPTION,
+      inputSchema: fromJsonSchema(
+        METRICS_DISCOVER_TOOL_INPUT_SCHEMA,
+        passThroughValidator
+      ),
+      annotations: READ_ONLY,
+    },
+    async () => call("metrics_discover", () => runMetricsDiscoverTool(opts))
+  );
+}

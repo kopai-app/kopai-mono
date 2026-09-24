@@ -6,6 +6,7 @@ import {
   compileTimeWindow,
   extractMetricType,
   findMetricTypePin,
+  parseKopaiQuery,
   validateKopaiQuery,
 } from "./kopai-query-compiler.js";
 import type { KopaiQuery, TimeDimension } from "./kopai-query.js";
@@ -390,5 +391,188 @@ describe("validateKopaiQuery — aggregate cross-field references", () => {
       orderBy: [{ type: "measure", alias: "c", direction: "desc" }],
     });
     expect(() => validateKopaiQuery(q)).not.toThrow();
+  });
+});
+
+describe("validateKopaiQuery — absolute window must run forwards", () => {
+  const absolute = (startTime: string, endTime: string) =>
+    asTestQuery({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: { type: "absolute", startTime, endTime },
+    });
+
+  it("rejects a window whose bounds are reversed", () => {
+    expect(() =>
+      validateKopaiQuery(
+        absolute("2026-02-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z")
+      )
+    ).toThrow(KopaiQueryValidationError);
+  });
+
+  it("says the bounds may be reversed rather than reporting no data", () => {
+    // The whole point: an empty result is indistinguishable from "no
+    // telemetry in that window", and the caller acts on the wrong one.
+    expect(() =>
+      validateKopaiQuery(
+        absolute("2026-02-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z")
+      )
+    ).toThrow(/not before endTime|Swap the bounds/);
+  });
+
+  it("rejects equal bounds, because endTime is exclusive", () => {
+    expect(() =>
+      validateKopaiQuery(
+        absolute("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z")
+      )
+    ).toThrow(/matches nothing/);
+  });
+
+  it("accepts a forward window, to the millisecond", () => {
+    expect(() =>
+      validateKopaiQuery(
+        absolute("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.001Z")
+      )
+    ).not.toThrow();
+  });
+
+  it("reports an unparseable datetime rather than passing it through", () => {
+    // Reachable only by calling the validator directly — the schema's pattern
+    // catches this first — but the gate is called directly by both datasources.
+    expect(() =>
+      validateKopaiQuery(absolute("not-a-date", "2026-01-01T00:00:00.000Z"))
+    ).toThrow(/startTime "not-a-date"/);
+  });
+
+  it("is reached through parseKopaiQuery, which both surfaces share", () => {
+    const r = parseKopaiQuery({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: {
+        type: "absolute",
+        startTime: "2026-02-01T00:00:00.000Z",
+        endTime: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.issues[0]?.path).toBe("");
+    expect(r.issues[0]?.message).toMatch(/endTime/);
+  });
+});
+
+describe("parseKopaiQuery — branch dispatch, shared by the builder and the MCP tool", () => {
+  it("parses a valid raw query and returns it", () => {
+    const r = parseKopaiQuery({
+      signal: "traces",
+      mode: "raw",
+      timeDimension: tdRelative,
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.signal).toBe("traces");
+    expect(r.data.mode).toBe("raw");
+  });
+
+  it("parses a valid aggregate query and returns it", () => {
+    const r = parseKopaiQuery({
+      signal: "traces",
+      mode: "aggregate",
+      measures: [{ op: "COUNT", as: "c" }],
+      timeDimension: tdRelative,
+      output: { type: "summary" },
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("returns issues rather than throwing — the whole point of the split", () => {
+    expect(() =>
+      parseKopaiQuery({ signal: "nope", mode: "raw" })
+    ).not.toThrow();
+  });
+
+  it("reports an unknown signal on `signal`, listing the accepted values", () => {
+    const r = parseKopaiQuery({ signal: "spans", mode: "raw" });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0]?.path).toBe("signal");
+    expect(r.issues[0]?.message).toMatch(/traces.*logs.*metrics/);
+  });
+
+  it("reports an unknown mode on `mode`, listing the accepted values", () => {
+    const r = parseKopaiQuery({ signal: "traces", mode: "rawish" });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0]?.path).toBe("mode");
+    expect(r.issues[0]?.message).toMatch(/aggregate.*raw/);
+  });
+
+  it("reports both halves of the pair at once when neither selects a branch", () => {
+    const r = parseKopaiQuery({});
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.issues.map((i) => i.path).sort()).toEqual(["mode", "signal"]);
+  });
+
+  it("reports a non-object input against the query as a whole", () => {
+    for (const input of [null, "traces", 42, [], undefined]) {
+      const r = parseKopaiQuery(input);
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      expect(r.issues).toHaveLength(1);
+      expect(r.issues[0]?.path).toBe("");
+    }
+  });
+
+  it("names only the selected branch's fields — not all six branches", () => {
+    // A trace aggregate whose measure column does not exist on traces. Parsed
+    // against the whole union this reports every branch's failures at once;
+    // against the one branch it names the offending field.
+    const r = parseKopaiQuery({
+      signal: "traces",
+      mode: "aggregate",
+      measures: [{ op: "AVG", column: "NoSuchColumn", as: "x" }],
+      timeDimension: tdRelative,
+      output: { type: "summary" },
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    // Not just the offending branch — the offending field inside it, named.
+    expect(r.issues.map((i) => i.path)).toEqual(["measures.0.column"]);
+    expect(r.issues[0]?.message).toMatch(/NoSuchColumn/);
+  });
+
+  it("surfaces a cross-field compiler rejection as one issue at the root", () => {
+    // Metric queries require a MetricType filter; the zod schema cannot
+    // express that, so it comes back from validateKopaiQuery.
+    const r = parseKopaiQuery({
+      signal: "metrics",
+      mode: "raw",
+      timeDimension: tdRelative,
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0]?.path).toBe("");
+    expect(r.issues[0]?.message).toMatch(/MetricType/);
+  });
+
+  it("agrees with validateKopaiQuery on a query the schema alone accepts", () => {
+    const q = {
+      signal: "traces",
+      mode: "raw",
+      timeDimension: tdRelative,
+      orderBy: [{ type: "measure", alias: "c", direction: "desc" }],
+    };
+    // Same rejection, one throwing and one returning.
+    expect(() => validateKopaiQuery(asTestQuery(q))).toThrow(
+      /measure is not allowed/
+    );
+    const r = parseKopaiQuery(q);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.issues[0]?.message).toMatch(/measure is not allowed/);
   });
 });

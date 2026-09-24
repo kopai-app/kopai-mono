@@ -1274,6 +1274,25 @@ describe("runtime: validation errors", () => {
     expect(err.issues.some((i) => i.path.includes("startTime"))).toBe(true);
   });
 
+  it("reversed absolute bounds -> build error naming endTime", () => {
+    // Both bounds are valid datetimes, so only the shared validation gate can
+    // catch this. Left through, the query returns nothing and reads as an
+    // empty window rather than as a mistake.
+    let err: unknown;
+    try {
+      kq.traces
+        .aggregate()
+        .measure((m) => m.count("c"))
+        .timeAbsolute("2024-01-02T00:00:00Z", "2024-01-01T00:00:00Z")
+        .summary()
+        .build();
+    } catch (e) {
+      err = e;
+    }
+    assertBuildError(err);
+    expect(err.issues.some((i) => /endTime/.test(i.message))).toBe(true);
+  });
+
   it("invalid granularity -> path includes granularity", () => {
     let err: unknown;
     try {
