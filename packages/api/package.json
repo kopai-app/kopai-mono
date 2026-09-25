@@ -42,7 +42,7 @@
     "fastify-type-provider-zod": "^7.0.0"
   },
   "devDependencies": {
-    "@fastify/swagger": "^9.8.1",
+    "@fastify/swagger": "^9.9.0",
     "@fastify/swagger-ui": "^6.1.1",
     "@kopai/tsconfig": "workspace:*",
     "tsdown": "^0.23.0"
