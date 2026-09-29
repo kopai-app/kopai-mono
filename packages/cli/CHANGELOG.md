@@ -1,5 +1,19 @@
 # @kopai/cli
 
+## 0.10.3
+
+### Patch Changes
+
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+  - @kopai/core@0.12.0
+  - @kopai/sdk@0.10.0
+
 ## 0.10.2
 
 ### Patch Changes

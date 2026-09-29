@@ -1,5 +1,18 @@
 # @kopai/collector
 
+## 0.7.4
+
+### Patch Changes
+
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+  - @kopai/core@0.12.0
+
 ## 0.7.3
 
 ### Patch Changes

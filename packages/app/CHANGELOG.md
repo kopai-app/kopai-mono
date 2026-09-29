@@ -1,5 +1,22 @@
 # @kopai/app
 
+## 0.14.7
+
+### Patch Changes
+
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+  - @kopai/core@0.12.0
+  - @kopai/api@0.9.0
+  - @kopai/sqlite-datasource@0.13.0
+  - @kopai/collector@0.7.4
+  - @kopai/ui@0.16.1
+
 ## 0.14.6
 
 ### Patch Changes

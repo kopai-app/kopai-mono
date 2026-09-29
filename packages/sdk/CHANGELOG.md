@@ -1,5 +1,99 @@
 # @kopai/sdk
 
+## 0.10.0
+
+### Minor Changes
+
+- d3afabc: Share the KopaiQuery branch dispatch and validation between the query builder
+  and future callers.
+
+  `@kopai/core` gains two exports. `kopaiQuery.branchSchemaFor(signal, mode)`
+  returns the one branch of the `KopaiQuery` union that a signal/mode pair
+  selects, alongside `SIGNALS`, `MODES`, `isSignal` and `isQueryMode` for
+  reporting the accepted values back. `kopaiQueryCompiler.parseKopaiQuery(input)`
+  takes unknown input, selects that branch, parses it and runs the cross-field
+  checks `validateKopaiQuery` holds, returning `{ ok: true, data }` or
+  `{ ok: false, issues }` where each issue is a `{ path, message }` pair.
+
+  Why the pair matters: parsing an input against the whole six-branch union makes
+  zod report every branch's failures at once, so one wrong field arrives buried in
+  five irrelevant schemas' worth of noise. Selecting the branch first means the
+  issues name the field the caller actually got wrong.
+
+  `parseKopaiQuery` returns issues rather than throwing because its callers want
+  different error types from the same checks — the query builder wraps them in a
+  `KopaiQueryBuildError`, and other surfaces map them into their own error shape.
+
+  `@kopai/sdk`'s query builder now delegates to it and drops its private
+  `SCHEMA_MAP`. `kq` and `KopaiQueryBuildError` are unchanged and the builder's
+  tests pass untouched, but the issues that error carries are not. The builder
+  used to map zod's raw output straight through; it now receives what
+  `explainIssues` rewrote, so both paths and messages move — `filters.0` becomes
+  `filters.0.column`, and `dimensions.0`'s bare `Invalid input` becomes
+  `Unknown value "ServiceName". Did you mean "service.name"?`. Nothing changes
+  about what is accepted or rejected, but a caller matching on `issue.path` or
+  `issue.message` sees different values, which is why `@kopai/sdk` takes a minor
+  bump rather than a patch.
+
+- d3afabc: Reject an unknown key or an inverted time window instead of running a different
+  query.
+
+  Every object in the query language was a `z.object`, which drops a key it does
+  not recognise. A caller that wrote `filter` for `filters` got back the entire
+  unfiltered window, with no issue raised and nothing in the response to say a
+  field had been ignored — the query ran, so the result read as an answer rather
+  than as a mistake. The MCP `query` tool is driven by a model, which makes a
+  near-miss key the normal case rather than a rare one, and its advertised schema
+  made this worse: in `io: "input"` mode zod emits no `additionalProperties` for a
+  plain `z.object`, so the document stated no rule a host could have enforced
+  either. (The same failure, one layer up, is the `spanAttributes` bug in the
+  trace Tags filter — a key zod stripped, and a search that silently ran
+  unfiltered.)
+
+  All of them are now `z.strictObject`, so an unrecognized key is reported. The
+  generated tool schema says `additionalProperties: false` on every node, and
+  `runQueryTool` also rejects an argument written beside `query` rather than
+  inside it — `{query, limit}` used to drop the `limit` and run with the default.
+
+  `parseKopaiQuery` names the key in the issue path and, where one is close
+  enough, the key that was probably meant: `filter` is answered with
+  `Did you mean "filters"?`, and so are `limitt`, `dimension` and `colunm`. The
+  budget is one insertion, deletion, substitution or transposition, scaled so a
+  short key cannot be corrected into an unrelated one, and a tie yields no
+  suggestion. Where nothing is close, the message lists the keys accepted at that
+  path. Each unknown key gets its own issue rather than one issue for the object.
+
+  `validateKopaiQuery` now also rejects an absolute window whose `startTime` is
+  not before its `endTime`. Both bounds are valid datetimes, so no schema can
+  catch it; left through, the query matched nothing and the empty result was
+  indistinguishable from "there is no telemetry in that window", which sends the
+  caller to widen a window that was inverted. Equal bounds are rejected too —
+  `endTime` is exclusive.
+
+  Behaviour that changes with this, all of it previously silent:
+
+  - A field removed from the query language is reported rather than dropped:
+    `kind` on a filter leaf, `compareOffset` on a time dimension.
+  - The HTTP query routes answer 400 for an unknown field in the body instead of
+    stripping it and running the query.
+  - `KopaiClient`'s query methods throw on an unknown field instead of dropping
+    it before the request, and the query builder rejects reversed
+    `timeAbsolute` bounds at `build()`.
+  - A dashboard definition whose `query` datasource carries an extra key in
+    `params` now fails validation rather than running a narrower query than it
+    describes.
+
+### Patch Changes
+
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+- Updated dependencies [d3afabc]
+  - @kopai/core@0.12.0
+
 ## 0.9.1
 
 ### Patch Changes
