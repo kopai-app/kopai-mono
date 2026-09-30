@@ -18,6 +18,7 @@ function mcpLine(host: string): string {
 describe("the MCP row of the startup banner", () => {
   it.each([
     ["localhost", "http://localhost:8000/mcp"],
+    ["LOCALHOST", "http://localhost:8000/mcp"],
     ["127.0.0.1", "http://127.0.0.1:8000/mcp"],
     ["::1", "http://[::1]:8000/mcp"],
     ["0.0.0.0", "http://localhost:8000/mcp"],
@@ -37,6 +38,8 @@ describe("the MCP row of the startup banner", () => {
     const line = mcpLine("192.168.1.5");
     expect(line).not.toContain("http://");
     expect(line).toContain("unavailable");
-    expect(line).toContain("bind HOST to localhost or 0.0.0.0");
+    expect(line).toContain("bind HOST to localhost");
+    // 0.0.0.0 would expose the whole unauthenticated API to the network.
+    expect(line).not.toContain("0.0.0.0");
   });
 });

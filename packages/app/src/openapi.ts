@@ -1,5 +1,7 @@
 import { jsonSchemaTransform } from "fastify-type-provider-zod";
 
+import { localMcpUrl, MCP_UNAVAILABLE_HINT } from "./loopback.js";
+
 type Transform = typeof jsonSchemaTransform;
 
 const uiRoutes = ["/", "/*"];
@@ -14,7 +16,23 @@ const uiRoutes = ["/", "/*"];
  * body the page could not send anyway. GET and DELETE are hidden: they exist
  * only so the SDK can answer them 405.
  */
-export function createOpenapiTransform({ port }: { port: number }): Transform {
+export function createOpenapiTransform({
+  host,
+  port,
+}: {
+  host: string;
+  port: number;
+}): Transform {
+  const mcpUrl = localMcpUrl(host, port);
+  const connect = mcpUrl
+    ? [
+        "Connect from Claude Code with:",
+        "",
+        `\`claude mcp add --transport http local-kopai ${mcpUrl}\``,
+      ]
+    : [
+        `Unavailable while the server is bound to \`${host}\`: this endpoint accepts loopback Host headers only, and nothing listens on loopback. To use it, ${MCP_UNAVAILABLE_HINT}.`,
+      ];
   return ({ schema, url, route, ...rest }) => {
     if (uiRoutes.includes(url)) return { schema: { hide: true }, url };
     if (url === "/mcp") {
@@ -25,9 +43,7 @@ export function createOpenapiTransform({ port }: { port: number }): Transform {
           description: [
             "Read-only MCP server exposing the `query` and `metrics_discover` tools over this app's telemetry.",
             "",
-            "Connect from Claude Code with:",
-            "",
-            `\`claude mcp add --transport http local-kopai http://localhost:${port}/mcp\``,
+            ...connect,
             "",
             "Accepts only loopback `Host` and browser `Origin` headers.",
           ].join("\n"),

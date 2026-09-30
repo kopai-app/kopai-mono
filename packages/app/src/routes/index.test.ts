@@ -150,6 +150,9 @@ describe("/mcp on the app", () => {
     expect(res.statusCode).toBe(403);
   });
 
+  // Checks the Origin allow-list only. A real browser page at this origin is
+  // still blocked by CORS, which the app does not serve (OPTIONS /mcp is 404);
+  // the README says browser-direct clients are not supported.
   it("accepts a loopback browser Origin on any port", async () => {
     const res = await rpc(
       "tools/list",

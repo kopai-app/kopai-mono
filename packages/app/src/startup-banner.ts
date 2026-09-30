@@ -1,5 +1,7 @@
 import { networkInterfaces } from "node:os";
 
+import { localMcpUrl, MCP_UNAVAILABLE_HINT } from "./loopback.js";
+
 const isTTY = process.stdout.isTTY;
 const bold = isTTY ? "\x1b[1m" : "";
 const dim = isTTY ? "\x1b[2m" : "";
@@ -18,21 +20,6 @@ function getNetworkAddress(): string | undefined {
     }
   }
   return undefined;
-}
-
-const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "::1", "[::1]"];
-const WILDCARD_HOSTS = ["0.0.0.0", "::"];
-
-/**
- * The URL an MCP client on this machine should use, or undefined when there is
- * none. `/mcp` refuses any non-loopback Host header, so a LAN URL would 403 —
- * and bound to one specific LAN address, nothing listens on loopback either.
- */
-function getMcpUrl(host: string, port: number): string | undefined {
-  if (WILDCARD_HOSTS.includes(host)) return `http://localhost:${port}/mcp`;
-  if (!LOOPBACK_HOSTS.includes(host)) return undefined;
-  const name = host === "::1" ? "[::1]" : host;
-  return `http://${name}:${port}/mcp`;
 }
 
 export function printStartupBanner({
@@ -61,12 +48,9 @@ export function printStartupBanner({
     ["Collector", `http://${localHost}:${collectorPort}`, ""],
   ];
 
-  const mcpUrl = getMcpUrl(host, port);
+  const mcpUrl = localMcpUrl(host, port);
 
-  const maxLocalLen = Math.max(
-    ...rows.map(([, url]) => url.length),
-    mcpUrl?.length ?? 0
-  );
+  const maxLocalLen = Math.max(...rows.map(([, url]) => url.length));
 
   for (const [label, localUrl, path] of rows) {
     const padded = localUrl.padEnd(maxLocalLen);
@@ -83,7 +67,7 @@ export function printStartupBanner({
   lines.push(
     mcpUrl
       ? `  ${green}▸${reset} ${bold}${"MCP".padEnd(16)}${reset}${cyan}${mcpUrl}${reset}`
-      : `  ${green}▸${reset} ${bold}${"MCP".padEnd(16)}${reset}${dim}unavailable (bind HOST to localhost or 0.0.0.0)${reset}`
+      : `  ${green}▸${reset} ${bold}${"MCP".padEnd(16)}${reset}${dim}unavailable (${MCP_UNAVAILABLE_HINT})${reset}`
   );
 
   lines.push("");

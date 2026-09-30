@@ -57,7 +57,10 @@ apiServer.register(fastifySwagger, {
     },
     servers: [],
   },
-  transform: createOpenapiTransform({ port: env.PORT }),
+  transform: createOpenapiTransform({
+    host: env.HOST || "localhost",
+    port: env.PORT,
+  }),
   transformObject: (input) => {
     const result = jsonSchemaTransformObject(input);
     // Fix: z.lazy() recursive schemas generate $ref to schema0

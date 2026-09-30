@@ -25,7 +25,7 @@ beforeEach(async () => {
   app.setSerializerCompiler(serializerCompiler);
   await app.register(fastifySwagger, {
     openapi: { info: { title: "t", version: "0" } },
-    transform: createOpenapiTransform({ port: 8123 }),
+    transform: createOpenapiTransform({ host: "localhost", port: 8123 }),
   });
   await app.register(apiRoutes, {
     readTelemetryDatasource: createOptimizedDatasource(connection),
@@ -55,6 +55,28 @@ describe("the OpenAPI document", () => {
     const mcp = app.swagger().paths?.["/mcp"];
     expect(mcp).not.toHaveProperty("get");
     expect(mcp).not.toHaveProperty("delete");
+  });
+
+  // Bound to one LAN address the banner says MCP is unavailable; the docs must
+  // not hand out a localhost URL that nothing listens on.
+  it("says MCP is unavailable when bound to a specific non-loopback address", async () => {
+    const lan = Fastify({ logger: false });
+    lan.setValidatorCompiler(validatorCompiler);
+    lan.setSerializerCompiler(serializerCompiler);
+    await lan.register(fastifySwagger, {
+      openapi: { info: { title: "t", version: "0" } },
+      transform: createOpenapiTransform({ host: "192.168.1.5", port: 8123 }),
+    });
+    await lan.register(apiRoutes, {
+      readTelemetryDatasource: createOptimizedDatasource(connection),
+      dynamicDashboardDatasource: new DashboardDbDatasource(connection),
+    });
+    await lan.ready();
+    const description = lan.swagger().paths?.["/mcp"]?.post?.description;
+    await lan.close();
+    expect(description).not.toContain("claude mcp add");
+    expect(description).toContain("Unavailable");
+    expect(description).toContain("bind HOST to localhost");
   });
 
   it("still hides the UI routes and still documents the signals routes", () => {

@@ -15,7 +15,8 @@ any request whose `Host` or browser `Origin` is not a loopback name
 (`localhost`, `127.0.0.1`, `[::1]`), whatever `HOST` the server binds to. That
 keeps web pages, including DNS-rebinding ones, out of `/mcp`. It covers `/mcp`
 only: the REST routes, dashboard and collector do not check `Host` or `Origin`
-yet, so a DNS-rebinding page can still reach local telemetry through them.
+yet, so a DNS-rebinding page can still read local telemetry through them, and
+write telemetry that an agent later reads through `/mcp`.
 MCP clients outside a browser send no `Origin` — measured for Claude Code, curl
 and Node `fetch` — so they are unaffected.
 

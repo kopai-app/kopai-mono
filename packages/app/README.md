@@ -83,17 +83,32 @@ Use your `PORT` if you changed it. The server exposes two tools:
 - `query` - search and aggregate traces, logs and metrics
 - `metrics_discover` - list the metrics that exist, with their attributes
 
-It works with MCP clients that run on your machine, such as Claude Code or the
-MCP Inspector. Connectors that connect from a vendor's backend (claude.ai, Claude
-Desktop's connector dialog) cannot reach `localhost` and are not supported.
+It works with MCP clients that run on your machine outside a browser, such as
+Claude Code or the MCP Inspector's CLI:
+
+```bash
+npx @modelcontextprotocol/inspector --cli http://localhost:8000/mcp --method tools/list
+```
+
+These are not supported:
+
+- clients that connect from a browser page directly, such as the Inspector's
+  web UI in direct mode - the endpoint serves no CORS, so the browser blocks
+  the request;
+- clients in another container that reach Kopai by a name other than
+  `localhost`, such as a Compose service name or `host.docker.internal` - the
+  endpoint accepts loopback names only;
+- connectors that connect from a vendor's backend (claude.ai, Claude Desktop's
+  connector dialog), which cannot reach `localhost`.
 
 **Security.** There is no authentication. `/mcp` refuses any request whose
 `Host` or browser `Origin` is not `localhost`, `127.0.0.1` or `[::1]`, which
 keeps web pages - including DNS-rebinding ones - out of the MCP endpoint.
 Those checks cover `/mcp` only: the rest of the API, the dashboard and the
 collector do not check `Host` or `Origin` yet, so a DNS-rebinding page can
-still reach your telemetry through them. Only run Kopai while you need it,
-and avoid untrusted sites while it is running.
+still read your telemetry through them, and write telemetry that an agent later
+reads. Only run Kopai while you need it, and avoid untrusted sites while it is
+running.
 
 None of this is network access control: a client on your network can send any
 `Host` it likes. If you bind `HOST=0.0.0.0` (the Docker image does), the whole

@@ -5,6 +5,8 @@ import { type datasource, type dashboardDatasource } from "@kopai/core";
 import { mcpRoutes } from "@kopai/mcp";
 import { generatePromptInstructions, observabilityCatalog } from "@kopai/ui";
 
+import { LOOPBACK_HOSTNAMES } from "../loopback.js";
+
 const require = createRequire(import.meta.url);
 const uiPkg = require("@kopai/ui/package.json");
 
@@ -14,15 +16,9 @@ const uiPkg = require("@kopai/ui/package.json");
 // with a genuinely loopback Host. MCP clients outside a browser (Claude Code,
 // curl, Node fetch) send no Origin, so they pass.
 //
-// NOTE neither list is network access control: a client on the LAN can send
-// any Host it likes. Always loopback, whatever HOST the server binds to —
-// widening this to a LAN address weakens the rebinding check and gains
-// nothing, since a LAN client can send Host: localhost anyway.
-//
 // NOTE the REST routes registered beside it check neither header, so a
 // rebinding page can still read the same data there. That gap is pinned by a
 // test in index.test.ts and tracked separately; it is not closed here.
-const LOOPBACK_HOSTNAMES = ["localhost", "127.0.0.1", "[::1]"];
 
 const promptInstructions = generatePromptInstructions(
   observabilityCatalog,
