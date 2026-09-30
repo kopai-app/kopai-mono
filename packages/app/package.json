@@ -52,6 +52,7 @@
     "dev": "node --env-file-if-exists=.env ./dist/cli.mjs start",
     "lint": "eslint src",
     "type-check": "tsc --noEmit",
+    "test": "vitest run",
     "start": "node ./dist/cli.mjs start"
   },
   "dependencies": {
@@ -61,6 +62,7 @@
     "@kopai/api": "workspace:*",
     "@kopai/collector": "workspace:*",
     "@kopai/core": "workspace:*",
+    "@kopai/mcp": "workspace:*",
     "@kopai/sqlite-datasource": "workspace:*",
     "@kopai/ui": "workspace:*",
     "close-with-grace": "^2.5.0",

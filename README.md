@@ -28,6 +28,7 @@ npx @kopai/app start
 - send OpenTelemetry signals to localhost:4318 using HTTP
 - inspect the data using [`@kopai/cli`](./packages/cli)
 - view traces, logs and metrics in your browser at localhost:8000
+- query them from Claude Code: `claude mcp add --transport http local-kopai http://localhost:8000/mcp` ([details](./packages/app#mcp))
 
 See: [OpenTelemetry Demo App running with @kopai/app](https://github.com/kopai-app/opentelemetry-demo/tree/main/kopai).
 

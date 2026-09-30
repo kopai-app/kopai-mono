@@ -20,6 +20,21 @@ function getNetworkAddress(): string | undefined {
   return undefined;
 }
 
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "::1", "[::1]"];
+const WILDCARD_HOSTS = ["0.0.0.0", "::"];
+
+/**
+ * The URL an MCP client on this machine should use, or undefined when there is
+ * none. `/mcp` refuses any non-loopback Host header, so a LAN URL would 403 —
+ * and bound to one specific LAN address, nothing listens on loopback either.
+ */
+function getMcpUrl(host: string, port: number): string | undefined {
+  if (WILDCARD_HOSTS.includes(host)) return `http://localhost:${port}/mcp`;
+  if (!LOOPBACK_HOSTS.includes(host)) return undefined;
+  const name = host === "::1" ? "[::1]" : host;
+  return `http://${name}:${port}/mcp`;
+}
+
 export function printStartupBanner({
   host,
   port,
@@ -46,7 +61,12 @@ export function printStartupBanner({
     ["Collector", `http://${localHost}:${collectorPort}`, ""],
   ];
 
-  const maxLocalLen = Math.max(...rows.map(([, url]) => url.length));
+  const mcpUrl = getMcpUrl(host, port);
+
+  const maxLocalLen = Math.max(
+    ...rows.map(([, url]) => url.length),
+    mcpUrl?.length ?? 0
+  );
 
   for (const [label, localUrl, path] of rows) {
     const padded = localUrl.padEnd(maxLocalLen);
@@ -58,6 +78,13 @@ export function printStartupBanner({
     }
     lines.push(line);
   }
+
+  // Local URL only: the endpoint refuses the network address by design.
+  lines.push(
+    mcpUrl
+      ? `  ${green}▸${reset} ${bold}${"MCP".padEnd(16)}${reset}${cyan}${mcpUrl}${reset}`
+      : `  ${green}▸${reset} ${bold}${"MCP".padEnd(16)}${reset}${dim}unavailable (bind HOST to localhost or 0.0.0.0)${reset}`
+  );
 
   lines.push("");
   console.log(lines.join("\n"));

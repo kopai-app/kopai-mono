@@ -1,7 +1,6 @@
 import fastify from "fastify";
 import {
   jsonSchemaTransformObject,
-  jsonSchemaTransform,
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
@@ -12,6 +11,7 @@ import closeWithGrace from "close-with-grace";
 import { env } from "./config.js";
 import { version } from "./version.js";
 import { apiRoutes } from "./routes/index.js";
+import { createOpenapiTransform } from "./openapi.js";
 import { otelCollectorRoutes } from "./collector/index.js";
 import {
   initializeDatabase,
@@ -48,7 +48,6 @@ const apiServer = fastify({
 apiServer.setValidatorCompiler(validatorCompiler);
 apiServer.setSerializerCompiler(serializerCompiler);
 
-const uiRoutes = ["/", "/*"];
 apiServer.register(fastifySwagger, {
   openapi: {
     info: {
@@ -58,10 +57,7 @@ apiServer.register(fastifySwagger, {
     },
     servers: [],
   },
-  transform: ({ schema, url, ...rest }) => {
-    if (uiRoutes.includes(url)) return { schema: { hide: true }, url };
-    return jsonSchemaTransform({ schema, url, ...rest });
-  },
+  transform: createOpenapiTransform({ port: env.PORT }),
   transformObject: (input) => {
     const result = jsonSchemaTransformObject(input);
     // Fix: z.lazy() recursive schemas generate $ref to schema0

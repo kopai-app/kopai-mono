@@ -150,6 +150,9 @@ importers:
       '@kopai/core':
         specifier: workspace:*
         version: link:../core
+      '@kopai/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@kopai/sqlite-datasource':
         specifier: workspace:*
         version: link:../sqlite-datasource

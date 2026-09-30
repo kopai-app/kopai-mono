@@ -67,6 +67,37 @@ PORT=3000 npx @kopai/app start
 
 - **OTEL Collector** - `localhost:4318` - [OTLP/HTTP endpoints](https://opentelemetry.io/docs/specs/otlp/#otlphttp-request)
 - **API Server** - `localhost:8000` - see [/documentation](http://localhost:8000/documentation) for available endpoints
+- **MCP Server** - `localhost:8000/mcp` - read-only [MCP](https://modelcontextprotocol.io) endpoint, see [MCP](#mcp)
+
+## MCP
+
+The API server also serves a read-only MCP server at `/mcp`, so an MCP client on
+the same machine can query your local telemetry. With Claude Code:
+
+```bash
+claude mcp add --transport http local-kopai http://localhost:8000/mcp
+```
+
+Use your `PORT` if you changed it. The server exposes two tools:
+
+- `query` - search and aggregate traces, logs and metrics
+- `metrics_discover` - list the metrics that exist, with their attributes
+
+It works with MCP clients that run on your machine, such as Claude Code or the
+MCP Inspector. Connectors that connect from a vendor's backend (claude.ai, Claude
+Desktop's connector dialog) cannot reach `localhost` and are not supported.
+
+**Security.** There is no authentication. `/mcp` refuses any request whose
+`Host` or browser `Origin` is not `localhost`, `127.0.0.1` or `[::1]`, which
+keeps web pages - including DNS-rebinding ones - out of the MCP endpoint.
+Those checks cover `/mcp` only: the rest of the API, the dashboard and the
+collector do not check `Host` or `Origin` yet, so a DNS-rebinding page can
+still reach your telemetry through them. Only run Kopai while you need it,
+and avoid untrusted sites while it is running.
+
+None of this is network access control: a client on your network can send any
+`Host` it likes. If you bind `HOST=0.0.0.0` (the Docker image does), the whole
+API, including `/mcp`, is reachable from your network.
 
 ## Sending Telemetry
 
