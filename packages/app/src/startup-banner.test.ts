@@ -3,7 +3,10 @@ import { stripVTControlCharacters } from "node:util";
 
 import { printStartupBanner } from "./startup-banner.js";
 
-// Strips ANSI so the assertions hold whether or not the runner has a TTY.
+/**
+ * The banner's MCP row for a given HOST, with ANSI stripped so the assertions
+ * hold whether or not the runner has a TTY.
+ */
 function mcpLine(host: string): string {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   try {

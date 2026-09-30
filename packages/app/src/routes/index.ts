@@ -25,6 +25,11 @@ const promptInstructions = generatePromptInstructions(
   uiPkg.version
 );
 
+/**
+ * Every API route the app serves, with no prefix: the signals and dashboards
+ * REST routes, and the MCP endpoint at `/mcp`. All of them read the same
+ * telemetry datasource.
+ */
 export const apiRoutes: FastifyPluginAsyncZod<{
   readTelemetryDatasource: datasource.ReadTelemetryDatasource;
   dynamicDashboardDatasource: dashboardDatasource.DynamicDashboardDatasource;

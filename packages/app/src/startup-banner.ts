@@ -22,6 +22,10 @@ function getNetworkAddress(): string | undefined {
   return undefined;
 }
 
+/**
+ * Prints the URLs the app is reachable at. The MCP row shows only the local
+ * URL, from {@link localMcpUrl}, because `/mcp` refuses the network address.
+ */
 export function printStartupBanner({
   host,
   port,

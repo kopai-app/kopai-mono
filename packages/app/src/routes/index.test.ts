@@ -64,6 +64,7 @@ afterEach(async () => {
   connection.close();
 });
 
+/** Sends a JSON-RPC request to `/mcp` with a loopback Host unless overridden. */
 function rpc(
   method: string,
   params: unknown,
