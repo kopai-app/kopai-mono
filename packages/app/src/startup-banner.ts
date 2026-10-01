@@ -1,5 +1,7 @@
 import { networkInterfaces } from "node:os";
 
+import { localMcpUrl, MCP_UNAVAILABLE_HINT } from "./loopback.js";
+
 const isTTY = process.stdout.isTTY;
 const bold = isTTY ? "\x1b[1m" : "";
 const dim = isTTY ? "\x1b[2m" : "";
@@ -20,6 +22,10 @@ function getNetworkAddress(): string | undefined {
   return undefined;
 }
 
+/**
+ * Prints the URLs the app is reachable at. The MCP row shows only the local
+ * URL, from {@link localMcpUrl}, because `/mcp` refuses the network address.
+ */
 export function printStartupBanner({
   host,
   port,
@@ -46,6 +52,8 @@ export function printStartupBanner({
     ["Collector", `http://${localHost}:${collectorPort}`, ""],
   ];
 
+  const mcpUrl = localMcpUrl(host, port);
+
   const maxLocalLen = Math.max(...rows.map(([, url]) => url.length));
 
   for (const [label, localUrl, path] of rows) {
@@ -58,6 +66,13 @@ export function printStartupBanner({
     }
     lines.push(line);
   }
+
+  // Local URL only: the endpoint refuses the network address by design.
+  lines.push(
+    mcpUrl
+      ? `  ${green}▸${reset} ${bold}${"MCP".padEnd(16)}${reset}${cyan}${mcpUrl}${reset}`
+      : `  ${green}▸${reset} ${bold}${"MCP".padEnd(16)}${reset}${dim}unavailable (${MCP_UNAVAILABLE_HINT})${reset}`
+  );
 
   lines.push("");
   console.log(lines.join("\n"));
