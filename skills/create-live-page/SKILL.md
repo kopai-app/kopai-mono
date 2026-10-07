@@ -23,7 +23,7 @@ Done when one of these holds:
 
 - **`Kopai` is attached**: continue; the page is publishable.
 - **A near-match is attached** (`kopai`, `Kopai (2)`, `kopai-local`, …): build if you like, then refuse to publish. Tell the user: _"Found the connector `<name>`. Live pages reach Kopai only by the exact name `Kopai`; rename it at <https://claude.ai/customize/connectors> and run this again."_
-- **Kopai is only a `.mcp.json` server** (tools under `mcp__kopai__…` or similar, no `claude_ai_` prefix) **or absent**: its tools may feed steps 2–4, then refuse to publish. Tell the user: _"A published page can call only connectors on your claude.ai account, and Kopai isn't one. Add it, named exactly `Kopai`: <https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=Kopai&connectorUrl=https%3A%2F%2Fapi.kopai.app%2Fv2%2Fmcp>. A static snapshot with the values written into the page is a different kind of page (an evidence page), not a live one."_
+- **Kopai is only a server configured in Claude Code** (its tools lack the `claude_ai_` prefix) **or absent**: its tools may feed steps 2–4, then refuse to publish. Tell the user: _"A published page can call only connectors on your claude.ai account, and Kopai isn't one. Add it, named exactly `Kopai`: <https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=Kopai&connectorUrl=https%3A%2F%2Fapi.kopai.app%2Fv2%2Fmcp>. A static snapshot with the values written into the page is a different kind of page (an evidence page), not a live one."_
 
 ### 2. Discover metrics (metric requests only)
 
@@ -47,7 +47,7 @@ Done when every query returns `ok` from `query`.
 
 Call each tool the page will call, through the `Kopai` connector, exactly as the page will. Learn the payload shape from it: `{ data: [{ bucket_start, <dimensions>, <measure aliases> }] }`.
 
-Done when every page query returns at least one row. Zero rows means a wrong metric name, filter value or window: fix it in step 3, never publish an empty chart. The observed values are the user's real data: use them to learn the shape and keep them out of the page.
+Done when every page query answers `ok`, and every query whose chart must hold data returns at least one row. There, zero rows means a wrong metric name, filter value or window: fix it in step 3, never publish an empty chart. Zero rows is a real answer only where the page renders it as a state, such as the worked example's rank with no errors; then observe the chart query in its unfiltered one-call form to learn its shape. The observed values are the user's real data: use them to learn the shape and keep them out of the page.
 
 ### 5. Build the page
 
@@ -57,18 +57,16 @@ Done when every page query returns at least one row. Zero rows means a wrong met
 - **Messages**: give each state below its own message in the section it affects, naming the connector `Kopai` in code formatting.
 - **Viewers**: one line on the page saying each viewer needs their own Kopai connection, linked to <https://kopai.app/connect-ai-assistants>.
 
-| State                                                                           | Message                                                                                                                                    |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `server_not_connected`                                                          | This page reads live data through the `Kopai` connector. Add it to your claude.ai account, named exactly `Kopai`: [link]                   |
-| `not_granted`                                                                   | You declined access to `Kopai` for this page, so its live sections stay empty. Reload to be asked again.                                   |
-| `blocked_by_policy`                                                             | Your organization blocks the `Kopai` connector on pages. An admin can allow it.                                                            |
-| `needs_reauth`                                                                  | Your `Kopai` connection has expired. Reconnect it at <https://claude.ai/customize/connectors>, then reload.                                |
-| `tool_error` with `error.result.structuredContent.error === "result_too_large"` | This view outgrew its query. Show this state in place of the chart; never draw a partial one, and drop the last-good rows for the section. |
-| any other code                                                                  | The runtime's generic degraded state from `artifact-capabilities`, keeping last-good data.                                                 |
+- **`server_not_connected`**: This page reads live data through the `Kopai` connector. Add it to your claude.ai account, named exactly `Kopai`: [link]
+- **`not_granted`**: You declined access to `Kopai` for this page, so its live sections stay empty. Reload to be asked again.
+- **`blocked_by_policy`**: Your organization blocks the `Kopai` connector on pages. An admin can allow it.
+- **`needs_reauth`**: Your `Kopai` connection has expired. Reconnect it at <https://claude.ai/customize/connectors>, then reload.
+- **`tool_error` with `error.result.structuredContent.error === "result_too_large"`**: This view outgrew its query. Show this state in place of the chart; never draw a partial one, and drop the last-good rows for the section.
+- **Any other code**: the runtime's generic degraded state from `artifact-capabilities`, keeping last-good data.
 
 `[link]` is <https://kopai.app/connect-ai-assistants>.
 
-Done when every query has a watch, every state in the table has its message, and no observed value appears in the page source.
+Done when every query has a watch, every state in the list has its message, and no observed value appears in the page source.
 
 ### 6. Publish
 
