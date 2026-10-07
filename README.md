@@ -42,6 +42,10 @@ docker run --rm -p 8000:8000 -p 4318:4318 ghcr.io/kopai-app/kopai:latest
 
 The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-images) (`dhi.io/node:24-debian13`) and published automatically on each release.
 
+## Agent skills
+
+`npx skills add kopai-app/kopai-mono` installs Kopai's agent skills from [`skills/`](./skills); see [kopai.app/skills](https://kopai.app/skills) for what each one does.
+
 ## Packages
 
 | Package                                                          | Description                     | Version                                                                                                                                      |
