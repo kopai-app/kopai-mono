@@ -39,9 +39,9 @@
     "zod": "^4.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/fastify": "2.0.0",
-    "@modelcontextprotocol/node": "2.1.0",
-    "@modelcontextprotocol/server": "2.1.0"
+    "@modelcontextprotocol/fastify": "2.0.1",
+    "@modelcontextprotocol/node": "2.1.1",
+    "@modelcontextprotocol/server": "2.3.1"
   },
   "devDependencies": {
     "@kopai/core": "workspace:*",

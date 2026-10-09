@@ -57,7 +57,7 @@
   },
   "dependencies": {
     "@fastify/vite": "^10.0.0",
-    "@fastify/swagger": "^9.9.0",
+    "@fastify/swagger": "^9.9.1",
     "@fastify/swagger-ui": "^6.1.1",
     "@kopai/api": "workspace:*",
     "@kopai/collector": "workspace:*",
@@ -74,14 +74,14 @@
     "@kopai/tsconfig": "workspace:*",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-react": "^6.1.2",
     "@tailwindcss/postcss": "^4.3.3",
-    "postcss": "^8.5.28",
+    "postcss": "^8.5.29",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3",
     "tsdown": "^0.23.0",
     "typescript": "^6.0.3",
-    "vite": "^8.3.1"
+    "vite": "^8.3.3"
   }
 }
