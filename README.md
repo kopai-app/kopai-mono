@@ -8,7 +8,7 @@
   <!-- BADGES -->
   <div align=center>
     <a href="https://github.com/kopai-app/kopai-mono/blob/main/LICENSE"><img alt="license" src="https://img.shields.io/github/license/kopai-app/kopai-mono"></a>
-    <a href="https://deepwiki.com/kopai-app/kopai-mono"><img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"/></a>
+    <a href="https://deepwiki.com/kopai-app/kopai-mono"><img alt="Ask DeepWiki" src="https://img.shields.io/badge/Ask-DeepWiki-blue"/></a>
   </div>
   <br />
   <!-- LINKS -->
