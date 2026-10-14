@@ -19,6 +19,9 @@ import { passThroughValidator } from "./validator.js";
 /**
  * Both tools read and never write, always return the same answer for the same
  * arguments and window, and reach nothing outside this deployment.
+ *
+ * Each tool repeats its `title` inside `annotations`: clients and directory
+ * checks built on the 2025-03-26 spec read the title only from there.
  */
 const READ_ONLY = {
   readOnlyHint: true,
@@ -127,7 +130,7 @@ export function registerTools(
         QUERY_TOOL_INPUT_SCHEMA,
         passThroughValidator
       ),
-      annotations: READ_ONLY,
+      annotations: { ...READ_ONLY, title: "Query telemetry" },
     },
     async (input: unknown) => call("query", () => runQueryTool(input, opts))
   );
@@ -141,7 +144,7 @@ export function registerTools(
         METRICS_DISCOVER_TOOL_INPUT_SCHEMA,
         passThroughValidator
       ),
-      annotations: READ_ONLY,
+      annotations: { ...READ_ONLY, title: "Discover metrics" },
     },
     async () => call("metrics_discover", () => runMetricsDiscoverTool(opts))
   );

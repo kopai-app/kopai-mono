@@ -66,6 +66,7 @@ describe("registerTools", () => {
         readOnlyHint: true,
         idempotentHint: true,
         openWorldHint: false,
+        title: tool.config.title,
       });
     }
   });
