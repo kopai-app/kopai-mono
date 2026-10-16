@@ -1,5 +1,11 @@
 # @kopai/mcp
 
+## 0.1.1
+
+### Patch Changes
+
+- aaec5bd: Repeat each tool's title in `annotations.title`, where clients and directory checks built on the 2025-03-26 MCP spec look for it.
+
 ## 0.1.0
 
 ### Minor Changes
