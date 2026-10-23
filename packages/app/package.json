@@ -57,8 +57,8 @@
   },
   "dependencies": {
     "@fastify/vite": "^10.0.0",
-    "@fastify/swagger": "^9.9.1",
-    "@fastify/swagger-ui": "^6.1.1",
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^6.1.2",
     "@kopai/api": "workspace:*",
     "@kopai/collector": "workspace:*",
     "@kopai/core": "workspace:*",
@@ -66,9 +66,9 @@
     "@kopai/sqlite-datasource": "workspace:*",
     "@kopai/ui": "workspace:*",
     "close-with-grace": "^2.5.0",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.7",
     "fastify-type-provider-zod": "^7.0.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@kopai/tsconfig": "workspace:*",
@@ -76,12 +76,12 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "@tailwindcss/postcss": "^4.3.3",
-    "postcss": "^8.5.29",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "postcss": "^8.5.31",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.3",
-    "tsdown": "^0.23.0",
+    "tsdown": "^0.23.1",
     "typescript": "^6.0.3",
-    "vite": "^8.3.3"
+    "vite": "^8.3.4"
   }
 }
