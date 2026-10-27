@@ -34,8 +34,9 @@ kq.metrics("Gauge") // auto-pins MetricType: "Gauge"
 | `ExponentialHistogram` | `Count`, `Sum`, `Positive/NegativeBucketCounts`, …             | Distributions                             |
 | `Summary`              | `Count`, `Sum`, `ValueAtQuantiles.*`                           | Pre-computed quantiles                    |
 
-For Gauge/Sum, aggregate over `Value` (`avg`/`sum`/`max`). For Histogram, aggregate over
-`Count`/`Sum`/`Max`.
+For Gauge, aggregate over `Value` (`avg`/`max`). For a counter (Sum) or a Histogram, use the
+distribution and counter measures below: `avg`/`p95` of a counter's `Value` or a histogram's
+`Sum`/`Count` mean nothing, and the percentile/average forms are refused.
 
 ## Structural columns
 
@@ -59,6 +60,51 @@ kq.metrics("Gauge")
 ```
 
 Percentiles (`p50`–`p999`) are **ClickHouse-only**; on SQLite use `avg`/`max`.
+
+## Counters, histograms and summaries
+
+Each method exists only on the builder for its type, and each handles cumulative and delta
+data, restarts and staleness markers. All are **ClickHouse-only**.
+
+| Builder                   | Method                            | Gives                                        |
+| ------------------------- | --------------------------------- | -------------------------------------------- |
+| `kq.metrics("Sum")`       | `rate("Value", a)`, `increase(…)` | Per-second rate / total growth of a counter  |
+| `kq.metrics("Histogram")` | `histogramQuantile(0.95, a)`      | p95 from merged buckets                      |
+| `kq.metrics("Histogram")` | `histogramAvg(a)`                 | Mean observation (Δ`Sum` ÷ Δ`Count`)         |
+| `kq.metrics("Histogram")` | `rate("Count", a)`, `increase(…)` | Requests per second / requests in the window |
+| `kq.metrics("Summary")`   | `summaryQuantile(0.99, a)`        | Highest per-instance pre-computed quantile   |
+
+```ts
+// error rate from a monotonic counter: the IsMonotonic filter is required
+kq.metrics("Sum")
+  .aggregate()
+  .where((f) => f.eq("MetricName", "http.server.errors"))
+  .where((f) => f.eq("IsMonotonic", true))
+  .measure((m) => m.rate("Value", "errors_per_s"))
+  .timeRelative("1h")
+  .timeSeries("1m")
+  .build();
+
+// p95 latency from a histogram, per service
+kq.metrics("Histogram")
+  .aggregate()
+  .where((f) => f.eq("MetricName", "http.server.request.duration"))
+  .measure((m) => m.histogramQuantile(0.95, "p95"))
+  .dimension("service.name")
+  .timeRelative("1h")
+  .timeSeries("5m")
+  .build();
+```
+
+- Values are `number | null`: null means nothing was observed, not zero.
+- `histogramQuantile` rows also carry `<alias>_low`/`_high` (the bucket the true value lies
+  in), `_coarsened` and `_error`. **Report only the value to people** ("p95 ≈ 430 ms"); use
+  the range yourself, e.g. a move inside one bucket range is not a change.
+- `_error` `"mixed_units"`: filter to one `MetricUnit`. `"no_shared_bounds"`: the series'
+  bucket layouts cannot be merged; group by a series attribute.
+- Next to these measures, filter only on series-level columns (`MetricName`, `MetricUnit`,
+  `ScopeName`, `ScopeVersion`, `IsMonotonic`, attributes), and group by time with
+  `.timeSeries()`, not by `TimeUnix`.
 
 ## CLI fallback (quick lookups)
 

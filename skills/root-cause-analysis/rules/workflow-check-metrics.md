@@ -82,7 +82,9 @@ The MetricType is a **builder argument**: `kq.metrics("<Type>")` auto-pins it, w
 type is one of `"Gauge"`/`"Sum"`/`"Histogram"`/`"ExponentialHistogram"`/`"Summary"`. Value
 columns are typed per type: `"Value"` for `Gauge`/`Sum`; `Count`/`Sum`/`Min`/`Max` for
 `Histogram`/`ExponentialHistogram`; `Count`/`Sum` for `Summary`. Bucket with
-`.timeSeries()` to align the metric's onset against the trace onset from (a).
+`.timeSeries()` to align the metric's onset against the trace onset from (a). A counter's
+`Value` is a running total, so read it with `rate`/`increase` (ClickHouse-only; the
+`IsMonotonic` filter is required), not `avg`.
 
 ```ts
 const NAME = "http.server.errors"; // from discoverMetrics()
@@ -90,8 +92,9 @@ try {
   const q = kq
     .metrics("Sum")
     .aggregate()
-    .measure((m) => m.avg("Value", "v"))
+    .measure((m) => m.rate("Value", "per_s"))
     .where((f) => f.eq("MetricName", NAME))
+    .where((f) => f.eq("IsMonotonic", true))
     .timeRelative("1h")
     .timeSeries("1m")
     .build();
@@ -106,10 +109,11 @@ try {
 ### Which signal to read
 
 - **Error rate / counts** → trace `errorRate` measure (a), or a `Sum` metric like
-  `http.server.errors` (c). Use `kq.metrics("Sum")`, aggregate `Value`.
+  `http.server.errors` (c). Use `kq.metrics("Sum")` with `rate("Value", …)`.
 - **Latency** → trace `avg`/`max` of `Duration` (portable); `p95`/`p99` only on
-  ClickHouse. For a metric-side view use `kq.metrics("Histogram")` and aggregate
-  `Count`/`Sum`/`Max`.
+  ClickHouse. For a metric-side view use `kq.metrics("Histogram")` with
+  `histogramQuantile(0.95, …)` (report only the value, e.g. "p95 ≈ 430 ms") and
+  `rate("Count", …)` for request rate.
 - **Resource saturation** (CPU, memory, connections) → point-in-time `Gauge`. Use
   `kq.metrics("Gauge")`, aggregate `Value` (`avg`/`max`), `.dimension("host.name")` for
   per-host spread.

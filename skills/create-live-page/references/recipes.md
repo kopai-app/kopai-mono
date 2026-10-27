@@ -28,6 +28,66 @@ Each recipe is the `query` input a page embeds, written for the last hour at `5m
 ]
 ```
 
+## p95 latency from a histogram metric
+
+When latency arrives as an OTel histogram (e.g. `http.server.request.duration`) rather than as spans, merge its buckets with `HISTOGRAM_QUANTILE`. Never take `P95` of the histogram's `Sum` or `Count`: each row is a batch, not a request, and the query is refused.
+
+```json
+{
+  "signal": "metrics",
+  "mode": "aggregate",
+  "measures": [{ "op": "HISTOGRAM_QUANTILE", "quantile": 0.95, "as": "p95" }],
+  "dimensions": ["service.name"],
+  "filters": [
+    { "column": "MetricType", "op": "eq", "value": "Histogram" },
+    {
+      "column": "MetricName",
+      "op": "eq",
+      "value": "http.server.request.duration"
+    }
+  ],
+  "timeDimension": { "type": "relative", "lookback": "1h" },
+  "output": { "type": "timeSeries", "granularity": "5m" },
+  "limit": 500
+}
+```
+
+Each row also carries `p95_low`, `p95_high`, `p95_coarsened` and `p95_error`. Chart and label only `p95`, in the metric's unit ("p95 ≈ 430 ms"); the other keys are for you. A non-null `p95_error` means that group has no honest value: `"mixed_units"` (filter to one `MetricUnit`) or `"no_shared_bounds"` (split by series). Leave the gap rather than plotting a number.
+
+## Request rate from a histogram
+
+A histogram's `Count` is a request counter. `RATE` turns it into requests per second, handling cumulative data and restarts:
+
+```json
+"measures": [{ "op": "RATE", "column": "Count", "as": "requests_per_second" }]
+```
+
+Use the histogram filters from the recipe above. `HISTOGRAM_AVG` (no column) gives the mean latency over the same rows.
+
+## Counter rate
+
+For a `Sum` metric that only goes up (requests, errors, bytes sent), `RATE` needs the `IsMonotonic` filter; without it the query is refused, because an up-down counter's real drops would read as restarts:
+
+```json
+{
+  "signal": "metrics",
+  "mode": "aggregate",
+  "measures": [{ "op": "RATE", "column": "Value", "as": "per_second" }],
+  "filters": [
+    { "column": "MetricType", "op": "eq", "value": "Sum" },
+    { "column": "MetricName", "op": "eq", "value": "http.server.errors" },
+    { "column": "IsMonotonic", "op": "eq", "value": true }
+  ],
+  "timeDimension": { "type": "relative", "lookback": "1h" },
+  "output": { "type": "timeSeries", "granularity": "5m" },
+  "limit": 500
+}
+```
+
+`INCREASE` gives the total over each bucket instead of a rate. For an up-down counter (`IsMonotonic` false: queue depth, active connections) chart `AVG` or `MAX` of `Value`.
+
+**On SQLite** these ops are refused like percentiles: _"Distribution and counter measures (HISTOGRAM_QUANTILE, …) are supported on the ClickHouse backend only."_ Say so; don't substitute an average of `Sum`.
+
 ## Log volume by severity
 
 ```json
