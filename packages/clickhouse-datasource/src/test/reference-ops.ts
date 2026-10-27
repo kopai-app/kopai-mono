@@ -251,6 +251,16 @@ function buildCells(input: RefInput): Cell[] {
     });
   }
 
+  // A summary with no dimensions is one group whether or not it has rows, as
+  // an ungrouped SQL aggregate is (COUNT 0, the new ops NULL).
+  const ungrouped =
+    (input.groupBy ?? []).length === 0 && input.granularitySec === undefined;
+  if (ungrouped && cells.size === 0) {
+    return [
+      { groupValues: [], bucketStart: window.startMs, contributions: [] },
+    ];
+  }
+
   return [...cells.values()].sort(
     (a, b) =>
       compareStrings(a.groupValues, b.groupValues) ||

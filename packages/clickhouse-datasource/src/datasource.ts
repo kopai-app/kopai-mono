@@ -5,7 +5,7 @@ import {
   type dataFilterSchemas,
   type denormalizedSignals,
   type datasource,
-  type kopaiQuery,
+  kopaiQuery,
 } from "@kopai/core";
 import type z from "zod";
 import {
@@ -878,6 +878,15 @@ export class ClickHouseReadDatasource
       // and bucket_start stay strings (a dimension like "service.name" must not
       // be numerically coerced).
       const measureAliases = new Set(q.measures.map((m) => m.as));
+      // A HISTOGRAM_QUANTILE's range and coarsened keys are numeric too. Its
+      // `_error` key is not: it stays a string code or null, and the numeric
+      // path would turn an empty string into 0.
+      for (const m of q.measures) {
+        if (!kopaiQueryCompiler.isDistributionOp(m.op)) continue;
+        for (const suffix of kopaiQuery.DISTRIBUTION_OP_EXTRA_KEYS[m.op]) {
+          if (suffix !== "_error") measureAliases.add(`${m.as}${suffix}`);
+        }
+      }
       for await (const batch of resultSet.stream()) {
         for (const row of batch) {
           const json = row.json() as Record<string, unknown>;

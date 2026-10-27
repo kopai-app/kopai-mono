@@ -588,3 +588,235 @@ describe("E2E: OTEL Collector → ClickHouse → ReadDatasource", () => {
     });
   });
 });
+
+// KOP-70 layer 4: the exporter's encodings of AggregationTemporality, Flags,
+// StartTimeUnix, IsMonotonic and ExplicitBounds, through the real collector.
+describe("E2E: distribution and counter ops through the collector", () => {
+  const MINUTE_NS = 60_000_000_000n;
+  // A 5-minute window ending a few minutes ago, aligned to the minute.
+  const nowNs = BigInt(Date.now()) * 1_000_000n;
+  const windowStart = (nowNs / MINUTE_NS) * MINUTE_NS - 10n * MINUTE_NS;
+  const at = (seconds: number) =>
+    String(windowStart + BigInt(seconds) * 1_000_000_000n);
+  const longAgo = at(-3 * 3600);
+  const NO_RECORDED_VALUE = 1;
+
+  const resource = {
+    attributes: [{ key: "service.name", value: { stringValue: "kop70-e2e" } }],
+  };
+
+  function metric(name: string, unit: string, body: Record<string, unknown>) {
+    return { name, unit, description: "", ...body };
+  }
+
+  const payload = {
+    resourceMetrics: [
+      {
+        resource,
+        scopeMetrics: [
+          {
+            scope: { name: "kop70", version: "1" },
+            metrics: [
+              metric("kop70.requests", "1", {
+                sum: {
+                  aggregationTemporality: 2,
+                  isMonotonic: true,
+                  dataPoints: [
+                    // Baseline in the lookback, a marker, then a restart
+                    // with a later start time.
+                    {
+                      timeUnixNano: at(-30),
+                      startTimeUnixNano: longAgo,
+                      asInt: "1000",
+                    },
+                    {
+                      timeUnixNano: at(30),
+                      startTimeUnixNano: longAgo,
+                      asInt: "1010",
+                    },
+                    {
+                      timeUnixNano: at(90),
+                      startTimeUnixNano: longAgo,
+                      flags: NO_RECORDED_VALUE,
+                    },
+                    {
+                      timeUnixNano: at(150),
+                      startTimeUnixNano: at(120),
+                      asInt: "15",
+                    },
+                    {
+                      timeUnixNano: at(210),
+                      startTimeUnixNano: at(120),
+                      asInt: "25",
+                    },
+                  ],
+                },
+              }),
+              metric("kop70.delta", "1", {
+                sum: {
+                  aggregationTemporality: 1,
+                  isMonotonic: true,
+                  dataPoints: [
+                    {
+                      timeUnixNano: at(30),
+                      startTimeUnixNano: at(0),
+                      asInt: "7",
+                    },
+                    {
+                      timeUnixNano: at(90),
+                      startTimeUnixNano: at(60),
+                      asInt: "9",
+                    },
+                  ],
+                },
+              }),
+              metric("kop70.latency", "ms", {
+                histogram: {
+                  aggregationTemporality: 2,
+                  dataPoints: [
+                    {
+                      timeUnixNano: at(-30),
+                      startTimeUnixNano: longAgo,
+                      count: "18",
+                      sum: 2000,
+                      bucketCounts: ["10", "5", "2", "1", "0"],
+                      explicitBounds: [100, 250, 500, 1000],
+                    },
+                    {
+                      timeUnixNano: at(60),
+                      startTimeUnixNano: longAgo,
+                      count: "118",
+                      sum: 22000,
+                      bucketCounts: ["60", "35", "17", "5", "1"],
+                      explicitBounds: [100, 250, 500, 1000],
+                    },
+                    {
+                      timeUnixNano: at(120),
+                      startTimeUnixNano: longAgo,
+                      flags: NO_RECORDED_VALUE,
+                    },
+                  ],
+                },
+              }),
+              metric("kop70.summary", "ms", {
+                summary: {
+                  dataPoints: [
+                    {
+                      timeUnixNano: at(60),
+                      startTimeUnixNano: longAgo,
+                      count: "10",
+                      sum: 1000,
+                      quantileValues: [{ quantile: 0.95, value: 900 }],
+                    },
+                    {
+                      timeUnixNano: at(240),
+                      startTimeUnixNano: longAgo,
+                      count: "20",
+                      sum: 2000,
+                      quantileValues: [
+                        { quantile: 0.5, value: 100 },
+                        { quantile: 0.95, value: 240 },
+                      ],
+                    },
+                  ],
+                },
+              }),
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  const iso = (ns: bigint) => new Date(Number(ns / 1_000_000n)).toISOString();
+  function query(
+    metricType: string,
+    name: string,
+    measures: unknown[],
+    monotonic = metricType === "Sum"
+  ) {
+    return {
+      signal: "metrics",
+      mode: "aggregate",
+      timeDimension: {
+        type: "absolute",
+        startTime: iso(windowStart),
+        endTime: iso(windowStart + 5n * MINUTE_NS),
+      },
+      output: { type: "summary" },
+      filters: [
+        { column: "MetricType", op: "eq", value: metricType },
+        { column: "MetricName", op: "eq", value: name },
+        ...(monotonic
+          ? [{ column: "IsMonotonic", op: "eq", value: true }]
+          : []),
+      ],
+      measures,
+      requestContext: requestContext(),
+    } as unknown as Parameters<
+      ClickHouseReadDatasource["queryMetricsAggregate"]
+    >[0];
+  }
+
+  beforeAll(async () => {
+    await sendOtlp("/v1/metrics", payload);
+    await waitForData(async () => {
+      const { data } = await ds.queryMetricsAggregate(
+        query("Summary", "kop70.summary", [{ op: "COUNT", as: "n" }])
+      );
+      return Number(data[0]?.n ?? 0) >= 2;
+    });
+  });
+
+  it("reads cumulative temporality, a marker and a restart on a counter", async () => {
+    const { data } = await ds.queryMetricsAggregate(
+      query("Sum", "kop70.requests", [
+        { op: "INCREASE", column: "Value", as: "inc" },
+        { op: "COUNT", as: "n" },
+      ])
+    );
+    // 1010 − 1000, the marker skipped, then 15 after the restart and 10 more.
+    expect(data).toEqual([{ inc: 35, n: 4 }]);
+  });
+
+  it("reads delta temporality", async () => {
+    const { data } = await ds.queryMetricsAggregate(
+      query("Sum", "kop70.delta", [
+        { op: "INCREASE", column: "Value", as: "inc" },
+      ])
+    );
+    expect(data).toEqual([{ inc: 16 }]);
+  });
+
+  it("reads histogram buckets, bounds and a marker", async () => {
+    const { data } = await ds.queryMetricsAggregate(
+      query("Histogram", "kop70.latency", [
+        { op: "HISTOGRAM_QUANTILE", quantile: 0.95, as: "p95" },
+        { op: "HISTOGRAM_AVG", as: "avg" },
+        { op: "INCREASE", column: "Count", as: "requests" },
+      ])
+    );
+    // Step [50, 30, 15, 4, 1]: the 95th of 100 lands in (250, 500].
+    expect(data).toEqual([
+      {
+        p95: 500,
+        p95_low: 250,
+        p95_high: 500,
+        p95_coarsened: 0,
+        p95_error: null,
+        avg: 200,
+        avg_error: null,
+        requests: 100,
+      },
+    ]);
+  });
+
+  it("takes each summary instance's latest point", async () => {
+    const { data } = await ds.queryMetricsAggregate(
+      query("Summary", "kop70.summary", [
+        { op: "SUMMARY_QUANTILE", quantile: 0.95, as: "p95" },
+      ])
+    );
+    expect(data).toEqual([{ p95: 240 }]);
+  });
+});

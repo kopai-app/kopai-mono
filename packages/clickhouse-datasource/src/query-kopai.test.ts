@@ -393,13 +393,45 @@ describe("percentile measures (clickhouse)", () => {
     ["P999", "0.999"],
   ];
 
-  it.each(quantiles)("compiles %s to quantile(%s)(col)", (op, q) => {
+  // Deterministic sampling (KOP-70): the same rows always give the same
+  // percentile, so an alert and a later diagnosis agree.
+  it.each(quantiles)("compiles %s to quantileDeterministic(%s)", (op, q) => {
     const { sql } = buildKopaiSql(
       baseTraceAggregate({
         measures: [{ op, column: "Duration", as: "p" }],
       })
     );
-    expect(sql).toContain(`quantile(${q})(\`Duration\`) AS \`p\``);
+    expect(sql).toContain(
+      `quantileDeterministic(${q})(\`Duration\`, cityHash64(TraceId, SpanId)) AS \`p\``
+    );
+    expect(sql).not.toMatch(/\bquantile\(/);
+  });
+
+  it("hashes the raw cursor's log row identity", () => {
+    const { sql } = buildKopaiSql({
+      signal: "logs",
+      mode: "aggregate",
+      measures: [{ op: "P95", column: "SeverityNumber", as: "p" }],
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "summary" },
+    });
+    expect(sql).toContain(
+      "quantileDeterministic(0.95)(`SeverityNumber`, sipHash64(Timestamp, Body, ServiceName, TraceId, SpanId))"
+    );
+  });
+
+  it("hashes the metric series identity and time, not the cursor hash", () => {
+    const { sql } = buildKopaiSql({
+      signal: "metrics",
+      mode: "aggregate",
+      measures: [{ op: "P95", column: "Value", as: "p" }],
+      filters: [{ column: "MetricType", op: "eq", value: "Gauge" }],
+      timeDimension: { type: "relative", lookback: "1h" },
+      output: { type: "summary" },
+    });
+    expect(sql).toContain(
+      "quantileDeterministic(0.95)(`Value`, sipHash64(sipHash64(MetricName, MetricUnit, ScopeName, ScopeVersion, toString(ResourceAttributes), toString(Attributes)), TimeUnix))"
+    );
   });
 });
 

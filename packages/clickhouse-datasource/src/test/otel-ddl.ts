@@ -112,6 +112,7 @@ export async function createOtelTables(
       BucketCounts Array(UInt64) CODEC(ZSTD(1)),
       ExplicitBounds Array(Float64) CODEC(ZSTD(1)),
       ${exemplarCols},
+      Flags UInt32 CODEC(ZSTD(1)),
       Min Float64 CODEC(ZSTD(1)),
       Max Float64 CODEC(ZSTD(1)),
       AggregationTemporality Int32 CODEC(ZSTD(1))
@@ -142,7 +143,8 @@ export async function createOtelTables(
       Count UInt64 CODEC(ZSTD(1)),
       Sum Float64 CODEC(ZSTD(1)),
       \`ValueAtQuantiles.Quantile\` Array(Float64) CODEC(ZSTD(1)),
-      \`ValueAtQuantiles.Value\` Array(Float64) CODEC(ZSTD(1))
+      \`ValueAtQuantiles.Value\` Array(Float64) CODEC(ZSTD(1)),
+      Flags UInt32 CODEC(ZSTD(1))
     ) ENGINE = MergeTree() ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))`,
   });
 }

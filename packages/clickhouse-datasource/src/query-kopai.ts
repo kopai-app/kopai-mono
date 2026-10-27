@@ -1,8 +1,4 @@
-import {
-  kopaiQueryCompiler,
-  type datasource,
-  type kopaiQuery,
-} from "@kopai/core";
+import { kopaiQueryCompiler, type datasource, kopaiQuery } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
 type KopaiQuery = kopaiQuery.KopaiQuery;
@@ -31,7 +27,14 @@ type MeasureExprShape =
   | { op: "ERROR_RATE"; as: string }
   | { op: "THROUGHPUT"; as: string }
   | { op: "COUNT_DISTINCT"; column: ColumnRefStructural; as: string }
-  | { op: NumericOpName; column: ColumnRefStructural; as: string };
+  | { op: NumericOpName; column: ColumnRefStructural; as: string }
+  | DistributionMeasureShape;
+type DistributionMeasureShape =
+  | { op: "HISTOGRAM_QUANTILE"; quantile: number; as: string }
+  | { op: "HISTOGRAM_AVG"; as: string }
+  | { op: "SUMMARY_QUANTILE"; quantile: number; as: string }
+  | { op: "INCREASE"; column: ColumnRefStructural; as: string }
+  | { op: "RATE"; column: ColumnRefStructural; as: string };
 
 function isStringRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
@@ -405,6 +408,25 @@ const QUANTILE_MAP: Record<
   P999: 0.999,
 };
 
+// OTel stream identity (spec 4.1): the per-series walk partitions on it, and
+// the metrics percentile determinator hashes it. Not the raw cursor's
+// _rowHash, which omits ResourceAttributes and the scope.
+const METRIC_SERIES_KEY_SQL =
+  "sipHash64(MetricName, MetricUnit, ScopeName, ScopeVersion, toString(ResourceAttributes), toString(Attributes))";
+
+// Row hash fed to quantileDeterministic, so the same rows always give the same
+// percentile (spec 4.8). Log lines identical down to the nanosecond share a
+// hash; the sampler then keeps or drops them together, which is accepted.
+const PERCENTILE_DETERMINATOR: Record<Signal, string> = {
+  traces: "cityHash64(TraceId, SpanId)",
+  logs: "sipHash64(Timestamp, Body, ServiceName, TraceId, SpanId)",
+  metrics: `sipHash64(${METRIC_SERIES_KEY_SQL}, TimeUnix)`,
+};
+
+function isPercentileOp(op: string): op is keyof typeof QUANTILE_MAP {
+  return op in QUANTILE_MAP;
+}
+
 function compileMeasure(
   signal: Signal,
   m: MeasureExprShape,
@@ -413,6 +435,16 @@ function compileMeasure(
   ctx: ParamCtx
 ): string {
   const alias = escapeIdent(m.as);
+  if (
+    m.op === "HISTOGRAM_QUANTILE" ||
+    m.op === "HISTOGRAM_AVG" ||
+    m.op === "SUMMARY_QUANTILE" ||
+    m.op === "INCREASE" ||
+    m.op === "RATE"
+  ) {
+    // Unreachable through buildKopaiSql, which routes these to the staged path.
+    throw new Error(`${m.op} compiles only through the staged metric path.`);
+  }
   if (m.op === "COUNT") {
     return `count() AS ${alias}`;
   }
@@ -462,7 +494,7 @@ function compileMeasure(
     case "P95":
     case "P99":
     case "P999":
-      return `quantile(${String(QUANTILE_MAP[m.op])})(${numCol}) AS ${alias}`;
+      return `quantileDeterministic(${String(QUANTILE_MAP[m.op])})(${numCol}, ${PERCENTILE_DETERMINATOR[signal]}) AS ${alias}`;
   }
   const exhaustive: never = m;
   throw new Error(`Unknown measure: ${JSON.stringify(exhaustive)}`);
@@ -837,12 +869,470 @@ function buildMetricAggregate(q: MetricAggregateQuery): {
       `Unknown metric type: ${metricType}`
     );
   }
+  if (kopaiQueryCompiler.distributionMeasures(q).length > 0) {
+    return buildStagedMetricAggregateSql(q, metricType, table);
+  }
   return buildAggregateSql({
     signal: "metrics",
     table,
     q,
     stripFilters: true,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Staged metric aggregate: distribution and counter ops (KOP-70)
+// ---------------------------------------------------------------------------
+// nibbler spec-kopaiquery-distribution-ops sections 4 and 5; ADR-062 has the
+// reasons. A query with one of the new ops runs in three stages:
+//
+//   __w, __s  row stage: scan the window plus a 5-minute lookback; a window
+//             function pairs each point with the previous eligible point of
+//             its series and temporality; __s turns the pair into a step.
+//   __series  one row per (group, bucket, series[, bucket layout]): sums of
+//             in-window eligible steps, and -State partials of every other
+//             measure, so those still see every in-window row.
+//   final     merges the partials per (group, bucket), merges histogram
+//             vectors onto their shared bounds and interpolates.
+//
+// Internal names carry a __ prefix so a user alias cannot shadow them.
+
+const LOOKBACK_NS = 300n * 1_000_000_000n;
+const QUANTILE_EPSILON = "1e-9";
+
+type StagedType = "Sum" | "Histogram" | "Summary";
+
+function stagedType(metricType: string): StagedType {
+  if (
+    metricType === "Sum" ||
+    metricType === "Histogram" ||
+    metricType === "Summary"
+  ) {
+    return metricType;
+  }
+  // The validator refuses the new ops on every other type (V1, V10).
+  throw new kopaiQueryCompiler.KopaiQueryValidationError(
+    `Distribution and counter ops are not supported on MetricType ${metricType}.`
+  );
+}
+
+interface StagedMeasure {
+  /** Expressions the row stage must project (inputs to -State). */
+  rowExprs: string[];
+  /** Series-stage aggregates. */
+  seriesExprs: string[];
+  /** Final-stage expressions, aliased to result keys. */
+  finalExprs: string[];
+}
+
+function buildStagedMetricAggregateSql(
+  q: MetricAggregateQuery,
+  metricType: string,
+  table: string
+): { sql: string; params: Record<string, unknown> } {
+  const type = stagedType(metricType);
+  const ctx = newParamCtx();
+  const win = kopaiQueryCompiler.compileTimeWindow(q.timeDimension);
+  const startP = nextParam(
+    ctx,
+    nanosToDateTime64(win.startNs.toString()),
+    "tsLo"
+  );
+  const endP = nextParam(ctx, nanosToDateTime64(win.endNs.toString()), "tsHi");
+  const scanP = nextParam(
+    ctx,
+    nanosToDateTime64((win.startNs - LOOKBACK_NS).toString()),
+    "tsScan"
+  );
+  const start = `{${startP}:DateTime64(9)}`;
+
+  const conds = [
+    `TimeUnix >= {${scanP}:DateTime64(9)}`,
+    `TimeUnix < {${endP}:DateTime64(9)}`,
+  ];
+  const filterSql = compileFilters(
+    "metrics",
+    stripMetricTypeFilter(q.filters),
+    ctx
+  );
+  if (filterSql) conds.push(filterSql);
+
+  const bucketSeconds =
+    q.output.type === "timeSeries"
+      ? kopaiQueryCompiler.granularityToSeconds(q.output.granularity)
+      : null;
+  const seconds = bucketSeconds ?? windowSecondsFromWindow(win);
+
+  // Dimensions and bucket: group keys at every stage.
+  const dims = (q.dimensions ?? []).map((d, i) => {
+    const r = resolveRefSql("metrics", toColumnRef(d));
+    return { name: `__d${String(i)}`, sql: r.sql, key: r.projectionKey };
+  });
+  const groupKeys = dims.map((d) => d.name);
+  const rowSelect = dims.map((d) => `${d.sql} AS ${d.name}`);
+  const finalSelect = dims.map((d) => `${d.name} AS ${escapeIdent(d.key)}`);
+  if (bucketSeconds !== null) {
+    rowSelect.push(
+      `toStartOfInterval(TimeUnix, INTERVAL ${String(bucketSeconds)} SECOND) AS __bucket`
+    );
+    groupKeys.push("__bucket");
+    finalSelect.push("__bucket AS bucket_start");
+  }
+
+  // Row stage: series key, eligibility, values and their previous values.
+  const hasTemp = type !== "Summary";
+  const eligibleSql = hasTemp
+    ? "(bitAnd(Flags, 1) = 0 AND AggregationTemporality IN (1, 2))"
+    : "(bitAnd(Flags, 1) = 0)";
+  const orderValue = type === "Sum" ? "Value" : "Count";
+  const partition = [METRIC_SERIES_KEY_SQL, eligibleSql];
+  if (hasTemp) partition.push("AggregationTemporality");
+  rowSelect.push(
+    `${METRIC_SERIES_KEY_SQL} AS __sk`,
+    "TimeUnix AS __t",
+    "StartTimeUnix AS __st",
+    "MetricUnit AS __unit",
+    `${eligibleSql} AS __eligible`,
+    `TimeUnix >= ${start} AS __in_window`,
+    "row_number() OVER __win AS __rn",
+    "lagInFrame(StartTimeUnix) OVER __win AS __p_st"
+  );
+  if (hasTemp) rowSelect.push("AggregationTemporality AS __temp");
+  if (type === "Sum") {
+    rowSelect.push("Value AS __v", "lagInFrame(Value) OVER __win AS __p_v");
+  } else if (type === "Histogram") {
+    rowSelect.push(
+      "toInt64(Count) AS __count",
+      "Sum AS __sum",
+      "arrayMap(x -> toInt64(x), BucketCounts) AS __bc",
+      "ExplicitBounds AS __bounds",
+      "lagInFrame(toInt64(Count)) OVER __win AS __p_count",
+      "lagInFrame(Sum) OVER __win AS __p_sum",
+      "lagInFrame(arrayMap(x -> toInt64(x), BucketCounts)) OVER __win AS __p_bc",
+      "lagInFrame(ExplicitBounds) OVER __win AS __p_bounds"
+    );
+  } else {
+    rowSelect.push(
+      "Count AS __count",
+      "`ValueAtQuantiles.Quantile` AS __qs",
+      "`ValueAtQuantiles.Value` AS __qv"
+    );
+  }
+
+  // Step stage (spec 4.2). __mode: 1 = the point is the step (delta, reset,
+  // or a series that started inside the window), 0 = baseline only,
+  // 2 = difference from the previous point.
+  const plausible = "(toUnixTimestamp64Nano(__st) > 0 AND __st < __t)";
+  const startReset = `(__st > __p_st AND ${plausible})`;
+  const firstPoint = `if(${plausible} AND __st >= ${start}, 1, 0)`;
+  const stepSelect = ["*"];
+  if (type === "Sum") {
+    stepSelect.push(
+      `multiIf(__temp = 1, 1, __rn = 1, ${firstPoint}, __v < __p_v OR ${startReset}, 1, 2) AS __mode`,
+      "multiIf(__mode = 1, __v, __mode = 0, 0, __v - __p_v) AS __step_v"
+    );
+  } else if (type === "Histogram") {
+    // Arrays of unequal length make element-wise functions throw, and the
+    // previous vector is [] on a series' first point or a different length
+    // after a layout change: normalise it before any arithmetic.
+    stepSelect.push(
+      "(__rn > 1 AND __p_bounds = __bounds AND length(__p_bc) = length(__bc)) AS __same_layout",
+      "if(__same_layout, __p_bc, arrayWithConstant(length(__bc), toInt64(0))) AS __prev_bc",
+      `multiIf(__temp = 1, 1, __rn = 1, ${firstPoint}, __count < __p_count OR NOT __same_layout OR arrayExists((c, p) -> c < p, __bc, __prev_bc) OR ${startReset}, 1, 2) AS __mode`,
+      "multiIf(__mode = 1, __count, __mode = 0, 0, __count - __p_count) AS __step_count",
+      "multiIf(__mode = 1, __sum, __mode = 0, 0, __sum - __p_sum) AS __step_sum",
+      "multiIf(__mode = 1, __bc, __mode = 0, arrayWithConstant(length(__bc), toInt64(0)), arrayMap((c, p) -> c - p, __bc, __prev_bc)) AS __step_vec"
+    );
+  }
+
+  // Measures.
+  const seriesGroup = [...groupKeys, "__sk"];
+  if (type === "Histogram") seriesGroup.push("__bounds");
+  const seriesSelect = [...groupKeys, "__sk", "any(__unit) AS __unit"];
+  if (type === "Histogram") seriesSelect.push("__bounds");
+  const finalMeasures: string[] = [];
+  const histogramAliases = new Set<string>();
+  const quantiles: { as: string; quantile: number; i: number }[] = [];
+  let avgPartsNeeded = false;
+
+  q.measures.forEach((raw, i) => {
+    const m = raw as MeasureExprShape;
+    const alias = escapeIdent(m.as);
+    switch (m.op) {
+      case "INCREASE":
+      case "RATE": {
+        const step =
+          type === "Sum"
+            ? "__step_v"
+            : m.column === "Sum"
+              ? "__step_sum"
+              : "__step_count";
+        const inc = `__inc${String(i)}`;
+        // sumIf over no matching rows is 0, not NULL: guard it, so a series
+        // with no eligible point stays NULL through the group-stage sum.
+        seriesSelect.push(
+          `if(countIf(__eligible) = 0, NULL, sumIf(${step}, __eligible)) AS ${inc}`
+        );
+        finalMeasures.push(
+          m.op === "INCREASE"
+            ? `sum(${inc}) AS ${alias}`
+            : `(sum(${inc}) / ${String(seconds)}) AS ${alias}`
+        );
+        return;
+      }
+      case "SUMMARY_QUANTILE": {
+        const match = `abs(x - ${String(m.quantile)}) < ${QUANTILE_EPSILON}`;
+        const sq = `__sq${String(i)}`;
+        // Latest eligible point per series and bucket; it counts only if it
+        // carries the quantile (spec 4.6).
+        seriesSelect.push(
+          `argMaxIf(tuple(arrayExists(x -> ${match}, __qs), __qv[arrayFirstIndex(x -> ${match}, __qs)]), tuple(__t, __st, __count), __eligible) AS ${sq}`
+        );
+        finalMeasures.push(
+          `if(countIf(tupleElement(${sq}, 1)) = 0, NULL, maxIf(tupleElement(${sq}, 2), tupleElement(${sq}, 1))) AS ${alias}`
+        );
+        return;
+      }
+      case "HISTOGRAM_AVG": {
+        avgPartsNeeded = true;
+        histogramAliases.add(m.as);
+        const mixed = "uniqExactIf(__unit, __hc != 0) > 1";
+        finalMeasures.push(
+          `if(${mixed} OR sum(__hc) = 0, NULL, sum(__hs) / sum(__hc)) AS ${alias}`,
+          `if(${mixed}, 'mixed_units', NULL) AS ${escapeIdent(`${m.as}_error`)}`
+        );
+        return;
+      }
+      case "HISTOGRAM_QUANTILE": {
+        histogramAliases.add(m.as);
+        quantiles.push({ as: m.as, quantile: m.quantile, i });
+        return;
+      }
+      default: {
+        const staged = stagedExistingMeasure(m, i, seconds);
+        rowSelect.push(...staged.rowExprs);
+        seriesSelect.push(...staged.seriesExprs);
+        finalMeasures.push(...staged.finalExprs);
+      }
+    }
+  });
+  // Histogram quantiles past the GROUP BY. Each intermediate gets its own
+  // query level so the next one reads it as a column: an alias would be
+  // inlined at every use, and these nest (__hRM ← __hM ← __hS ← __hv), so
+  // the expression tree, and planning time, grow with every reference.
+  const levels: string[][] = [];
+  if (quantiles.length > 0) {
+    seriesSelect.push("sumForEachIf(__step_vec, __eligible) AS __vec");
+    // Kept vectors (spec 4.4 step 1): one per series and layout.
+    finalMeasures.push(
+      "arrayFilter(x -> arrayExists(c -> c != 0, tupleElement(x, 2)), groupArray(tuple(__bounds, __vec, __unit))) AS __hv"
+    );
+    levels.push(
+      [
+        "arrayDistinct(arrayMap(x -> tupleElement(x, 3), __hv)) AS __hunits",
+        "arrayDistinct(arrayMap(x -> tupleElement(x, 1), __hv)) AS __hlayouts",
+      ],
+      [
+        "arraySort(arrayFold((acc, b) -> arrayIntersect(acc, b), __hlayouts, __hlayouts[1])) AS __hS",
+      ],
+      [
+        // Coarsen each vector onto __hS: running totals read off at the
+        // shared bounds, the total appended, neighbours subtracted; then sum.
+        "arrayReduce('sumForEach', arrayMap(x -> arrayPopFront(arrayDifference(arrayPushFront(arrayPushBack(arrayFilter((r, b) -> has(__hS, b), arrayResize(arrayCumSum(tupleElement(x, 2)), length(tupleElement(x, 1))), tupleElement(x, 1)), arraySum(tupleElement(x, 2))), toInt64(0)))), __hv)) AS __hM",
+        "multiIf(length(__hv) = 0, 'none', length(__hunits) > 1, 'mixed_units', arrayAll(x -> length(tupleElement(x, 1)) = 0, __hv), 'none', length(__hS) = 0, 'no_shared_bounds', 'ok') AS __hstate",
+      ],
+      ["arrayCumSum(__hM) AS __hRM"]
+    );
+    const parts = quantiles.map((h) =>
+      histogramQuantileSql(h.as, h.quantile, h.i)
+    );
+    levels.push(
+      parts.map((p) => p.target),
+      parts.map((p) => p.index),
+      parts.flatMap((p) => p.keys)
+    );
+  }
+  if (avgPartsNeeded) {
+    seriesSelect.push(
+      "sumIf(__step_sum, __eligible) AS __hs",
+      "sumIf(__step_count, __eligible) AS __hc"
+    );
+  }
+
+  // HAVING (spec 4.7): a histogram op's errored group always survives. Applied
+  // on the outer query, where every result key is a plain column.
+  let havingSql = "";
+  if (q.havings && q.havings.length > 0) {
+    const parts = q.havings.map((h) => {
+      const p = nextParam(ctx, h.value, "hv");
+      const cond = `${escapeIdent(h.measure)} ${kopaiQueryCompiler.NUMBER_COMPARATOR_SQL[h.op]} {${p}:Float64}`;
+      return histogramAliases.has(h.measure)
+        ? `((${cond}) OR ${escapeIdent(`${h.measure}_error`)} IS NOT NULL)`
+        : `(${cond})`;
+    });
+    havingSql = `WHERE ${parts.join(" AND ")}`;
+  }
+
+  let orderSql = "";
+  if (q.orderBy && q.orderBy.length > 0) {
+    const parts = q.orderBy.map((o) => {
+      const dir = o.direction.toUpperCase();
+      if (o.type === "measure") {
+        return `${escapeIdent(o.alias)} ${dir} NULLS LAST`;
+      }
+      const key = resolveRefSql("metrics", toColumnRef(o.column)).projectionKey;
+      return `${escapeIdent(key)} ${dir}`;
+    });
+    orderSql = `ORDER BY ${parts.join(", ")}`;
+  }
+
+  let limitSql = "";
+  if (q.limit !== undefined) {
+    const p = nextParam(ctx, q.limit, "lim");
+    limitSql = `LIMIT {${p}:UInt32}`;
+  }
+
+  // The final stage also projects its intermediates (__hv, __hS, …); the
+  // outer query keeps only the result keys, in dimension-then-measure order.
+  const resultKeys = dims.map((d) => d.key);
+  if (bucketSeconds !== null) resultKeys.push("bucket_start");
+  for (const m of q.measures) {
+    resultKeys.push(m.as);
+    if (kopaiQueryCompiler.isDistributionOp(m.op)) {
+      for (const suffix of kopaiQuery.DISTRIBUTION_OP_EXTRA_KEYS[m.op]) {
+        resultKeys.push(`${m.as}${suffix}`);
+      }
+    }
+  }
+
+  const finalGroup =
+    groupKeys.length > 0 ? `GROUP BY ${groupKeys.join(", ")}` : "";
+  let body = `SELECT
+    ${[...finalSelect, ...finalMeasures].join(",\n    ")}
+  FROM __series
+  ${finalGroup}`;
+  for (const level of levels) {
+    body = `SELECT *, ${level.join(", ")}
+  FROM (
+  ${body}
+  )`;
+  }
+  const sql = `WITH
+__w AS (
+  SELECT
+    ${rowSelect.join(",\n    ")}
+  FROM ${table}
+  WHERE ${conds.join(" AND ")}
+  WINDOW __win AS (PARTITION BY ${partition.join(", ")} ORDER BY TimeUnix, StartTimeUnix, ${orderValue} ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+),
+__s AS (
+  SELECT ${stepSelect.join(",\n    ")}
+  FROM __w
+),
+__series AS (
+  SELECT
+    ${seriesSelect.join(",\n    ")}
+  FROM __s
+  WHERE __in_window
+  GROUP BY ${seriesGroup.join(", ")}
+)
+SELECT ${resultKeys.map(escapeIdent).join(", ")}
+FROM (
+  ${body}
+)
+${havingSql}
+${orderSql}
+${limitSql}`.trim();
+  return { sql, params: ctx.params };
+}
+
+// The five keys of one HISTOGRAM_QUANTILE (spec 4.4 step 9), in three
+// levels: the target rank, the bucket it falls in, then the keys. Reads the
+// __hS/__hM/__hRM/__hstate columns of the levels before.
+function histogramQuantileSql(
+  as: string,
+  quantile: number,
+  i: number
+): { target: string; index: string; keys: string[] } {
+  const n = "length(__hS)";
+  const target = `__ht${String(i)}`;
+  const idx = `__hi${String(i)}`;
+  const ok = "__hstate = 'ok'";
+  return {
+    target: `(${String(quantile)} * __hRM[-1]) AS ${target}`,
+    index: `arrayFirstIndex(x -> x >= ${target}, __hRM) AS ${idx}`,
+    keys: [
+      `multiIf(NOT ${ok}, NULL, ${idx} = ${n} + 1, __hS[${n}], ${idx} = 1, if(__hS[1] > 0, __hS[1] * ${target} / __hM[1], __hS[1]), __hS[${idx} - 1] + (__hS[${idx}] - __hS[${idx} - 1]) * (${target} - __hRM[${idx} - 1]) / __hM[${idx}]) AS ${escapeIdent(as)}`,
+      `multiIf(NOT ${ok}, NULL, ${idx} = ${n} + 1, __hS[${n}], ${idx} = 1, if(__hS[1] > 0, 0, NULL), __hS[${idx} - 1]) AS ${escapeIdent(`${as}_low`)}`,
+      `multiIf(NOT ${ok}, NULL, ${idx} = ${n} + 1, NULL, __hS[${idx}]) AS ${escapeIdent(`${as}_high`)}`,
+      `multiIf(__hstate = 'no_shared_bounds', 1, ${ok}, length(__hlayouts) > 1, 0) AS ${escapeIdent(`${as}_coarsened`)}`,
+      `if(__hstate IN ('mixed_units', 'no_shared_bounds'), __hstate, NULL) AS ${escapeIdent(`${as}_error`)}`,
+    ],
+  };
+}
+
+// Existing measures next to a new op: -State per series, -Merge per group, so
+// a P* or COUNT gives the same value with or without the new op present.
+function stagedExistingMeasure(
+  m: MeasureExprShape,
+  i: number,
+  seconds: number
+): StagedMeasure {
+  const alias = escapeIdent(m.as);
+  const input = `__in${String(i)}`;
+  const state = `__m${String(i)}`;
+  if (m.op === "COUNT") {
+    return {
+      rowExprs: [],
+      seriesExprs: [`countState() AS ${state}`],
+      finalExprs: [`countMerge(${state}) AS ${alias}`],
+    };
+  }
+  if (!("column" in m)) {
+    throw new Error(`Measure ${m.op} is not available on metrics.`);
+  }
+  const r = resolveRefSql("metrics", m.column);
+  if (m.op === "COUNT_DISTINCT") {
+    return {
+      rowExprs: [`${r.isString ? `nullIf(${r.sql}, '')` : r.sql} AS ${input}`],
+      seriesExprs: [`uniqState(${input}) AS ${state}`],
+      finalExprs: [`uniqMerge(${state}) AS ${alias}`],
+    };
+  }
+  const rowExprs = [`${numericCast(r)} AS ${input}`];
+  if (isPercentileOp(m.op)) {
+    const level = String(QUANTILE_MAP[m.op]);
+    const det = `__det${String(i)}`;
+    return {
+      rowExprs: [...rowExprs, `${PERCENTILE_DETERMINATOR.metrics} AS ${det}`],
+      seriesExprs: [
+        `quantileDeterministicState(${level})(${input}, ${det}) AS ${state}`,
+      ],
+      finalExprs: [
+        `quantileDeterministicMerge(${level})(${state}) AS ${alias}`,
+      ],
+    };
+  }
+  const fn: Record<string, [string, boolean]> = {
+    SUM: ["sum", false],
+    AVG: ["avg", false],
+    MIN: ["min", false],
+    MAX: ["max", false],
+    RATE_SUM: ["sum", true],
+    RATE_AVG: ["avg", true],
+    RATE_MAX: ["max", true],
+  };
+  const spec = fn[m.op];
+  if (!spec) throw new Error(`Unknown measure: ${JSON.stringify(m)}`);
+  const [agg, rate] = spec;
+  const merged = `${agg}Merge(${state})`;
+  return {
+    rowExprs,
+    seriesExprs: [`${agg}State(${input}) AS ${state}`],
+    finalExprs: [
+      `${rate ? `(${merged} / ${String(seconds)})` : merged} AS ${alias}`,
+    ],
+  };
 }
 
 function buildAggregateSql(args: {
