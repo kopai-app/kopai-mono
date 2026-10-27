@@ -143,6 +143,42 @@ describe("result value types", () => {
   });
 });
 
+describe("aliases cannot shadow internal names", () => {
+  // Each alias was once an internal name of the staged SQL. ClickHouse
+  // resolves an alias before a column, so the shared name changed values.
+  it.each([
+    "__ht1",
+    "__ht0",
+    "__hS",
+    "__hM",
+    "__hRM",
+    "__hstate",
+    "__hunits",
+    "__hv",
+    "__unit",
+    "__hc",
+    "__d0",
+    "__hi1",
+    "__inc1",
+    "__series",
+  ])("%s", async (alias) => {
+    const { data } = await ds.queryMetricsAggregate(
+      metricsQuery("G1", "Histogram", [
+        { op: "MAX", column: "Sum", as: alias },
+        { op: "HISTOGRAM_QUANTILE", quantile: 0.95, as: "p" },
+      ])
+    );
+    expect(data).toHaveLength(1);
+    expect(data[0]).toMatchObject({
+      p: 500,
+      p_low: 250,
+      p_high: 500,
+      p_coarsened: 0,
+      p_error: null,
+    });
+  });
+});
+
 describe("existing measures next to a new op", () => {
   const ROWS = 20_000;
 

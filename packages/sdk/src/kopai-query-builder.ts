@@ -535,8 +535,9 @@ export interface CounterMeasureBuilder<C extends string> {
 }
 
 /** Histogram-only measures. */
-export interface HistogramMeasureBuilder
-  extends CounterMeasureBuilder<"Count" | "Sum"> {
+export interface HistogramMeasureBuilder extends CounterMeasureBuilder<
+  "Count" | "Sum"
+> {
   /** Bucket-merged quantile; adds `_low`, `_high`, `_coarsened`, `_error`.
    * Show people only the value, never the range. */
   histogramQuantile<A extends string>(
@@ -779,8 +780,8 @@ type AggRowMarker<
   Extra extends object = object,
 > = {
   readonly __aggRow?: { [K in Aliases]: number } & Extra & {
-    [K in Dims]: string | number | null;
-  } & (Out extends "timeSeries" ? { bucket_start: string } : object);
+      [K in Dims]: string | number | null;
+    } & (Out extends "timeSeries" ? { bucket_start: string } : object);
 };
 
 /**
@@ -851,12 +852,10 @@ export class AggBuilder<
       Dims,
       Out,
       Extra & RowOf<E>
-    >(
-      (s) => ({
-        ...s,
-        measures: Object.freeze([...s.measures, expr]),
-      })
-    );
+    >((s) => ({
+      ...s,
+      measures: Object.freeze([...s.measures, expr]),
+    }));
   }
 
   /** Adds a GROUP BY column. Repeatable. */
@@ -925,15 +924,7 @@ export class AggBuilder<
   /** Relative time window ending now. */
   timeRelative(
     lookback: string
-  ): AggBuilder<
-    S,
-    WithFlag<F, "timeDimension">,
-    M,
-    Aliases,
-    Dims,
-    Out,
-    Extra
-  > {
+  ): AggBuilder<S, WithFlag<F, "timeDimension">, M, Aliases, Dims, Out, Extra> {
     const td: TimeDim = { type: "relative", lookback };
     return this.clone<WithFlag<F, "timeDimension">>((s) => ({
       ...s,
@@ -945,15 +936,7 @@ export class AggBuilder<
   timeAbsolute(
     startTime: string,
     endTime: string
-  ): AggBuilder<
-    S,
-    WithFlag<F, "timeDimension">,
-    M,
-    Aliases,
-    Dims,
-    Out,
-    Extra
-  > {
+  ): AggBuilder<S, WithFlag<F, "timeDimension">, M, Aliases, Dims, Out, Extra> {
     const td: TimeDim = { type: "absolute", startTime, endTime };
     return this.clone<WithFlag<F, "timeDimension">>((s) => ({
       ...s,

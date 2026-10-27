@@ -29,8 +29,9 @@ Queries that used to return a meaningless number or a server error are now
 refused with a 400 that names the fix:
 
 - A numeric measure (`SUM`, `AVG`, `P95`, …) on a structural column that is not
-  numeric on any signal, e.g. `SUM(SpanName)`, `P95(BucketCounts)`, or
-  `MIN`/`MAX` of `Timestamp`/`TimeUnix`.
+  numeric on any signal, e.g. `SUM(SpanName)` or `P95(BucketCounts)`. On a
+  time column (`Timestamp`, `TimeUnix`, `StartTimeUnix`) only `MIN` and `MAX`
+  are kept: they still return the first or last time.
 - `P50`–`P999`, `AVG` and `RATE_AVG` on the `Sum` or `Count` of a Histogram,
   Summary or ExponentialHistogram metric. `SUM`, `MIN`, `MAX`, `RATE_SUM` and
   `RATE_MAX` there are unchanged.
@@ -42,5 +43,5 @@ refused with a 400 that names the fix:
 per signal, so the same rows always return the same percentile. Accuracy is
 unchanged.
 
-The new ops need **ClickHouse 24.x or later** (`groupArrayIntersect`,
-`arrayFold`); they are tested on 25.6.
+The new ops need **ClickHouse 24.x or later** (`arrayFold` with
+`arrayIntersect`); they are tested on 25.6.

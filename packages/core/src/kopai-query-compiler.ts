@@ -909,15 +909,23 @@ function hasMonotonicPin(filters: AnyFilterExpr[] | undefined): boolean {
 // V4 (all signals): a numeric measure on a structural column needs a numeric
 // one. Today a String or array column surfaces as a 500 or a meaningless
 // number. Attribute and semconv refs are dynamically typed and exempt, as is
-// COUNT_DISTINCT, which counts any column.
+// COUNT_DISTINCT, which counts any column. MIN and MAX of a time column give
+// the first or last point's time, so they stay.
 function validateNumericMeasureColumns(q: AggregateQuery): void {
   const numeric = NUMERIC_STRUCTURAL_COLUMNS[q.signal];
+  const time = TIME_STRUCTURAL_COLUMNS[q.signal];
   for (const m of q.measures) {
     if (!("column" in m) || m.op === "COUNT_DISTINCT") continue;
     const col = m.column;
     if (typeof col !== "string") continue;
     if (resolveColumn(q.signal, col).kind !== "structural") continue;
     if (numeric.has(col)) continue;
+    if (time.has(col)) {
+      if (m.op === "MIN" || m.op === "MAX") continue;
+      throw new KopaiQueryValidationError(
+        `${m.op} on ${col}: the column is a time; only MIN and MAX apply to it.`
+      );
+    }
     const fix =
       ARRAY_COLUMN_FIX[col] ??
       "the column is not numeric; choose a numeric column or a numeric attribute";

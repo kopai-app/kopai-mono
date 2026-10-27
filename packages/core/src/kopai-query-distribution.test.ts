@@ -229,6 +229,41 @@ describe("V4: numeric measures need a numeric structural column", () => {
       ])
     );
   });
+
+  it.each([
+    ["logs", "MAX"],
+    ["traces", "MIN"],
+  ])("keeps %s %s(Timestamp): the first or last time", (signal, op) => {
+    accepted({
+      signal,
+      mode: "aggregate",
+      measures: [{ op, column: "Timestamp", as: "t" }],
+      timeDimension: td,
+      output: { type: "summary" },
+    });
+  });
+
+  it.each([
+    ["MAX", "TimeUnix"],
+    ["MIN", "StartTimeUnix"],
+  ])("keeps metrics %s(%s)", (op, column) => {
+    accepted(metricQuery("Gauge", [{ op, column, as: "t" }]));
+  });
+
+  it.each(["SUM", "AVG", "P95", "RATE_MAX"])(
+    "refuses %s(Timestamp) on logs",
+    (op) => {
+      expect(
+        rejection({
+          signal: "logs",
+          mode: "aggregate",
+          measures: [{ op, column: "Timestamp", as: "t" }],
+          timeDimension: td,
+          output: { type: "summary" },
+        })
+      ).toMatch(new RegExp(`${op} on Timestamp: the column is a time`));
+    }
+  );
 });
 
 describe("V5: meaningless percentile/average on Histogram and Summary Sum/Count", () => {
@@ -388,6 +423,11 @@ describe("near-miss hints for the new op names", () => {
       'Did you mean {op: "HISTOGRAM_QUANTILE", quantile: 0.999}?',
     ],
     ["SUMMARY_P50", 'Did you mean {op: "SUMMARY_QUANTILE", quantile: 0.5}?'],
+    [
+      "HISTOGRAM_P5",
+      'Did you mean {op: "HISTOGRAM_QUANTILE", quantile: 0.05}?',
+    ],
+    ["SUMMARY_P1", 'Did you mean {op: "SUMMARY_QUANTILE", quantile: 0.01}?'],
     ["HISTOGRAM_MEAN", 'Did you mean "HISTOGRAM_AVG"?'],
     ["histogram_quantile", 'Did you mean "HISTOGRAM_QUANTILE"?'],
   ])("%s", (op, message) => {

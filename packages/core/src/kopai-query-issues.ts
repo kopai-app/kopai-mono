@@ -422,7 +422,11 @@ function measureOpNearMiss(
   if (percentile?.[1] && percentile[2]) {
     const op = `${percentile[1].toUpperCase()}_QUANTILE`;
     if (!accepted.includes(op)) return undefined;
-    const quantile = Number(`0.${percentile[2]}`);
+    // Percentile digits: P5 is 0.05, P95 0.95, P999 0.999. P0 and P100
+    // name no valid quantile, so they get no hint.
+    const digits = percentile[2];
+    if (/^0+$|^10+$/.test(digits)) return undefined;
+    const quantile = Number(`0.${digits.padStart(2, "0")}`);
     return { op, shown: `{op: "${op}", quantile: ${quantile}}` };
   }
   const op = MEASURE_OP_ALIASES[fold(sent)];
