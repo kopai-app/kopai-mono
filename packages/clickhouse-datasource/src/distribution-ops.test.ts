@@ -24,13 +24,17 @@ import {
 
 const CLICKHOUSE_HTTP_PORT = 8123;
 const TEST_DATABASE = "test_distribution_ops";
-const CONTAINER_STARTUP_TIMEOUT = 60_000;
+// Container start plus seeding every golden case and scenario.
+const SETUP_TIMEOUT = 180_000;
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Differential scenarios: override the base seed to replay a failure.
+// Differential scenarios: override the base seed to replay a failure, and the
+// count to run more or fewer (CI runs fewer to keep the job short).
 const BASE_SEED = Number(process.env.KOPAI_DIFF_SEED ?? 7000);
-const SCENARIO_COUNT = 300;
+const SCENARIO_COUNT = Number(
+  process.env.KOPAI_DIFF_SCENARIOS ?? (process.env.CI ? 100 : 300)
+);
 const SCENARIOS = Array.from({ length: SCENARIO_COUNT }, (_, i) =>
   generateScenario(BASE_SEED + i)
 );
@@ -76,7 +80,7 @@ beforeAll(async () => {
     })),
   ]);
   ds = new ClickHouseReadDatasource(baseUrl);
-}, CONTAINER_STARTUP_TIMEOUT);
+}, SETUP_TIMEOUT);
 
 afterAll(async () => {
   await ds?.close();

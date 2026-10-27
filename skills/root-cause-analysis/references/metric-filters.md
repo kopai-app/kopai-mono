@@ -36,7 +36,8 @@ kq.metrics("Gauge") // auto-pins MetricType: "Gauge"
 
 For Gauge, aggregate over `Value` (`avg`/`max`). For a counter (Sum) or a Histogram, use the
 distribution and counter measures below: `avg`/`p95` of a counter's `Value` or a histogram's
-`Sum`/`Count` mean nothing, and the percentile/average forms are refused.
+`Sum`/`Count` mean nothing. On a histogram's `Sum`/`Count` they are refused; on a counter's
+`Value` they are accepted, so do not reach for them.
 
 ## Structural columns
 

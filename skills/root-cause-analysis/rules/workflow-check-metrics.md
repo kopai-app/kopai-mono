@@ -84,7 +84,8 @@ columns are typed per type: `"Value"` for `Gauge`/`Sum`; `Count`/`Sum`/`Min`/`Ma
 `Histogram`/`ExponentialHistogram`; `Count`/`Sum` for `Summary`. Bucket with
 `.timeSeries()` to align the metric's onset against the trace onset from (a). A counter's
 `Value` is a running total, so read it with `rate`/`increase` (ClickHouse-only; the
-`IsMonotonic` filter is required), not `avg`.
+`IsMonotonic` filter is required), not `avg`. On SQLite `rate` fails at query time:
+fall back to `max("Value")` per bucket and compare neighbouring buckets.
 
 ```ts
 const NAME = "http.server.errors"; // from discoverMetrics()
@@ -102,7 +103,11 @@ try {
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   if (e instanceof KopaiQueryBuildError) console.error(e.issues);
-  else throw e;
+  else
+    console.error(
+      "rate needs ClickHouse; fall back to max(Value) per bucket:",
+      e
+    );
 }
 ```
 

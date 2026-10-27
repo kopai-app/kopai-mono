@@ -166,7 +166,7 @@ Common pitfalls:
 - **LogTimeline with severity filter** — avoid filtering by severity unless the user explicitly asks for error logs. Many services only emit info-level logs, so filtering to error level returns empty results. Default to showing all logs. (When error logs ARE requested, filter `SeverityNumber >= 17`: `kq.logs.raw().where(f => f.gte("SeverityNumber", 17)).timeRelative("1h").limit(100).build()`.)
 - **Trace error tiles** — StatusCode value is the literal `"Error"` (also `"Unset"`/`"Ok"`); successful spans are usually `"Unset"`.
 - **Percentiles** (`p50`–`p999`) are ClickHouse-only and hard-fail on SQLite at query time. Lead latency tiles with `avg`/`max` of `Duration` (nanoseconds: 1ms = 1e6, 1s = 1e9).
-- **Histogram percentiles and counter rates** — never `p95`/`avg` of a histogram's `Sum`/`Count` or `avg` of a counter's `Value` (refused, and meaningless). In aggregate queries use `kq.metrics("Histogram")` `.histogramQuantile(0.95, a)` / `.rate("Count", a)` and `kq.metrics("Sum")` `.rate("Value", a)` with `.where(f => f.eq("IsMonotonic", true))`; all ClickHouse-only. A `histogramQuantile` row also carries `<a>_low`/`_high`/`_coarsened`/`_error`: label tiles with the value only.
+- **Histogram percentiles and counter rates** — never `p95`/`avg` of a histogram's `Sum`/`Count` (refused) or `avg` of a counter's `Value` (accepted, but meaningless: it is a running total). In aggregate queries use `kq.metrics("Histogram")` `.histogramQuantile(0.95, a)` / `.rate("Count", a)` and `kq.metrics("Sum")` `.rate("Value", a)` with `.where(f => f.eq("IsMonotonic", true))`; all ClickHouse-only. A `histogramQuantile` row also carries `<a>_low`/`_high`/`_coarsened`/`_error`: label tiles with the value only.
 
 ## CLI fallback (one-off create)
 
