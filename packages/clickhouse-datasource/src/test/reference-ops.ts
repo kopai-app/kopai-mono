@@ -146,6 +146,15 @@ function sameBounds(a: number[] | undefined, b: number[] | undefined) {
   return x.length === y.length && x.every((v, i) => v === y[i]);
 }
 
+/**
+ * Section 4.4 step 0: bucket counts that do not fit the bounds. A point with
+ * no counts at all (count and sum only) is not malformed.
+ */
+function malformed(p: RefPoint): boolean {
+  const n = (p.buckets ?? []).length;
+  return n > 0 && n !== (p.bounds ?? []).length + 1;
+}
+
 function step(
   c: RefPoint,
   p: RefPoint | undefined,
@@ -168,21 +177,25 @@ function step(
     layoutChange = !sameBounds(c.bounds, p.bounds);
     const cb = c.buckets ?? [];
     const pb = p.buckets ?? [];
+    // Counts compare bucket by bucket only when both points have as many.
     valueDrop =
       (c.count ?? 0) < (p.count ?? 0) ||
-      (!layoutChange && cb.some((v, i) => v < (pb[i] ?? 0)));
+      (!layoutChange &&
+        cb.length === pb.length &&
+        cb.some((v, i) => v < pb[i]!));
   }
   const reset =
     valueDrop || layoutChange || (c.start > p.start && plausibleStart(c));
   if (reset) return pointAsStep(c);
 
+  const cb = c.buckets ?? [];
   const pb = p.buckets ?? [];
   return {
     value: (c.value ?? 0) - (p.value ?? 0),
     count: (c.count ?? 0) - (p.count ?? 0),
     sum: (c.sum ?? 0) - (p.sum ?? 0),
     bounds: c.bounds ?? [],
-    buckets: (c.buckets ?? []).map((v, i) => v - (pb[i] ?? 0)),
+    buckets: cb.length === pb.length ? cb.map((v, i) => v - pb[i]!) : cb,
   };
 }
 
@@ -195,6 +208,8 @@ interface Contribution {
   point: RefPoint;
   /** Undefined for points that are not eligible. */
   step: Step | undefined;
+  /** Histogram: the point or its previous point has malformed buckets. */
+  malformed: boolean;
 }
 
 interface Cell {
@@ -217,6 +232,7 @@ function buildCells(input: RefInput): Cell[] {
 
   // Previous eligible point of the same series and the same temporality.
   const stepOf = new Map<RefPoint, Step>();
+  const malformedOf = new Set<RefPoint>();
   const walks = new Map<string, RefPoint[]>();
   for (const p of scanned) {
     if (!isEligible(p, type)) continue;
@@ -229,7 +245,11 @@ function buildCells(input: RefInput): Cell[] {
     list.sort(comparePoints(type));
     list.forEach((c, i) => {
       if (c.time < window.startMs) return;
-      stepOf.set(c, step(c, list[i - 1], type, window.startMs));
+      const prev = list[i - 1];
+      stepOf.set(c, step(c, prev, type, window.startMs));
+      if (type === "Histogram" && (malformed(c) || (prev && malformed(prev)))) {
+        malformedOf.add(c);
+      }
     });
   }
 
@@ -248,6 +268,7 @@ function buildCells(input: RefInput): Cell[] {
       unit: p.unit ?? "",
       point: p,
       step: stepOf.get(p),
+      malformed: malformedOf.has(p),
     });
   }
 
@@ -342,6 +363,9 @@ function histogramQuantile(cell: Cell, q: number) {
     coarsened: 0,
     error: null,
   };
+  if (eligible(cell).some((c) => c.malformed)) {
+    return { ...empty, error: "malformed_buckets" };
+  }
   const vectors = seriesVectors(cell);
   if (vectors.length === 0) return empty;
   if (new Set(vectors.map((v) => v.unit)).size > 1) {

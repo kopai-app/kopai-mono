@@ -106,10 +106,15 @@ export function generateScenario(seed: number): Scenario {
           sum += deltaSum;
         }
         const out = temporality === 2 ? buckets : delta;
+        let stored = marker ? out.map(() => 0) : [...out];
+        // Rarely, counts that do not fit the bounds (spec 4.4 step 0).
+        if (chance(0.02)) {
+          stored = chance(0.5) ? [...stored, int(0, 20)] : stored.slice(0, -1);
+        }
         point = {
           ...base,
           bounds: layout,
-          buckets: marker ? out.map(() => 0) : [...out],
+          buckets: stored,
           count: marker ? 0 : out.reduce((a, b) => a + b, 0),
           sum: marker ? 0 : temporality === 2 ? sum : deltaSum,
         };

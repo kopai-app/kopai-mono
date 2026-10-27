@@ -1045,11 +1045,15 @@ function buildStagedMetricAggregateSql(
   } else if (type === "Histogram") {
     // Arrays of unequal length make element-wise functions throw, and the
     // previous vector is [] on a series' first point or a different length
-    // after a layout change: normalise it before any arithmetic.
+    // after a layout change: normalise it before any arithmetic. Only a
+    // change of bounds resets; counts of another length (malformed, spec
+    // 4.4 step 0) are differenced against zeros.
     stepSelect.push(
-      "(`$rn` > 1 AND `$p_bounds` = `$bounds` AND length(`$p_bc`) = length(`$bc`)) AS `$same_layout`",
+      "(`$rn` > 1 AND `$p_bounds` = `$bounds`) AS `$same_bounds`",
+      "(`$same_bounds` AND length(`$p_bc`) = length(`$bc`)) AS `$same_layout`",
       "if(`$same_layout`, `$p_bc`, arrayWithConstant(length(`$bc`), toInt64(0))) AS `$prev_bc`",
-      `multiIf(\`$temp\` = 1, 1, \`$rn\` = 1, ${firstPoint}, \`$count\` < \`$p_count\` OR NOT \`$same_layout\` OR arrayExists((c, p) -> c < p, \`$bc\`, \`$prev_bc\`) OR ${startReset}, 1, 2) AS \`$mode\``,
+      "((length(`$bc`) > 0 AND length(`$bc`) != length(`$bounds`) + 1) OR (`$rn` > 1 AND length(`$p_bc`) > 0 AND length(`$p_bc`) != length(`$p_bounds`) + 1)) AS `$malformed`",
+      `multiIf(\`$temp\` = 1, 1, \`$rn\` = 1, ${firstPoint}, \`$count\` < \`$p_count\` OR NOT \`$same_bounds\` OR arrayExists((c, p) -> c < p, \`$bc\`, \`$prev_bc\`) OR ${startReset}, 1, 2) AS \`$mode\``,
       "multiIf(`$mode` = 1, `$count`, `$mode` = 0, 0, `$count` - `$p_count`) AS `$step_count`",
       "multiIf(`$mode` = 1, `$sum`, `$mode` = 0, 0, `$sum` - `$p_sum`) AS `$step_sum`",
       "multiIf(`$mode` = 1, `$bc`, `$mode` = 0, arrayWithConstant(length(`$bc`), toInt64(0)), arrayMap((c, p) -> c - p, `$bc`, `$prev_bc`)) AS `$step_vec`"
@@ -1133,10 +1137,14 @@ function buildStagedMetricAggregateSql(
   // the expression tree, and planning time, grow with every reference.
   const levels: string[][] = [];
   if (quantiles.length > 0) {
-    seriesSelect.push("sumForEachIf(`$step_vec`, `$eligible`) AS `$vec`");
+    seriesSelect.push(
+      "sumForEachIf(`$step_vec`, `$eligible`) AS `$vec`",
+      "countIf(`$eligible` AND `$malformed`) AS `$hbad`"
+    );
     // Kept vectors (spec 4.4 step 1): one per series and layout.
     finalMeasures.push(
-      "arrayFilter(x -> arrayExists(c -> c != 0, tupleElement(x, 2)), groupArray(tuple(`$bounds`, `$vec`, `$unit`))) AS `$hv`"
+      "arrayFilter(x -> arrayExists(c -> c != 0, tupleElement(x, 2)), groupArray(tuple(`$bounds`, `$vec`, `$unit`))) AS `$hv`",
+      "sum(`$hbad`) AS `$hbad_n`"
     );
     levels.push(
       [
@@ -1150,7 +1158,7 @@ function buildStagedMetricAggregateSql(
         // Coarsen each vector onto $hS: running totals read off at the
         // shared bounds, the total appended, neighbours subtracted; then sum.
         "arrayReduce('sumForEach', arrayMap(x -> arrayPopFront(arrayDifference(arrayPushFront(arrayPushBack(arrayFilter((r, b) -> has(`$hS`, b), arrayResize(arrayCumSum(tupleElement(x, 2)), length(tupleElement(x, 1))), tupleElement(x, 1)), arraySum(tupleElement(x, 2))), toInt64(0)))), `$hv`)) AS `$hM`",
-        "multiIf(length(`$hv`) = 0, 'none', length(`$hunits`) > 1, 'mixed_units', arrayAll(x -> length(tupleElement(x, 1)) = 0, `$hv`), 'none', length(`$hS`) = 0, 'no_shared_bounds', 'ok') AS `$hstate`",
+        "multiIf(`$hbad_n` > 0, 'malformed_buckets', length(`$hv`) = 0, 'none', length(`$hunits`) > 1, 'mixed_units', arrayAll(x -> length(tupleElement(x, 1)) = 0, `$hv`), 'none', length(`$hS`) = 0, 'no_shared_bounds', 'ok') AS `$hstate`",
       ],
       ["arrayCumSum(`$hM`) AS `$hRM`"]
     );
@@ -1277,7 +1285,7 @@ function histogramQuantileSql(
       `multiIf(NOT ${ok}, NULL, ${idx} = ${n} + 1, \`$hS\`[${n}], ${idx} = 1, if(\`$hS\`[1] > 0, 0, NULL), \`$hS\`[${idx} - 1]) AS ${escapeIdent(`${as}_low`)}`,
       `multiIf(NOT ${ok}, NULL, ${idx} = ${n} + 1, NULL, \`$hS\`[${idx}]) AS ${escapeIdent(`${as}_high`)}`,
       `multiIf(\`$hstate\` = 'no_shared_bounds', 1, ${ok}, length(\`$hlayouts\`) > 1, 0) AS ${escapeIdent(`${as}_coarsened`)}`,
-      `if(\`$hstate\` IN ('mixed_units', 'no_shared_bounds'), \`$hstate\`, NULL) AS ${escapeIdent(`${as}_error`)}`,
+      `if(\`$hstate\` IN ('malformed_buckets', 'mixed_units', 'no_shared_bounds'), \`$hstate\`, NULL) AS ${escapeIdent(`${as}_error`)}`,
     ],
   };
 }

@@ -10,7 +10,7 @@ Five metric measure ops, each limited to the metric types it applies to:
   merged across series and the window. Each row also carries `<as>_low` and
   `<as>_high` (the bucket the true value lies in), `<as>_coarsened` (1 when
   series used different bucket layouts) and `<as>_error` (`"mixed_units"`,
-  `"no_shared_bounds"` or null). A data problem makes that group's value null
+  `"no_shared_bounds"`, `"malformed_buckets"` or null). A data problem makes that group's value null
   with a code; the query does not fail.
 - `HISTOGRAM_AVG` `{op, as}`: increase of `Sum` ÷ increase of `Count`, plus
   `<as>_error`.

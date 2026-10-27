@@ -598,4 +598,32 @@ export const GOLDEN_CASES: GoldenCase[] = [
     },
     expected: [hq(50, 0, 100, 0, null)],
   },
+  {
+    id: "G31",
+    name: "too many bucket counts: malformed_buckets, not a bucket guess",
+    input: {
+      metricType: "Histogram",
+      window: WINDOW,
+      measures: [...HQ_P50, { op: "INCREASE", column: "Count", as: "n" }],
+      points: [
+        deltaHist("12:01", [100], [10, 10]),
+        deltaHist("12:03", [100], [10, 10, 80]),
+      ],
+    },
+    expected: [{ ...hq(null, null, null, 0, "malformed_buckets"), n: 120 }],
+  },
+  {
+    id: "G32",
+    name: "too few counts on the baseline: no reset, malformed_buckets",
+    input: {
+      metricType: "Histogram",
+      window: WINDOW,
+      measures: [...HQ_P50, { op: "INCREASE", column: "Count", as: "n" }],
+      points: [
+        cumHist("11:58", "09:00", [100, 250], [10], { count: 10 }),
+        cumHist("12:02", "09:00", [100, 250], [20, 5, 5]),
+      ],
+    },
+    expected: [{ ...hq(null, null, null, 0, "malformed_buckets"), n: 20 }],
+  },
 ];

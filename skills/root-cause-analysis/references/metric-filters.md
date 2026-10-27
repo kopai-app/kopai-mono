@@ -101,7 +101,8 @@ kq.metrics("Histogram")
   in), `_coarsened` and `_error`. **Report only the value to people** ("p95 ≈ 430 ms"); use
   the range yourself, e.g. a move inside one bucket range is not a change.
 - `_error` `"mixed_units"`: filter to one `MetricUnit`. `"no_shared_bounds"`: the series'
-  bucket layouts cannot be merged; group by a series attribute.
+  bucket layouts cannot be merged; group by a series attribute. `"malformed_buckets"`: an
+  exporter sent bucket counts that do not fit the bounds; find and filter out that series.
 - Next to these measures, filter only on series-level columns (`MetricName`, `MetricUnit`,
   `ScopeName`, `ScopeVersion`, `IsMonotonic`, attributes), and group by time with
   `.timeSeries()`, not by `TimeUnix`.
