@@ -509,6 +509,27 @@ describe("measure ops (sqlite)", () => {
       ).toThrow(/Percentile measures \(P50-P999\) are not yet supported/);
     }
   );
+
+  it.each([
+    ["Histogram", { op: "HISTOGRAM_QUANTILE", quantile: 0.95, as: "p" }],
+    ["Histogram", { op: "HISTOGRAM_AVG", as: "a" }],
+    ["Summary", { op: "SUMMARY_QUANTILE", quantile: 0.95, as: "p" }],
+    ["Histogram", { op: "INCREASE", column: "Count", as: "i" }],
+    ["Histogram", { op: "RATE", column: "Count", as: "r" }],
+  ] as const)("refuses %s %o (ClickHouse only)", (metricType, measure) => {
+    expect(() =>
+      buildKopaiSql({
+        signal: "metrics",
+        mode: "aggregate",
+        measures: [measure],
+        filters: [{ column: "MetricType", op: "eq", value: metricType }],
+        timeDimension: { type: "relative", lookback: "1h" },
+        output: { type: "summary" },
+      })
+    ).toThrow(
+      /Distribution and counter measures \(HISTOGRAM_QUANTILE, HISTOGRAM_AVG, SUMMARY_QUANTILE, INCREASE, RATE\) are supported on the ClickHouse backend only/
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

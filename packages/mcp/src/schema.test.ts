@@ -168,6 +168,39 @@ const VALID: Array<[string, unknown]> = [
       },
     },
   ],
+  [
+    "metrics/aggregate histogram quantile and request rate",
+    {
+      query: {
+        signal: "metrics",
+        mode: "aggregate",
+        measures: [
+          { op: "HISTOGRAM_QUANTILE", quantile: 0.95, as: "p95" },
+          { op: "HISTOGRAM_AVG", as: "avg" },
+          { op: "RATE", column: "Count", as: "rps" },
+        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Histogram" }],
+        timeDimension: td,
+        output: { type: "timeSeries", granularity: "5m" },
+      },
+    },
+  ],
+  [
+    "metrics/aggregate counter increase and summary quantile",
+    {
+      query: {
+        signal: "metrics",
+        mode: "aggregate",
+        measures: [
+          { op: "INCREASE", column: "Value", as: "inc" },
+          { op: "SUMMARY_QUANTILE", quantile: 0.99, as: "p99" },
+        ],
+        filters: [{ column: "MetricType", op: "eq", value: "Sum" }],
+        timeDimension: td,
+        output: { type: "summary" },
+      },
+    },
+  ],
 ];
 
 const INVALID: Array<[string, unknown]> = [
@@ -246,6 +279,49 @@ const INVALID: Array<[string, unknown]> = [
       },
     },
   ],
+  [
+    "quantile outside (0, 1)",
+    {
+      query: {
+        signal: "metrics",
+        mode: "aggregate",
+        measures: [{ op: "HISTOGRAM_QUANTILE", quantile: 1, as: "p" }],
+        timeDimension: td,
+        output: { type: "summary" },
+      },
+    },
+  ],
+  [
+    "histogram quantile with a column",
+    {
+      query: {
+        signal: "metrics",
+        mode: "aggregate",
+        measures: [
+          {
+            op: "HISTOGRAM_QUANTILE",
+            quantile: 0.5,
+            column: "BucketCounts",
+            as: "p",
+          },
+        ],
+        timeDimension: td,
+        output: { type: "summary" },
+      },
+    },
+  ],
+  [
+    "counter op on traces",
+    {
+      query: {
+        signal: "traces",
+        mode: "aggregate",
+        measures: [{ op: "RATE", column: "Duration", as: "r" }],
+        timeDimension: td,
+        output: { type: "summary" },
+      },
+    },
+  ],
   ["no query key", {}],
   ["query is not an object", { query: "hello" }],
 ];
@@ -281,6 +357,17 @@ describe("QUERY_TOOL_INPUT_SCHEMA", () => {
         limit: 5,
       })
     ).toBe(false);
+  });
+
+  // The tool schema is generated from the zod descriptions, so what a model
+  // is told about the distribution ops arrives through it (KOP-70).
+  it("advertises the distribution ops and how to report them", () => {
+    const doc = JSON.stringify(QUERY_TOOL_INPUT_SCHEMA);
+    for (const op of kopaiQuery.DISTRIBUTION_OPS) {
+      expect(doc).toContain(`"const":"${op}"`);
+    }
+    expect(doc).toContain("show only the value");
+    expect(doc).toContain("IsMonotonic");
   });
 
   it("compiles under a 2020-12 validator — every $ref resolves", () => {

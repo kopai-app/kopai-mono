@@ -428,10 +428,40 @@ function makeFilterBuilder<S extends Signal, M extends MetricType>(
 export type MeasureExpr<
   S extends Signal,
   A extends string = string,
-> = MeasureExprFor<S> & { readonly __alias?: A };
+  R = unknown,
+> = MeasureExprFor<S> & { readonly __alias?: A; readonly __row?: R };
 
 /** Extracts the branded alias literal from a `MeasureExpr<S, A>`. */
 type AliasOf<E> = E extends { __alias?: infer A extends string } ? A : never;
+
+/**
+ * The row fragment a distribution or counter measure contributes, branded
+ * as `__row` (type-only, like `__alias`). Those measures brand no `__alias`,
+ * so they stay out of the `number`-typed alias map: their value is
+ * `number | null`, and some add keys of other types.
+ */
+type RowOf<E> = E extends { __row?: infer R }
+  ? [R] extends [object]
+    ? R
+    : object
+  : object;
+
+/** Keys of a HISTOGRAM_QUANTILE aliased `A` (spec 2.1). */
+export type HistogramQuantileRow<A extends string> = {
+  [K in A | `${A}_low` | `${A}_high`]: number | null;
+} & { [K in `${A}_coarsened`]: 0 | 1 } & {
+  [K in `${A}_error`]: string | null;
+};
+
+/** Keys of a HISTOGRAM_AVG aliased `A`. */
+export type HistogramAvgRow<A extends string> = {
+  [K in A]: number | null;
+} & { [K in `${A}_error`]: string | null };
+
+/** The single nullable key of SUMMARY_QUANTILE, INCREASE and RATE. */
+export type NullableMeasureRow<A extends string> = { [K in A]: number | null };
+
+type DistributionExpr<R> = MeasureExpr<"metrics", never, R>;
 
 /**
  * Per-signal measure builder. For metrics, `M` narrows the numeric-column
@@ -489,10 +519,63 @@ export interface TraceMeasureBuilder extends MeasureBuilder<"traces"> {
   throughput<A extends string>(alias: A): MeasureExpr<"traces", A>;
 }
 
+/** Counter measures; `C` is the column they read on the metric type. */
+export interface CounterMeasureBuilder<C extends string> {
+  /** How much a counter grew over the window or bucket (INCREASE). */
+  increase<A extends string>(
+    col: C,
+    alias: A
+  ): DistributionExpr<NullableMeasureRow<A>>;
+  /** Per-second rate of a counter (RATE). Sum counters need the
+   * `IsMonotonic eq true` filter; the builder never adds it. */
+  rate<A extends string>(
+    col: C,
+    alias: A
+  ): DistributionExpr<NullableMeasureRow<A>>;
+}
+
+/** Histogram-only measures. */
+export interface HistogramMeasureBuilder
+  extends CounterMeasureBuilder<"Count" | "Sum"> {
+  /** Bucket-merged quantile; adds `_low`, `_high`, `_coarsened`, `_error`.
+   * Show people only the value, never the range. */
+  histogramQuantile<A extends string>(
+    quantile: number,
+    alias: A
+  ): DistributionExpr<HistogramQuantileRow<A>>;
+  /** Average observation (increase of Sum ÷ increase of Count). */
+  histogramAvg<A extends string>(
+    alias: A
+  ): DistributionExpr<HistogramAvgRow<A>>;
+}
+
+/** Summary-only measures. */
+export interface SummaryMeasureBuilder {
+  /** Highest per-instance value of a quantile the summaries carry. */
+  summaryQuantile<A extends string>(
+    quantile: number,
+    alias: A
+  ): DistributionExpr<NullableMeasureRow<A>>;
+}
+
+// Non-distributive on purpose: an unnarrowed `M` (the MetricType union) gets
+// none of these, so they appear only once the builder names one type.
+type DistributionMeasuresFor<M extends MetricType> = [M] extends ["Histogram"]
+  ? HistogramMeasureBuilder
+  : [M] extends ["Summary"]
+    ? SummaryMeasureBuilder
+    : [M] extends ["Sum"]
+      ? CounterMeasureBuilder<"Value">
+      : object;
+
 export type MeasureBuilderFor<
   S extends Signal,
   M extends MetricType = MetricType,
-> = S extends "traces" ? TraceMeasureBuilder : MeasureBuilder<S, M>;
+> = S extends "traces"
+  ? TraceMeasureBuilder
+  : S extends "metrics"
+    ? MeasureBuilder<S, M> & DistributionMeasuresFor<M>
+    : MeasureBuilder<S, M>;
 
 function makeMeasureBuilder<S extends Signal, M extends MetricType>(
   signal: S
@@ -545,6 +628,32 @@ function makeMeasureBuilder<S extends Signal, M extends MetricType>(
           op: "THROUGHPUT",
           as: alias,
         }) as unknown as MeasureExpr<"traces", A>,
+    } as unknown as MeasureBuilderFor<S, M>;
+  }
+  if (signal === "metrics") {
+    // Every op exists at runtime; the types offer each one only on the
+    // MetricTypes it applies to, and the validator refuses the rest.
+    const counter =
+      (op: "INCREASE" | "RATE") =>
+      <A extends string>(c: string, alias: A) => ({ op, column: c, as: alias });
+    return {
+      ...base,
+      increase: counter("INCREASE"),
+      rate: counter("RATE"),
+      histogramQuantile: <A extends string>(quantile: number, alias: A) => ({
+        op: "HISTOGRAM_QUANTILE",
+        quantile,
+        as: alias,
+      }),
+      histogramAvg: <A extends string>(alias: A) => ({
+        op: "HISTOGRAM_AVG",
+        as: alias,
+      }),
+      summaryQuantile: <A extends string>(quantile: number, alias: A) => ({
+        op: "SUMMARY_QUANTILE",
+        quantile,
+        as: alias,
+      }),
     } as unknown as MeasureBuilderFor<S, M>;
   }
   return base as MeasureBuilderFor<S, M>;
@@ -667,8 +776,9 @@ type AggRowMarker<
   Aliases extends string,
   Dims extends string,
   Out extends OutKind,
+  Extra extends object = object,
 > = {
-  readonly __aggRow?: { [K in Aliases]: number } & {
+  readonly __aggRow?: { [K in Aliases]: number } & Extra & {
     [K in Dims]: string | number | null;
   } & (Out extends "timeSeries" ? { bucket_start: string } : object);
 };
@@ -691,6 +801,7 @@ export class AggBuilder<
   Aliases extends string = never,
   Dims extends string = never,
   Out extends OutKind = "none",
+  Extra extends object = object,
 > {
   declare private readonly _flags: F;
   private readonly _state: State;
@@ -708,15 +819,17 @@ export class AggBuilder<
   // frozen state. Defaults to F for methods that don't change required-field
   // tracking (dimension/where/having/orderBy/limit). M, Aliases, Dims, Out are
   // carried through; measure()/dimension() widen Aliases/Dims and
-  // summary()/timeSeries() set Out.
+  // summary()/timeSeries() set Out. Extra accumulates the row fragments of
+  // distribution and counter measures, whose keys are not plain numbers.
   private clone<
     F2 extends AggFlags = F,
     A2 extends string = Aliases,
     D2 extends string = Dims,
     O2 extends OutKind = Out,
-  >(patch: (s: State) => State): AggBuilder<S, F2, M, A2, D2, O2> {
+    X2 extends object = Extra,
+  >(patch: (s: State) => State): AggBuilder<S, F2, M, A2, D2, O2, X2> {
     const next = Object.freeze(patch(this._state));
-    return new AggBuilder<S, F2, M, A2, D2, O2>(this._signal, next);
+    return new AggBuilder<S, F2, M, A2, D2, O2, X2>(this._signal, next);
   }
 
   /** Adds a measure. Repeatable; each call appends. */
@@ -728,10 +841,17 @@ export class AggBuilder<
     M,
     Aliases | AliasOf<E>,
     Dims,
-    Out
+    Out,
+    Extra & RowOf<E>
   > {
     const expr = fn(makeMeasureBuilder<S, M>(this._signal));
-    return this.clone<WithFlag<F, "measures">, Aliases | AliasOf<E>, Dims, Out>(
+    return this.clone<
+      WithFlag<F, "measures">,
+      Aliases | AliasOf<E>,
+      Dims,
+      Out,
+      Extra & RowOf<E>
+    >(
       (s) => ({
         ...s,
         measures: Object.freeze([...s.measures, expr]),
@@ -742,7 +862,7 @@ export class AggBuilder<
   /** Adds a GROUP BY column. Repeatable. */
   dimension<C extends ColumnArg<S, M>>(
     col: C
-  ): AggBuilder<S, F, M, Aliases, Dims | DimKeyOf<C>, Out> {
+  ): AggBuilder<S, F, M, Aliases, Dims | DimKeyOf<C>, Out, Extra> {
     const ref = resolveColumn(col, this._signal);
     return this.clone<F, Aliases, Dims | DimKeyOf<C>, Out>((s) => ({
       ...s,
@@ -753,7 +873,7 @@ export class AggBuilder<
   /** Adds a pre-aggregation filter (top-level AND with other where calls). */
   where(
     fn: (f: FilterBuilder<S, M>) => FilterExprFor<S>
-  ): AggBuilder<S, F, M, Aliases, Dims, Out> {
+  ): AggBuilder<S, F, M, Aliases, Dims, Out, Extra> {
     const expr = fn(makeFilterBuilder<S, M>(this._signal));
     return this.clone((s) => ({
       ...s,
@@ -766,7 +886,7 @@ export class AggBuilder<
     alias: string,
     op: HavingOp,
     value: number
-  ): AggBuilder<S, F, M, Aliases, Dims, Out> {
+  ): AggBuilder<S, F, M, Aliases, Dims, Out, Extra> {
     return this.clone((s) => ({
       ...s,
       havings: Object.freeze([...s.havings, { measure: alias, op, value }]),
@@ -777,7 +897,7 @@ export class AggBuilder<
   orderByDimension(
     col: ColumnArg<S, M>,
     direction: "asc" | "desc" = "asc"
-  ): AggBuilder<S, F, M, Aliases, Dims, Out> {
+  ): AggBuilder<S, F, M, Aliases, Dims, Out, Extra> {
     const ref = resolveColumn(col, this._signal);
     return this.clone((s) => ({
       ...s,
@@ -792,7 +912,7 @@ export class AggBuilder<
   orderByMeasure(
     alias: string,
     direction: "asc" | "desc" = "asc"
-  ): AggBuilder<S, F, M, Aliases, Dims, Out> {
+  ): AggBuilder<S, F, M, Aliases, Dims, Out, Extra> {
     return this.clone((s) => ({
       ...s,
       orderBy: Object.freeze([
@@ -805,7 +925,15 @@ export class AggBuilder<
   /** Relative time window ending now. */
   timeRelative(
     lookback: string
-  ): AggBuilder<S, WithFlag<F, "timeDimension">, M, Aliases, Dims, Out> {
+  ): AggBuilder<
+    S,
+    WithFlag<F, "timeDimension">,
+    M,
+    Aliases,
+    Dims,
+    Out,
+    Extra
+  > {
     const td: TimeDim = { type: "relative", lookback };
     return this.clone<WithFlag<F, "timeDimension">>((s) => ({
       ...s,
@@ -817,7 +945,15 @@ export class AggBuilder<
   timeAbsolute(
     startTime: string,
     endTime: string
-  ): AggBuilder<S, WithFlag<F, "timeDimension">, M, Aliases, Dims, Out> {
+  ): AggBuilder<
+    S,
+    WithFlag<F, "timeDimension">,
+    M,
+    Aliases,
+    Dims,
+    Out,
+    Extra
+  > {
     const td: TimeDim = { type: "absolute", startTime, endTime };
     return this.clone<WithFlag<F, "timeDimension">>((s) => ({
       ...s,
@@ -826,7 +962,15 @@ export class AggBuilder<
   }
 
   /** One row per group across the full window. */
-  summary(): AggBuilder<S, WithFlag<F, "output">, M, Aliases, Dims, "summary"> {
+  summary(): AggBuilder<
+    S,
+    WithFlag<F, "output">,
+    M,
+    Aliases,
+    Dims,
+    "summary",
+    Extra
+  > {
     return this.clone<WithFlag<F, "output">, Aliases, Dims, "summary">((s) => ({
       ...s,
       output: { type: "summary" },
@@ -836,7 +980,15 @@ export class AggBuilder<
   /** One row per (group, bucket) where bucket width is `granularity`. */
   timeSeries(
     granularity: string
-  ): AggBuilder<S, WithFlag<F, "output">, M, Aliases, Dims, "timeSeries"> {
+  ): AggBuilder<
+    S,
+    WithFlag<F, "output">,
+    M,
+    Aliases,
+    Dims,
+    "timeSeries",
+    Extra
+  > {
     return this.clone<WithFlag<F, "output">, Aliases, Dims, "timeSeries">(
       (s) => ({
         ...s,
@@ -846,7 +998,7 @@ export class AggBuilder<
   }
 
   /** Maximum rows to return (server-side hard cap = 10000). */
-  limit(n: number): AggBuilder<S, F, M, Aliases, Dims, Out> {
+  limit(n: number): AggBuilder<S, F, M, Aliases, Dims, Out, Extra> {
     return this.clone((s) => ({ ...s, limit: n }));
   }
 
@@ -862,11 +1014,11 @@ export class AggBuilder<
    * `AggregateQueryFor<S>` and still passes `kopaiQuery.KopaiQuery.parse()`.
    */
   build(
-    this: AggBuilder<S, AggReady, M, Aliases, Dims, Out>
-  ): AggregateQueryFor<S> & AggRowMarker<Aliases, Dims, Out> {
+    this: AggBuilder<S, AggReady, M, Aliases, Dims, Out, Extra>
+  ): AggregateQueryFor<S> & AggRowMarker<Aliases, Dims, Out, Extra> {
     return validateAndReturn<AggregateQueryFor<S>>(
       this._state
-    ) as AggregateQueryFor<S> & AggRowMarker<Aliases, Dims, Out>;
+    ) as AggregateQueryFor<S> & AggRowMarker<Aliases, Dims, Out, Extra>;
   }
 }
 

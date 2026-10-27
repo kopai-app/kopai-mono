@@ -732,6 +732,14 @@ function compileAggregateSql(
   const measureSelectParams: SqlParam[] = [];
   const measureAliases: string[] = [];
 
+  // The per-series counter walk and the histogram merge need window
+  // functions and array arithmetic this backend does not implement.
+  if (kopaiQueryCompiler.distributionMeasures(q).length > 0) {
+    throw new kopaiQueryCompiler.KopaiQueryValidationError(
+      "Distribution and counter measures (HISTOGRAM_QUANTILE, HISTOGRAM_AVG, SUMMARY_QUANTILE, INCREASE, RATE) are supported on the ClickHouse backend only."
+    );
+  }
+
   for (const m of measures) {
     measureAliases.push(m.as);
     if (m.op === "COUNT") {
@@ -775,7 +783,7 @@ function compileAggregateSql(
     // optionally divided by the bucket window seconds for the RATE_*
     // variants. The op→fn map collapses 7 near-identical branches.
     const agg = NUMERIC_AGG[m.op];
-    if (!agg) {
+    if (!agg || !("column" in m)) {
       throw new kopaiQueryCompiler.KopaiQueryValidationError(
         `Unsupported numeric measure op "${m.op}".`
       );
