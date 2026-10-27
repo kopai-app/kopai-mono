@@ -688,7 +688,94 @@ const NumericOp = z
     "RATE_MAX",
   ])
   .describe(
-    "Aggregation that requires a numeric column. RATE_* divides the aggregate by the time-bucket width. NOTE: the percentile ops (P50–P999) are supported only on the ClickHouse backend; the SQLite backend rejects them with a validation error."
+    "Aggregation that requires a numeric column. RATE_* divides the aggregate by the time-bucket width; for counters use RATE instead of RATE_SUM. The percentile ops (P50–P999) sample deterministically, so the same rows always give the same value; P999 is approximate on high-volume data. NOTE: the percentile ops are supported only on the ClickHouse backend; the SQLite backend rejects them with a validation error. On Histogram and Summary metrics use HISTOGRAM_QUANTILE, HISTOGRAM_AVG or SUMMARY_QUANTILE rather than P*/AVG on Sum or Count."
+  );
+
+// ============================================================
+// Distribution and counter ops (metrics only)
+// ============================================================
+// Separate variants rather than NumericOp members, so they never match the
+// generic numeric branch. Semantics, result keys and the reasons behind them:
+// nibbler ADR-062 and spec-kopaiquery-distribution-ops.
+
+export const DISTRIBUTION_OPS = [
+  "HISTOGRAM_QUANTILE",
+  "HISTOGRAM_AVG",
+  "SUMMARY_QUANTILE",
+  "INCREASE",
+  "RATE",
+] as const;
+
+export type DistributionOp = (typeof DISTRIBUTION_OPS)[number];
+
+/** Result-key suffixes each op adds next to its alias. Always present. */
+export const DISTRIBUTION_OP_EXTRA_KEYS: Record<
+  DistributionOp,
+  readonly string[]
+> = {
+  HISTOGRAM_QUANTILE: ["_low", "_high", "_coarsened", "_error"],
+  HISTOGRAM_AVG: ["_error"],
+  SUMMARY_QUANTILE: [],
+  INCREASE: [],
+  RATE: [],
+};
+
+const Quantile = z
+  .number()
+  .gt(0)
+  .lt(1)
+  .describe("Quantile strictly between 0 and 1, e.g. 0.95 for p95.");
+
+const HistogramQuantileMeasure = z
+  .strictObject({
+    op: z.literal("HISTOGRAM_QUANTILE"),
+    quantile: Quantile,
+    as: Alias,
+  })
+  .describe(
+    "Quantile of an OTel Histogram metric (MetricType Histogram). Merges the buckets of every series in the group over the window (or bucket); handles delta and cumulative data, counter restarts and staleness markers. " +
+      'Adds four keys next to the alias: `<as>_low` and `<as>_high` bound the true value (`_high` null means above `_low`; `_low` null means at or below `_high`, for layouts whose first bound is 0 or negative); `<as>_coarsened` is 1 when series used different bucket layouts and were merged onto the bounds they share; `<as>_error` is null or a code: "mixed_units" (series with different MetricUnit were observed; filter to one unit) or "no_shared_bounds" (the bucket layouts share no bound, so they cannot be merged; group or filter by series). ' +
+      "The value is null with a null error when nothing was observed. Errored groups are kept by havings, sort last, and count against limit. " +
+      'When reporting to people, show only the value (e.g. "p95 ≈ 430 ms"): never the range, `_coarsened` or buckets. The range is context for you, so you do not claim more precision than the data has (e.g. a move within one range is not a change).'
+  );
+
+const HistogramAvgMeasure = z
+  .strictObject({ op: z.literal("HISTOGRAM_AVG"), as: Alias })
+  .describe(
+    'Average observation of an OTel Histogram metric over the window (or bucket): increase of Sum ÷ increase of Count across the group\'s series. Use instead of AVG(Sum). Null when nothing was observed. Adds `<as>_error`: null, or "mixed_units" when series with different MetricUnit were observed (filter to one unit).'
+  );
+
+const SummaryQuantileMeasure = z
+  .strictObject({
+    op: z.literal("SUMMARY_QUANTILE"),
+    quantile: Quantile,
+    as: Alias,
+  })
+  .describe(
+    "Quantile of an OTel Summary metric (MetricType Summary): the highest of the per-instance values, each taken from that instance's latest point in the window (or bucket). It is not a combined percentile; summaries cannot be merged. An instance whose latest point lacks the quantile is left out; null when none has it. Common values: 0.5, 0.9, 0.95, 0.99."
+  );
+
+const counterDescription = (what: string) =>
+  `${what} For counters: MetricType Sum with a {column:'IsMonotonic', op:'eq', value:true} filter (column Value), or MetricType Histogram (column Count for request counts, or Sum). Use instead of RATE_SUM for counters. Handles delta and cumulative data, restarts and staleness markers; exact, not extrapolated. Series with different units are added as they are, so filter to one MetricUnit. Null when the group has no point in the window; 0 when it has points but no increase.`;
+
+const IncreaseMeasure = z
+  .strictObject({
+    op: z.literal("INCREASE"),
+    column: MetricColumnRef,
+    as: Alias,
+  })
+  .describe(
+    counterDescription(
+      "How much a counter grew over the window (or bucket), summed over the group's series."
+    )
+  );
+
+const RateMeasure = z
+  .strictObject({ op: z.literal("RATE"), column: MetricColumnRef, as: Alias })
+  .describe(
+    counterDescription(
+      "Per-second rate of a counter: INCREASE ÷ the bucket width (or the window for summary output). Under-reports in a partial first or last bucket, as RATE_SUM does."
+    )
   );
 
 // ============================================================
@@ -774,6 +861,11 @@ const MetricMeasureExpr = z
       .describe(
         "Numeric aggregation. For heterogeneous MetricType, filter by MetricType so the chosen column exists for every matched row."
       ),
+    HistogramQuantileMeasure,
+    HistogramAvgMeasure,
+    SummaryQuantileMeasure,
+    IncreaseMeasure,
+    RateMeasure,
   ])
   .describe("Aggregation expression for the metrics signal.");
 

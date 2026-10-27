@@ -386,17 +386,47 @@ function explainCommonKey(
   if (!accepted.length) return undefined;
 
   const sent = valueAt(value, [key]);
-  const suggestion = didYouMean(String(sent), accepted);
+  const opHint =
+    key === "op" && typeof sent === "string"
+      ? measureOpNearMiss(sent, accepted)
+      : undefined;
+  const suggestion = opHint?.op ?? didYouMean(String(sent), accepted);
+  const shown = opHint?.shown ?? `"${suggestion}"`;
   return {
     key,
     suggestion,
     issue: {
       path: path ? `${path}.${key}` : key,
       message: suggestion
-        ? `Unknown ${key} ${typeof sent === "string" ? `"${sent}"` : String(sent)}. Did you mean "${suggestion}"?`
+        ? `Unknown ${key} ${typeof sent === "string" ? `"${sent}"` : String(sent)}. Did you mean ${shown}?`
         : `Expected ${key} to be one of ${summarise(accepted)}.`,
     },
   };
+}
+
+// Names a caller reaches for when it means one of the metric distribution
+// ops. The quantile ops are parametric, so `HISTOGRAM_P95` is a near miss
+// that no spelling correction finds: the answer is a different shape.
+const MEASURE_OP_ALIASES: Record<string, string> = {
+  histogrammean: "HISTOGRAM_AVG",
+  histogramaverage: "HISTOGRAM_AVG",
+  histogrampercentile: "HISTOGRAM_QUANTILE",
+  summarypercentile: "SUMMARY_QUANTILE",
+};
+
+function measureOpNearMiss(
+  sent: string,
+  accepted: string[]
+): { op: string; shown: string } | undefined {
+  const percentile = /^(histogram|summary)_?p(\d+)$/i.exec(sent);
+  if (percentile?.[1] && percentile[2]) {
+    const op = `${percentile[1].toUpperCase()}_QUANTILE`;
+    if (!accepted.includes(op)) return undefined;
+    const quantile = Number(`0.${percentile[2]}`);
+    return { op, shown: `{op: "${op}", quantile: ${quantile}}` };
+  }
+  const op = MEASURE_OP_ALIASES[fold(sent)];
+  return op && accepted.includes(op) ? { op, shown: `"${op}"` } : undefined;
 }
 
 /**

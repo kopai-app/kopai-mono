@@ -3,6 +3,9 @@
 
 import {
   branchSchemaFor,
+  DISTRIBUTION_OP_EXTRA_KEYS,
+  DISTRIBUTION_OPS,
+  type DistributionOp,
   isQueryMode,
   isSignal,
   LogColumn,
@@ -646,6 +649,11 @@ export function validateKopaiQuery(q: KopaiQuery): void {
     // the user passed an unrecognized type.
     const metricType = assertMetricType(pin.value);
 
+    // Ahead of the column-existence check below, so a counter op aimed at
+    // the wrong column hears which column to read, not just that this one
+    // is missing.
+    if (q.mode === "aggregate") validateMetricMeasures(q, metricType);
+
     // Each MetricType is stored in its own table holding only that variant's
     // structural columns. Reject any referenced structural column that does
     // not exist on the pinned type's table — otherwise the backend emits SQL
@@ -663,6 +671,8 @@ export function validateKopaiQuery(q: KopaiQuery): void {
       }
     }
   }
+
+  if (q.mode === "aggregate") validateNumericMeasureColumns(q);
 
   if (q.mode === "aggregate") {
     // Alias uniqueness across measures.
@@ -787,6 +797,261 @@ export function validateKopaiQuery(q: KopaiQuery): void {
       );
     }
   }
+}
+
+// ============================================================
+// Distribution and counter ops (KOP-70)
+// ============================================================
+// Rules V1–V10 of nibbler spec-kopaiquery-distribution-ops section 3. Every
+// message names the fix: the caller is usually a model, and a 400 it can
+// repair from beats a number that means nothing.
+
+type AggregateQuery = Extract<KopaiQuery, { mode: "aggregate" }>;
+type AnyMeasure = AggregateQuery["measures"][number];
+
+const DISTRIBUTION_OP_SET: ReadonlySet<string> = new Set(DISTRIBUTION_OPS);
+
+export function isDistributionOp(op: string): op is DistributionOp {
+  return DISTRIBUTION_OP_SET.has(op);
+}
+
+/** The new ops present in a query, in measure order. */
+export function distributionMeasures(
+  q: KopaiQuery
+): (AnyMeasure & { op: DistributionOp })[] {
+  if (q.mode !== "aggregate") return [];
+  return q.measures.filter((m): m is AnyMeasure & { op: DistributionOp } =>
+    isDistributionOp(m.op)
+  );
+}
+
+const OP_METRIC_TYPES: Record<DistributionOp, readonly MetricType[]> = {
+  HISTOGRAM_QUANTILE: ["Histogram"],
+  HISTOGRAM_AVG: ["Histogram"],
+  SUMMARY_QUANTILE: ["Summary"],
+  INCREASE: ["Sum", "Histogram"],
+  RATE: ["Sum", "Histogram"],
+};
+
+const COUNTER_COLUMNS: Partial<Record<MetricType, readonly string[]>> = {
+  Sum: ["Value"],
+  Histogram: ["Count", "Sum"],
+};
+
+// Columns that are constant along a series: the series-key columns, plus
+// IsMonotonic, which the V3 pin needs. Filtering on anything else removes
+// points from the per-series walk, which drops baselines and invents resets.
+// MetricDescription, the schema URLs and AggregationTemporality are not in
+// the series key and can change mid-series.
+const SERIES_LEVEL_FILTER_COLUMNS: ReadonlySet<string> = new Set([
+  "MetricType",
+  "MetricName",
+  "MetricUnit",
+  "ScopeName",
+  "ScopeVersion",
+  "IsMonotonic",
+]);
+
+const TIME_DIMENSIONS: ReadonlySet<string> = new Set([
+  "TimeUnix",
+  "StartTimeUnix",
+]);
+
+// Array (and array-of-struct) columns a numeric measure is sometimes aimed
+// at, and the op that reads them properly.
+const ARRAY_COLUMN_FIX: Record<string, string> = {
+  BucketCounts: "use HISTOGRAM_QUANTILE",
+  ExplicitBounds: "use HISTOGRAM_QUANTILE",
+  PositiveBucketCounts: "ExponentialHistogram buckets are not supported yet",
+  NegativeBucketCounts: "ExponentialHistogram buckets are not supported yet",
+  "ValueAtQuantiles.Value": "use SUMMARY_QUANTILE",
+  "ValueAtQuantiles.Quantile": "use SUMMARY_QUANTILE",
+};
+
+const DISTRIBUTION_STAT_OPS: ReadonlySet<string> = new Set([
+  "P50",
+  "P75",
+  "P90",
+  "P95",
+  "P99",
+  "P999",
+  "AVG",
+  "RATE_AVG",
+]);
+
+const GENERATED_KEY_KIND: Record<string, string> = {
+  _low: "range key",
+  _high: "range key",
+  _coarsened: "coarsened key",
+  _error: "error key",
+};
+
+// True when `filters` holds {IsMonotonic eq true} where every enclosing node
+// is an AND — the same walk findMetricTypePin uses. Under an OR the pin does
+// not hold for every matched row.
+function hasMonotonicPin(filters: AnyFilterExpr[] | undefined): boolean {
+  for (const f of filters ?? []) {
+    if ("and" in f) {
+      if (hasMonotonicPin(f.and)) return true;
+    } else if ("or" in f) {
+      continue;
+    } else if (
+      f.column === "IsMonotonic" &&
+      f.op === "eq" &&
+      f.value === true
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// V4 (all signals): a numeric measure on a structural column needs a numeric
+// one. Today a String or array column surfaces as a 500 or a meaningless
+// number. Attribute and semconv refs are dynamically typed and exempt, as is
+// COUNT_DISTINCT, which counts any column.
+function validateNumericMeasureColumns(q: AggregateQuery): void {
+  const numeric = NUMERIC_STRUCTURAL_COLUMNS[q.signal];
+  for (const m of q.measures) {
+    if (!("column" in m) || m.op === "COUNT_DISTINCT") continue;
+    const col = m.column;
+    if (typeof col !== "string") continue;
+    if (resolveColumn(q.signal, col).kind !== "structural") continue;
+    if (numeric.has(col)) continue;
+    const fix =
+      ARRAY_COLUMN_FIX[col] ??
+      "the column is not numeric; choose a numeric column or a numeric attribute";
+    throw new KopaiQueryValidationError(`${m.op} on ${col}: ${fix}.`);
+  }
+}
+
+function validateMetricMeasures(
+  q: AggregateQuery,
+  metricType: MetricType
+): void {
+  const ops = distributionMeasures(q);
+  for (const m of ops) validateDistributionMeasure(q, m, metricType);
+  for (const m of q.measures) {
+    if (!isDistributionOp(m.op) && "column" in m) {
+      validateDistributionStat(m.op, m.column, metricType);
+    }
+  }
+
+  const first = ops[0];
+  if (!first) return;
+
+  // V6. A series walk needs every point of a series in one group.
+  for (const d of q.dimensions ?? []) {
+    if (typeof d === "string" && TIME_DIMENSIONS.has(d)) {
+      throw new KopaiQueryValidationError(
+        `${d} cannot be a dimension next to ${first.op}: group by time with output timeSeries.`
+      );
+    }
+  }
+
+  // V7.
+  for (const leaf of collectFilterLeaves(q.filters)) {
+    const col = leaf.column;
+    if (typeof col !== "string") continue;
+    if (resolveColumn("metrics", col).kind !== "structural") continue;
+    if (SERIES_LEVEL_FILTER_COLUMNS.has(col)) continue;
+    throw new KopaiQueryValidationError(
+      `A filter on ${col} cannot be combined with ${first.op}: filters on Value/Count/Flags/… remove points from the counter walk; ` +
+        `filter by series attributes instead (MetricName, MetricUnit, ScopeName, ScopeVersion, IsMonotonic, or attributes).`
+    );
+  }
+
+  // V8. Every key in a result row must be distinct.
+  const owners = new Map<string, string>();
+  const claim = (key: string, owner: string) => {
+    const existing = owners.get(key);
+    if (existing !== undefined) {
+      throw new KopaiQueryValidationError(
+        `${owner} collides with ${existing}; rename the measure.`
+      );
+    }
+    owners.set(key, owner);
+  };
+  claim("bucket_start", "the time bucket key bucket_start");
+  for (const d of q.dimensions ?? []) {
+    const key = columnRefProjectionKey(d);
+    claim(key, `dimension ${key}`);
+  }
+  for (const m of ops) {
+    for (const suffix of DISTRIBUTION_OP_EXTRA_KEYS[m.op]) {
+      claim(`${m.as}${suffix}`, `${m.as}'s ${GENERATED_KEY_KIND[suffix]}`);
+    }
+  }
+  for (const m of q.measures) claim(m.as, `alias ${m.as}`);
+}
+
+function validateDistributionMeasure(
+  q: AggregateQuery,
+  m: AnyMeasure & { op: DistributionOp },
+  metricType: MetricType
+): void {
+  // V10, ahead of V1 for the clearer message.
+  if (metricType === "ExponentialHistogram") {
+    throw new KopaiQueryValidationError(
+      `${m.op} on ExponentialHistogram is not supported yet; open an issue if you need it.`
+    );
+  }
+
+  // V1.
+  const types = OP_METRIC_TYPES[m.op];
+  if (!types.includes(metricType)) {
+    throw new KopaiQueryValidationError(
+      `${m.op} needs MetricType ${types.join(" or ")}; got ${metricType}.`
+    );
+  }
+
+  if (m.op !== "INCREASE" && m.op !== "RATE") return;
+
+  // V2.
+  const columns = COUNTER_COLUMNS[metricType] ?? [];
+  const col = "column" in m ? m.column : undefined;
+  if (typeof col !== "string" || !columns.includes(col)) {
+    const got = col === undefined ? "nothing" : columnRefProjectionKey(col);
+    throw new KopaiQueryValidationError(
+      `On ${metricType}, ${m.op} reads ${columns.join(" or ")}; got ${got}.`
+    );
+  }
+
+  // V3. Without the pin, an UpDownCounter's real drops become fake resets.
+  if (metricType === "Sum" && !hasMonotonicPin(q.filters)) {
+    throw new KopaiQueryValidationError(
+      `${m.op} on Sum needs a monotonic counter: add {column:'IsMonotonic', op:'eq', value:true}; UpDownCounters use AVG/MAX.`
+    );
+  }
+}
+
+// V5: P*, AVG and RATE_AVG over a histogram's or summary's Sum or Count treat
+// each batch total as one observation, which is not a latency statistic. SUM,
+// MIN, MAX, RATE_SUM and RATE_MAX stay: on delta data they mean something.
+function validateDistributionStat(
+  op: string,
+  column: ColumnRefStructural,
+  metricType: MetricType
+): void {
+  if (!DISTRIBUTION_STAT_OPS.has(op)) return;
+  if (column !== "Sum" && column !== "Count") return;
+  let fix: string;
+  switch (metricType) {
+    case "Histogram":
+      fix = "use HISTOGRAM_QUANTILE / HISTOGRAM_AVG";
+      break;
+    case "Summary":
+      fix = "use SUMMARY_QUANTILE";
+      break;
+    case "ExponentialHistogram":
+      fix = "ExponentialHistogram distributions are not supported yet";
+      break;
+    default:
+      return;
+  }
+  throw new KopaiQueryValidationError(
+    `${op} on ${metricType} ${column} treats each data point as one observation: ${fix}; open an issue for per-interval load stats.`
+  );
 }
 
 // ============================================================
