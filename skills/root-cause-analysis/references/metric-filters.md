@@ -97,13 +97,18 @@ kq.metrics("Histogram")
   .build();
 ```
 
-- Values are `number | null`, and null is never zero. Read `_error` first: a non-null code
-  means the group has no honest value (below). With no error, null means nothing was
-  observed, or, for `summaryQuantile`, that no instance's latest point reports that quantile
-  (try another quantile before concluding there is no data).
+- Values are `number | null`, and null is never zero. What a null means depends on the
+  measure:
+  - `histogramQuantile`/`histogramAvg`: read `<alias>_error` first; a non-null code means
+    the group has no honest value (below). With no error, nothing was observed.
+  - `summaryQuantile` (no `_error` key): no instance's latest point reports that quantile;
+    try another quantile before concluding there is no data.
+  - `increase`/`rate` (no `_error` key): nothing was observed.
 - `histogramQuantile` rows also carry `<alias>_low`/`_high` (the bucket the true value lies
   in), `_coarsened` and `_error`. **Report only the value to people** ("p95 ≈ 430 ms"); use
-  the range yourself, e.g. a move inside one bucket range is not a change. When `_high` is
+  the range yourself as the uncertainty around the value: the value is interpolated inside
+  the bucket, so a move that stays inside one range is weak evidence. Confirm it elsewhere
+  (e.g. trace latency) before calling it a regression, but don't discard it. When `_high` is
   null the value is only the lower bound of the open-ended last bucket: say "p95 > 430 ms".
   When `_low` is null, say "p95 ≤ 430 ms".
 - `_error` `"mixed_units"`: filter to one `MetricUnit`. `"no_shared_bounds"`: the series'

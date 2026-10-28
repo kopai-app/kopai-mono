@@ -82,13 +82,18 @@ The MetricType is a **builder argument**: `kq.metrics("<Type>")` auto-pins it, w
 type is one of `"Gauge"`/`"Sum"`/`"Histogram"`/`"ExponentialHistogram"`/`"Summary"`. Value
 columns are typed per type: `"Value"` for `Gauge`/`Sum`; `Count`/`Sum`/`Min`/`Max` for
 `Histogram`/`ExponentialHistogram`; `Count`/`Sum` for `Summary`. Bucket with
-`.timeSeries()` to align the metric's onset against the trace onset from (a). A counter's
-`Value` is a running total, so read it with `rate`/`increase` (ClickHouse-only; the
-`IsMonotonic` filter is required), not `avg`. On SQLite `rate` is refused with a 400, and
-SQLite cannot give a counter's total growth across series. The fallback is per series only:
-`.dimension()` by the attributes that identify one series (e.g. `service.instance.id`),
-take `max("Value")` per bucket, and compare neighbouring buckets within each series; a
-drop means a restart. Never compare maxima across series to infer total growth.
+`.timeSeries()` to align the metric's onset against the trace onset from (a). Read a counter
+with `rate`/`increase` (ClickHouse-only; the `IsMonotonic` filter is required), not `avg`.
+On SQLite `rate` is refused with a 400, and the fallback depends on the counter's
+temporality; filter on `AggregationTemporality` to split them:
+
+- **Delta (`1`):** each `Value` is the increase since the previous point, so
+  `sum("Value")` per bucket is the growth, and it adds up across series.
+- **Cumulative (`2`):** each `Value` is a running total, and SQLite cannot give the total
+  growth across series. Work per series only: `.dimension()` by the attributes that
+  identify one series (e.g. `service.instance.id`), take `max("Value")` per bucket, and
+  compare neighbouring buckets within each series; a drop means a restart. Never compare
+  maxima across series.
 
 ```ts
 const NAME = "http.server.errors"; // from discoverMetrics()
@@ -111,7 +116,7 @@ try {
     e.status === 400 &&
     e.message.includes("ClickHouse backend only")
   )
-    console.error("rate needs ClickHouse; fall back to per-series max(Value)");
+    console.error("rate needs ClickHouse; use the SQLite fallback above");
   else throw e;
 }
 ```
