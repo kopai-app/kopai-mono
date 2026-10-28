@@ -18,15 +18,33 @@ jobs:
   publish-skill:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         skill:
           - create-dashboard
           - otel-instrumentation
           - root-cause-analysis
+    defaults:
+      run:
+        working-directory: skills/${{ matrix.skill }}
     steps:
       - uses: actions/checkout@v7
-      - uses: tesslio/publish@1.0
+      - uses: tesslio/setup-tessl@v2
         with:
           token: ${{ secrets.TESSL_API_TOKEN }}
-          path: "./skills/${{ matrix.skill }}"
-          review-threshold: "50"
+      - name: Check whether this version is already published
+        id: published
+        run: |
+          tile="$(jq -r '"\(.name)@\(.version)"' tile.json)"
+          if tessl plugin info "$tile" --json > /dev/null 2>&1; then
+            echo "$tile is already published, skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Review skill
+        if: steps.published.outputs.skip == 'false'
+        run: tessl review run quality --workspace kopai --threshold 50 .
+      - name: Publish
+        if: steps.published.outputs.skip == 'false'
+        run: tessl plugin publish .
