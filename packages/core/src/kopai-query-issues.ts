@@ -425,7 +425,7 @@ function measureOpNearMiss(
     // Percentile digits: P5 is 0.05, P95 0.95, P999 0.999. P0 and P100
     // name no valid quantile, so they get no hint.
     const digits = percentile[2];
-    if (/^0+$|^10+$/.test(digits)) return undefined;
+    if (/^0+$|^100+$/.test(digits)) return undefined;
     const quantile = Number(`0.${digits.padStart(2, "0")}`);
     return { op, shown: `{op: "${op}", quantile: ${quantile}}` };
   }

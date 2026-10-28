@@ -428,6 +428,10 @@ describe("near-miss hints for the new op names", () => {
       'Did you mean {op: "HISTOGRAM_QUANTILE", quantile: 0.05}?',
     ],
     ["SUMMARY_P1", 'Did you mean {op: "SUMMARY_QUANTILE", quantile: 0.01}?'],
+    [
+      "HISTOGRAM_P10",
+      'Did you mean {op: "HISTOGRAM_QUANTILE", quantile: 0.1}?',
+    ],
     ["HISTOGRAM_MEAN", 'Did you mean "HISTOGRAM_AVG"?'],
     ["histogram_quantile", 'Did you mean "HISTOGRAM_QUANTILE"?'],
   ])("%s", (op, message) => {

@@ -52,7 +52,7 @@ When latency arrives as an OTel histogram (e.g. `http.server.request.duration`) 
 }
 ```
 
-Each row also carries `p95_low`, `p95_high`, `p95_coarsened` and `p95_error`. Chart and label only `p95`, in the metric's unit ("p95 ≈ 430 ms"); the other keys are for you. A non-null `p95_error` means that group has no honest value: `"mixed_units"` (filter to one `MetricUnit`) `"no_shared_bounds"` (split by series) or `"malformed_buckets"` (an exporter sent counts that do not fit the bounds; filter that series out). Leave the gap rather than plotting a number.
+Each row also carries `p95_low`, `p95_high`, `p95_coarsened` and `p95_error`. Chart and label only `p95`, in the metric's unit ("p95 ≈ 430 ms"); the other keys are for you. When `p95_high` is null the value fell in the last, open-ended bucket and `p95` is only that bucket's lower bound: label it "p95 > 430 ms", not "≈". When `p95_low` is null, label it "p95 ≤ 430 ms". A non-null `p95_error` means that group has no honest value: `"mixed_units"` (filter to one `MetricUnit`) `"no_shared_bounds"` (split by series) or `"malformed_buckets"` (an exporter sent counts that do not fit the bounds; filter that series out). Leave the gap rather than plotting a number.
 
 ## Request rate from a histogram
 

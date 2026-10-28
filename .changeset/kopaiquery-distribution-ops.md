@@ -22,8 +22,9 @@ Five metric measure ops, each limited to the metric types it applies to:
 
 All of them handle delta and cumulative temporality, restarts and staleness
 markers, read a baseline from up to 5 minutes before the window, and return
-null rather than 0 when nothing was observed. Queries without them compile
-exactly as before.
+null rather than 0 when nothing was observed. Queries without them compile as
+before, with two changes: `P50`–`P999` now use `quantileDeterministic`, so the
+same rows always give the same value, and the queries below are refused.
 
 Queries that used to return a meaningless number or a server error are now
 refused with a 400 that names the fix:

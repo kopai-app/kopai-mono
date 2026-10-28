@@ -18,7 +18,7 @@ inflection (`5m`). `errorRate` counts errors server-side; result rows still repo
 `Duration` in **nanoseconds**, so `avg`/`max` come back in ns.
 
 ```ts
-import { kq, KopaiQueryBuildError } from "@kopai/sdk";
+import { kq, KopaiError, KopaiQueryBuildError } from "@kopai/sdk";
 // const client = clientFromConfig();
 
 try {
@@ -84,8 +84,11 @@ columns are typed per type: `"Value"` for `Gauge`/`Sum`; `Count`/`Sum`/`Min`/`Ma
 `Histogram`/`ExponentialHistogram`; `Count`/`Sum` for `Summary`. Bucket with
 `.timeSeries()` to align the metric's onset against the trace onset from (a). A counter's
 `Value` is a running total, so read it with `rate`/`increase` (ClickHouse-only; the
-`IsMonotonic` filter is required), not `avg`. On SQLite `rate` fails at query time:
-fall back to `max("Value")` per bucket and compare neighbouring buckets.
+`IsMonotonic` filter is required), not `avg`. On SQLite `rate` is refused with a 400, and
+SQLite cannot give a counter's total growth across series. The fallback is per series only:
+`.dimension()` by the attributes that identify one series (e.g. `service.instance.id`),
+take `max("Value")` per bucket, and compare neighbouring buckets within each series; a
+drop means a restart. Never compare maxima across series to infer total growth.
 
 ```ts
 const NAME = "http.server.errors"; // from discoverMetrics()
@@ -103,11 +106,13 @@ try {
   console.log(JSON.stringify(data, null, 2));
 } catch (e) {
   if (e instanceof KopaiQueryBuildError) console.error(e.issues);
-  else
-    console.error(
-      "rate needs ClickHouse; fall back to max(Value) per bucket:",
-      e
-    );
+  else if (
+    e instanceof KopaiError &&
+    e.status === 400 &&
+    e.message.includes("ClickHouse backend only")
+  )
+    console.error("rate needs ClickHouse; fall back to per-series max(Value)");
+  else throw e;
 }
 ```
 
@@ -117,7 +122,7 @@ try {
   `http.server.errors` (c). Use `kq.metrics("Sum")` with `rate("Value", …)`.
 - **Latency** → trace `avg`/`max` of `Duration` (portable); `p95`/`p99` only on
   ClickHouse. For a metric-side view use `kq.metrics("Histogram")` with
-  `histogramQuantile(0.95, …)` (report only the value, e.g. "p95 ≈ 430 ms") and
+  `histogramQuantile(0.95, …)` (report only the value, e.g. "p95 ≈ 430 ms", or "p95 > 430 ms" when `_high` is null) and
   `rate("Count", …)` for request rate.
 - **Resource saturation** (CPU, memory, connections) → point-in-time `Gauge`. Use
   `kq.metrics("Gauge")`, aggregate `Value` (`avg`/`max`), `.dimension("host.name")` for

@@ -97,10 +97,15 @@ kq.metrics("Histogram")
   .build();
 ```
 
-- Values are `number | null`: null means nothing was observed, not zero.
+- Values are `number | null`, and null is never zero. Read `_error` first: a non-null code
+  means the group has no honest value (below). With no error, null means nothing was
+  observed, or, for `summaryQuantile`, that no instance's latest point reports that quantile
+  (try another quantile before concluding there is no data).
 - `histogramQuantile` rows also carry `<alias>_low`/`_high` (the bucket the true value lies
   in), `_coarsened` and `_error`. **Report only the value to people** ("p95 ≈ 430 ms"); use
-  the range yourself, e.g. a move inside one bucket range is not a change.
+  the range yourself, e.g. a move inside one bucket range is not a change. When `_high` is
+  null the value is only the lower bound of the open-ended last bucket: say "p95 > 430 ms".
+  When `_low` is null, say "p95 ≤ 430 ms".
 - `_error` `"mixed_units"`: filter to one `MetricUnit`. `"no_shared_bounds"`: the series'
   bucket layouts cannot be merged; group by a series attribute. `"malformed_buckets"`: an
   exporter sent bucket counts that do not fit the bounds; find and filter out that series.

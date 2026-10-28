@@ -760,11 +760,24 @@ describe("E2E: distribution and counter ops through the collector", () => {
 
   beforeAll(async () => {
     await sendOtlp("/v1/metrics", payload);
+    // The collector writes each metric type to its own table, so wait for
+    // every fixture metric, not just one.
+    const expected: [string, string, number][] = [
+      ["Sum", "kop70.requests", 4],
+      ["Sum", "kop70.delta", 2],
+      ["Histogram", "kop70.latency", 2],
+      ["Summary", "kop70.summary", 2],
+    ];
     await waitForData(async () => {
-      const { data } = await ds.queryMetricsAggregate(
-        query("Summary", "kop70.summary", [{ op: "COUNT", as: "n" }])
+      const counts = await Promise.all(
+        expected.map(async ([type, name]) => {
+          const { data } = await ds.queryMetricsAggregate(
+            query(type, name, [{ op: "COUNT", as: "n" }])
+          );
+          return Number(data[0]?.n ?? 0);
+        })
       );
-      return Number(data[0]?.n ?? 0) >= 2;
+      return counts.every((n, i) => n >= (expected[i]?.[2] ?? 0));
     });
   });
 
