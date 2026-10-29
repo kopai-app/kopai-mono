@@ -1,5 +1,18 @@
 # @kopai/sqlite-datasource
 
+## 0.14.0
+
+### Minor Changes
+
+- 0dd26d9: Refuse the new distribution and counter measures (`HISTOGRAM_QUANTILE`,
+  `HISTOGRAM_AVG`, `SUMMARY_QUANTILE`, `INCREASE`, `RATE`) with a validation
+  error naming the ClickHouse backend, as percentiles already are.
+
+### Patch Changes
+
+- Updated dependencies [0dd26d9]
+  - @kopai/core@0.13.0
+
 ## 0.13.0
 
 ### Minor Changes
