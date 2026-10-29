@@ -22,6 +22,7 @@ jobs:
       matrix:
         skill:
           - create-dashboard
+          - create-live-page
           - otel-instrumentation
           - root-cause-analysis
     defaults:
