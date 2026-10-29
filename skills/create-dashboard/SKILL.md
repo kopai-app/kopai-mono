@@ -4,7 +4,7 @@ description: Build Kopai observability dashboards from OpenTelemetry metrics, lo
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.4.2"
+  version: "1.5.0"
 ---
 
 # Create Dashboard with Kopai

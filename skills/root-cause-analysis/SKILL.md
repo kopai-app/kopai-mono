@@ -4,7 +4,7 @@ description: Investigate and root-cause production issues from live OpenTelemetr
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.4.1"
+  version: "1.5.0"
 ---
 
 # Root Cause Analysis with Kopai

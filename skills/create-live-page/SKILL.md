@@ -4,7 +4,7 @@ description: 'Live page: a page in Claude that charts Kopai telemetry through th
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Create a live page with Kopai
