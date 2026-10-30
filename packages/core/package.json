@@ -40,7 +40,7 @@
     "@kopai/tsconfig": "workspace:*",
     "pretty-quick": "^4.2.2",
     "ts-to-zod": "^5.1.0",
-    "tsdown": "^0.23.1",
+    "tsdown": "^0.23.2",
     "zod": "^4.6.7"
   }
 }
