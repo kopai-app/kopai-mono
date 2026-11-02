@@ -6,7 +6,11 @@ export {
   overflowRemedies,
   SIZE_REMEDIES,
 } from "./limits.js";
-export { registerTools, type RegisterToolsOptions } from "./register.js";
+export {
+  BUILT_IN_TOOL_NAMES,
+  registerTools,
+  type RegisterToolsOptions,
+} from "./register.js";
 export { mcpRoutes } from "./routes.js";
 export {
   errorResult,
@@ -33,9 +37,15 @@ export {
   type ToolContext,
   type ToolRun,
 } from "./tools.js";
-export type {
-  McpRoutesOptions,
-  ToolCallEvent,
-  ToolCallOutcome,
+export {
+  TOOL_CALL_OUTCOMES,
+  type HostTools,
+  type McpRoutesOptions,
+  type ToolCallEvent,
+  type ToolCallOutcome,
 } from "./types.js";
+// Re-exported so a host registering its own tools (`hostTools`) uses this
+// package's copy of the SDK. `McpServer` has private fields, so a second copy
+// is a different type from the one `register` is called with.
+export { fromJsonSchema, type McpServer } from "@modelcontextprotocol/server";
 export { passThroughValidator } from "./validator.js";

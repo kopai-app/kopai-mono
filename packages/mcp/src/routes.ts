@@ -6,11 +6,60 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 
-import { registerTools } from "./register.js";
-import type { McpRoutesOptions } from "./types.js";
+import {
+  BUILT_IN_TOOL_NAMES,
+  registerHostTools,
+  registerTools,
+  type RegisterToolsOptions,
+} from "./register.js";
+import type { HostTools, McpRoutesOptions } from "./types.js";
 
 const SERVER_NAME = "kopai";
 const SERVER_VERSION = "0.0.0";
+
+// The MCP tool-name rule. The SDK checks the same pattern but only warns,
+// once per server, which on a per-request server is once per request.
+const TOOL_NAME = /^[A-Za-z0-9._-]{1,128}$/;
+
+/**
+ * Checks `hostTools` once, at registration, and returns its names as a set.
+ *
+ * Refused rather than absorbed, for the reason `allowedOriginHostnames` is: a
+ * wrong shape would otherwise fail on every request, and a name colliding
+ * with a built-in would fail only when a caller who may use it arrives.
+ */
+function checkedHostToolNames(hostTools: HostTools): ReadonlySet<string> {
+  if (
+    typeof hostTools !== "object" ||
+    hostTools === null ||
+    typeof hostTools.register !== "function" ||
+    !Array.isArray(hostTools.names) ||
+    hostTools.names.some((name) => typeof name !== "string")
+  ) {
+    throw new TypeError(
+      'hostTools must be { names: string[]; register: (server, request) => void }, e.g. { names: ["alert_get"], register }. Omit it to add no tools.'
+    );
+  }
+  const names = new Set<string>();
+  const builtIns: readonly string[] = BUILT_IN_TOOL_NAMES;
+  for (const name of hostTools.names) {
+    if (!TOOL_NAME.test(name)) {
+      throw new TypeError(
+        `hostTools.names: "${name}" is not an MCP tool name (1 to 128 of A-Z, a-z, 0-9, ".", "_", "-").`
+      );
+    }
+    if (builtIns.includes(name)) {
+      throw new TypeError(
+        `hostTools.names: "${name}" is the name of a built-in tool.`
+      );
+    }
+    if (names.has(name)) {
+      throw new TypeError(`hostTools.names: "${name}" appears more than once.`);
+    }
+    names.add(name);
+  }
+  return names;
+}
 
 /**
  * Mounts the MCP endpoint at `/mcp`, relative to wherever this plugin is
@@ -74,6 +123,14 @@ export const mcpRoutes: FastifyPluginAsync<McpRoutesOptions> =
       );
     }
 
+    const hostTools =
+      opts.hostTools === undefined
+        ? undefined
+        : {
+            names: checkedHostToolNames(opts.hostTools),
+            register: opts.hostTools.register,
+          };
+
     const handleMcp = async (
       request: FastifyRequest,
       reply: FastifyReply
@@ -112,7 +169,7 @@ export const mcpRoutes: FastifyPluginAsync<McpRoutesOptions> =
           name: SERVER_NAME,
           version: SERVER_VERSION,
         });
-        registerTools(server, {
+        const toolOptions: RegisterToolsOptions = {
           readTelemetryDatasource: opts.readTelemetryDatasource,
           requestContext: request.requestContext,
           // Per-request, so an upstream failure is logged with the same
@@ -123,7 +180,27 @@ export const mcpRoutes: FastifyPluginAsync<McpRoutesOptions> =
           onToolCall: opts.onToolCall
             ? (event) => opts.onToolCall?.({ ...event, request })
             : undefined,
-        });
+        };
+        registerTools(server, toolOptions);
+        // After the built-ins, so a host tool can never take their place. A
+        // throw here fails this request rather than falling back to the
+        // built-ins alone.
+        //
+        // NOTE logged here because nothing else logs it: the SDK answers a
+        // throwing factory with a bare JSON-RPC internal error and passes the
+        // error to no `onerror`.
+        if (hostTools !== undefined) {
+          try {
+            registerHostTools(server, {
+              ...toolOptions,
+              names: hostTools.names,
+              register: (s) => hostTools.register(s, request),
+            });
+          } catch (error) {
+            toolOptions.logger?.error(error, "MCP hostTools.register failed");
+            throw error;
+          }
+        }
         return server;
       });
 

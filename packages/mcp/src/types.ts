@@ -1,13 +1,25 @@
 import type { datasource } from "@kopai/core";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { FastifyRequest } from "fastify";
 
 /**
- * How a tool call ended. These four labels are the server's whole error
+ * How a tool call ended. These labels are the server's whole error
  * vocabulary: they are the `error` code on a failed result, the `outcome` on
  * the observer event, and the values a counter is grouped by.
+ *
+ * `not_found` and `forbidden` are produced only by host tools (see
+ * {@link HostTools}); the built-in tools never return them.
  */
-export type ToolCallOutcome =
-  "ok" | "invalid_input" | "result_too_large" | "upstream_error";
+export const TOOL_CALL_OUTCOMES = [
+  "ok",
+  "invalid_input",
+  "result_too_large",
+  "upstream_error",
+  "not_found",
+  "forbidden",
+] as const;
+
+export type ToolCallOutcome = (typeof TOOL_CALL_OUTCOMES)[number];
 
 /**
  * The one method this package calls on a logger.
@@ -36,6 +48,59 @@ export interface ToolCallEvent {
   /** Rows returned, when the tool returned rows. */
   rowCount?: number;
   request: FastifyRequest;
+}
+
+/**
+ * Tools the host application adds to the same server as `query` and
+ * `metrics_discover`, for data only the host has.
+ *
+ * Host tools follow the built-ins' conventions:
+ *
+ * - Results are built with `okResult` and `errorResult`, so the
+ *   error contract holds for every tool on the server.
+ * - The package observes them as it observes the built-ins: a throw becomes
+ *   a logged `upstream_error` ("The tool call could not be completed."), the
+ *   outcome is read from the result's `error` code, and `onToolCall` fires
+ *   once per call (without `rowCount`).
+ *   A host tool never calls `onToolCall` itself. An error result without a
+ *   known code is counted as `upstream_error` and logged.
+ * - `inputSchema` is built with `fromJsonSchema(schema, passThroughValidator)`
+ *   and the handler validates, returning `invalid_input` with `issues`. The
+ *   SDK's own validator rejects before dispatch, so the rejection would go
+ *   uncounted and lose its `issues`; see `validator.ts`.
+ * - No `outputSchema`; registering one throws. The SDK checks it after the
+ *   callback returns, so a mismatch would be counted `ok` while the caller
+ *   got the SDK's bare error.
+ * - `McpServer` and `fromJsonSchema` are imported from `@kopai/mcp`, not from
+ *   `@modelcontextprotocol/server`. They are the SDK's own, re-exported, at
+ *   the version this package pins (2.3.1). `McpServer` has private fields, so
+ *   a second copy of the SDK is a different, incompatible type.
+ *
+ * `register` is for tools. Prompts and resources registered through it are
+ * neither checked nor observed.
+ */
+export interface HostTools {
+  /**
+   * Every name `register` may register. Checked once, at plugin registration:
+   * a name that is not an MCP tool name (`[A-Za-z0-9._-]`, 1 to 128
+   * characters), a duplicate, or a built-in name is refused with a
+   * `TypeError`. An empty list is allowed.
+   */
+  names: string[];
+  /**
+   * Runs on each request's server, after the built-in tools are registered.
+   * Registering, or renaming a tool to, a name not in `names` throws, and so
+   * does renaming a tool onto a name already registered.
+   *
+   * Synchronous, because the SDK's server factory is. Do the I/O that decides
+   * which tools this caller gets in an async `preHandler`, attach the result
+   * to the request, and read it here. A tool not registered for a request is
+   * absent from that caller's `tools/list`.
+   *
+   * A throw fails the request; the server does not fall back to the built-in
+   * tools alone.
+   */
+  register: (server: McpServer, request: FastifyRequest) => void;
 }
 
 export interface McpRoutesOptions {
@@ -84,6 +149,8 @@ export interface McpRoutesOptions {
   logger?: ToolLogger;
   /** Called once per completed tool call. Errors thrown here are swallowed. */
   onToolCall?: (event: ToolCallEvent) => void;
+  /** Tools the host adds to the server. See {@link HostTools}. */
+  hostTools?: HostTools;
 }
 
 // Mirrors the identical augmentation in `@kopai/api`. Both packages mount into
