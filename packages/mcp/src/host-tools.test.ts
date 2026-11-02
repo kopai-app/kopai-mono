@@ -512,4 +512,17 @@ describe("hostTools — the name guard", () => {
       await h.app.close();
     }
   });
+
+  it("fails the request when update adds an outputSchema", async () => {
+    await expectFailedRequest((server) => {
+      tool(server, "alert_get").update({ outputSchema: EMPTY_INPUT });
+    }, /"alert_get" declares an outputSchema/);
+  });
+
+  // An async function satisfies `=> void`, and its promise would be dropped.
+  it("fails the request when register is async", async () => {
+    await expectFailedRequest(async (server) => {
+      tool(server, "alert_get");
+    }, /register returned a promise; it must be synchronous/);
+  });
 });

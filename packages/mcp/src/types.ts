@@ -68,7 +68,8 @@ export interface ToolCallEvent {
  *   and the handler validates, returning `invalid_input` with `issues`. The
  *   SDK's own validator rejects before dispatch, so the rejection would go
  *   uncounted and lose its `issues`; see `validator.ts`.
- * - No `outputSchema`; registering one throws. The SDK checks it after the
+ * - No `outputSchema`; registering one, or adding one through `update`,
+ *   throws. The SDK checks it after the
  *   callback returns, so a mismatch would be counted `ok` while the caller
  *   got the SDK's bare error.
  * - `McpServer` and `fromJsonSchema` are imported from `@kopai/mcp`, not from
@@ -92,7 +93,8 @@ export interface HostTools {
    * Registering, or renaming a tool to, a name not in `names` throws, and so
    * does renaming a tool onto a name already registered.
    *
-   * Synchronous, because the SDK's server factory is. Do the I/O that decides
+   * Synchronous, because the SDK's server factory is; a returned promise
+   * fails the request. Do the I/O that decides
    * which tools this caller gets in an async `preHandler`, attach the result
    * to the request, and read it here. A tool not registered for a request is
    * absent from that caller's `tools/list`.

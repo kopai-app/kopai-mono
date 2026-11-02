@@ -288,14 +288,19 @@ export function registerHostTools(
 
   const guarded = (name: string, config: unknown, callback: HostCallback) => {
     assertDeclared(name);
-    if (isRecord(config) && config.outputSchema !== undefined) {
-      // WHY: the SDK checks an output schema after the callback returns, so
-      // a mismatch is counted `ok` while the caller receives the SDK's own
-      // bare error, which breaks the error contract for that tool.
+    // WHY: the SDK checks an output schema after the callback returns, so a
+    // mismatch is counted `ok` while the caller receives the SDK's own bare
+    // error, which breaks the error contract for that tool.
+    const refuseOutputSchema = (value: unknown, tool: string): void => {
+      if (value === undefined) return;
       throw new TypeError(
-        `Host tool "${name}" declares an outputSchema; host tools may not.`
+        `Host tool "${tool}" declares an outputSchema; host tools may not.`
       );
-    }
+    };
+    refuseOutputSchema(
+      isRecord(config) ? config.outputSchema : undefined,
+      name
+    );
     let current = name;
     const observed = (inner: HostCallback): HostCallback => {
       const outer: HostCallback = (...args) =>
@@ -335,6 +340,7 @@ export function registerHostTools(
     });
     const update = handle.update;
     handle.update = (updates) => {
+      refuseOutputSchema(updates.outputSchema, current);
       const renamed =
         updates.name !== undefined && updates.name !== current
           ? updates.name
@@ -370,5 +376,14 @@ export function registerHostTools(
   };
   server.registerTool = guarded as McpServer["registerTool"];
 
-  opts.register(server);
+  // Typed `void`, but an `async` function satisfies that type. Its promise
+  // would be dropped: whatever it registers after an `await` is never
+  // listed, and a rejection goes unhandled.
+  const returned: unknown = opts.register(server);
+  if (returned instanceof Promise) {
+    returned.catch(() => {});
+    throw new TypeError(
+      "hostTools.register returned a promise; it must be synchronous. Do the I/O in a preHandler and read its result from the request."
+    );
+  }
 }
