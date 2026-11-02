@@ -48,7 +48,7 @@
     "fastify-type-provider-zod": "^7.0.0"
   },
   "devDependencies": {
-    "@bufbuild/buf": "^1.74.0",
+    "@bufbuild/buf": "^1.75.0",
     "@bufbuild/protoc-gen-es": "^2.16.0",
     "@kopai/tsconfig": "workspace:*",
     "@opentelemetry/api": "^1.10.0",
@@ -64,7 +64,7 @@
     "@opentelemetry/sdk-metrics": "^3.0.0",
     "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@opentelemetry/sdk-trace-node": "^2.12.0",
-    "@opentelemetry/semantic-conventions": "^1.43.0",
-    "tsdown": "^0.23.1"
+    "@opentelemetry/semantic-conventions": "^1.44.0",
+    "tsdown": "^0.23.4"
   }
 }
