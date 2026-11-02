@@ -1,5 +1,12 @@
 # @kopai/app
 
+## 0.15.3
+
+### Patch Changes
+
+- Updated dependencies [1d4b96b]
+  - @kopai/mcp@0.3.0
+
 ## 0.15.2
 
 ### Patch Changes
