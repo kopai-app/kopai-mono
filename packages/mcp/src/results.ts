@@ -16,7 +16,7 @@ export interface ToolErrorPayload {
 }
 
 /**
- * The shape both tools return. Deliberately not the MCP SDK's own result type
+ * The shape every tool on the server returns, built-in or host. Deliberately not the MCP SDK's own result type
  * — this stays a plain object so it can be asserted on in tests without a
  * server.
  */
