@@ -1,5 +1,15 @@
 # @kopai/ui
 
+## 0.16.2
+
+### Patch Changes
+
+- Updated dependencies [0dd26d9]
+- Updated dependencies [0dd26d9]
+  - @kopai/core@0.13.0
+  - @kopai/sdk@0.11.0
+  - @kopai/ui-core@0.3.2
+
 ## 0.16.1
 
 ### Patch Changes

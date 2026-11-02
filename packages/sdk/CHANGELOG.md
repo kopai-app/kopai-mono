@@ -1,5 +1,25 @@
 # @kopai/sdk
 
+## 0.11.0
+
+### Minor Changes
+
+- 0dd26d9: The metric measure builder gains `histogramQuantile(q, alias)`,
+  `histogramAvg(alias)` and `rate`/`increase("Count" | "Sum", alias)` on
+  `kq.metrics("Histogram")`, `summaryQuantile(q, alias)` on
+  `kq.metrics("Summary")`, and `rate`/`increase("Value", alias)` on
+  `kq.metrics("Sum")`. Each appears only on the type it applies to.
+
+  Result rows type these measures as `number | null`, and `histogramQuantile`
+  adds `<alias>_low`, `<alias>_high` (`number | null`), `<alias>_coarsened`
+  (`0 | 1`) and `<alias>_error` (`string | null`). The builder does not add the
+  `IsMonotonic` filter a Sum counter needs; `.build()` reports it missing.
+
+### Patch Changes
+
+- Updated dependencies [0dd26d9]
+  - @kopai/core@0.13.0
+
 ## 0.10.0
 
 ### Minor Changes

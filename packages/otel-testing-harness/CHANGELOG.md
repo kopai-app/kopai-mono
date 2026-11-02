@@ -1,5 +1,15 @@
 # @kopai/otel-testing-harness
 
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [0dd26d9]
+- Updated dependencies [0dd26d9]
+  - @kopai/core@0.13.0
+  - @kopai/sqlite-datasource@0.14.0
+  - @kopai/collector@0.7.5
+
 ## 0.1.7
 
 ### Patch Changes
