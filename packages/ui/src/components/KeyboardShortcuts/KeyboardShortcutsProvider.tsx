@@ -11,6 +11,7 @@ const GENERAL_GROUP: ShortcutGroup = {
     { keys: ["Shift", "T"], description: "Traces tab" },
     { keys: ["Shift", "L"], description: "Logs tab" },
     { keys: ["Shift", "M"], description: "Metrics tab" },
+    { keys: ["Shift", "S"], description: "Service map tab" },
   ],
 };
 
@@ -19,6 +20,8 @@ interface KeyboardShortcutsProviderProps {
   onNavigateServices: () => void;
   onNavigateLogs: () => void;
   onNavigateMetrics: () => void;
+  /** Shift+S. Optional so existing hosts of the provider keep compiling. */
+  onNavigateServiceMap?: () => void;
 }
 
 export function KeyboardShortcutsProvider({
@@ -26,6 +29,7 @@ export function KeyboardShortcutsProvider({
   onNavigateServices,
   onNavigateLogs,
   onNavigateMetrics,
+  onNavigateServiceMap,
 }: KeyboardShortcutsProviderProps) {
   const [registry, setRegistry] = useState<ShortcutsRegistry>(() => new Map());
   const [isOpen, setIsOpen] = useState(false);
@@ -85,15 +89,34 @@ export function KeyboardShortcutsProvider({
         onNavigateMetrics();
         return;
       }
+      if (e.shiftKey && e.key === "S" && onNavigateServiceMap) {
+        e.preventDefault();
+        onNavigateServiceMap();
+        return;
+      }
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onNavigateServices, onNavigateLogs, onNavigateMetrics]);
+  }, [
+    isOpen,
+    onNavigateServices,
+    onNavigateLogs,
+    onNavigateMetrics,
+    onNavigateServiceMap,
+  ]);
 
   const groups = useMemo(() => {
-    return [GENERAL_GROUP, ...registry.values()];
-  }, [registry]);
+    const general = onNavigateServiceMap
+      ? GENERAL_GROUP
+      : {
+          ...GENERAL_GROUP,
+          shortcuts: GENERAL_GROUP.shortcuts.filter(
+            (s) => !(s.keys[0] === "Shift" && s.keys[1] === "S")
+          ),
+        };
+    return [general, ...registry.values()];
+  }, [registry, onNavigateServiceMap]);
 
   const contextValue = useMemo(
     () => ({ register, unregister }),

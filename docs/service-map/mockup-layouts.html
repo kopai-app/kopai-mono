@@ -1,0 +1,1112 @@
+<title>Service map layouts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Kopai-style product chrome. Sticky scan header on top, four layout panels in a 2x2 grid, comparison table below. */
+:root {
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --ink: #15181b;
+  --muted: #5b646d;
+  --line: #dde1e5;
+  --accent: #0d7c8a;
+  --accent-soft: #e3f1f3;
+  --virtual: #eceef0;
+  --virtual-stroke: #79848f;
+  --edge: #a3acb5;
+  --edge-hl: #0d7c8a;
+  --err: #cf3f3f;
+  --warn: #b8740a;
+  --warn-soft: #fbf0dc;
+  --ok: #2f8a4c;
+  --ok-soft: #e2f3e7;
+  --guide: #e9ecef;
+  --font-heading: "Space Grotesk", system-ui, sans-serif;
+  --font-body: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0a0b0c; --surface: #121416; --ink: #f1f3f4; --muted: #99a3ac; --line: #262a2e;
+    --accent: #43c3d1; --accent-soft: #0f2a2e; --virtual: #1b1f22; --virtual-stroke: #8a959f;
+    --edge: #4e5760; --edge-hl: #43c3d1; --err: #f06b6b; --warn: #e4a443; --warn-soft: #2e2412;
+    --ok: #5cc27a; --ok-soft: #132a1a; --guide: #191c1f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0a0b0c; --surface: #121416; --ink: #f1f3f4; --muted: #99a3ac; --line: #262a2e;
+  --accent: #43c3d1; --accent-soft: #0f2a2e; --virtual: #1b1f22; --virtual-stroke: #8a959f;
+  --edge: #4e5760; --edge-hl: #43c3d1; --err: #f06b6b; --warn: #e4a443; --warn-soft: #2e2412;
+  --ok: #5cc27a; --ok-soft: #132a1a; --guide: #191c1f;
+}
+
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 28px 56px; display: flex; flex-direction: column; gap: 22px; }
+h1, h2, h3 { font-family: var(--font-heading); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: 26px; letter-spacing: -0.01em; }
+h2 { font-size: 18px; }
+h3 { font-size: 16px; }
+p { margin: 0; }
+.lead { color: var(--muted); max-width: 70ch; }
+.lead strong { color: var(--ink); font-weight: 600; }
+code, .mono { font-family: var(--font-mono); font-size: 12px; }
+
+/* Sticky scan header: the mocked "counter at the top" plus the checkpoint stepper */
+@media (max-width: 700px) { .scanbar { position: static !important; } }
+.scanbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+}
+.counter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.counter .name { font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
+.counter .text { color: var(--muted); font-variant-numeric: tabular-nums; }
+.counter .text b { color: var(--ink); font-weight: 500; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.pill.scan { background: var(--accent-soft); color: var(--accent); }
+.pill.live { background: var(--ok-soft); color: var(--ok); }
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.scan .dot { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.steps { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.steps button {
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 10px; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.steps button:hover { border-color: var(--accent); }
+.steps button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.steps button:focus-visible, .chk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.steps .play { margin-left: auto; }
+.what { font-size: 13px; color: var(--muted); }
+.what b { color: var(--ink); font-weight: 500; }
+
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.phead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.phead .key { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.phead .used { font-size: 12px; color: var(--muted); margin-left: auto; }
+.svgbox { border-radius: 8px; background: var(--bg); overflow: hidden; }
+svg.map { display: block; width: 100%; height: 440px; }
+@media (max-width: 500px) { svg.map { height: 340px; } }
+.stat { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.chip { padding: 1px 8px; border-radius: 99px; font-weight: 500; font-size: 12px; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.stat .cum { color: var(--muted); }
+.pc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; }
+@media (max-width: 500px) { .pc { grid-template-columns: 1fr; } }
+.pc h4 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.pc ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+
+/* SVG marks */
+.guide { fill: none; stroke: var(--guide); stroke-width: 1.5; }
+.guide-label { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.tray-band { fill: var(--surface); stroke: var(--line); stroke-dasharray: 4 4; }
+.edge { stroke: var(--edge); fill: none; opacity: 0; transition: opacity .5s ease, stroke .15s; }
+.edge.on { opacity: var(--edge-op, .9); }
+.edge.dim { opacity: .18; }
+.edge.hl { stroke: var(--edge-hl); opacity: 1; }
+.arrow { fill: var(--edge); }
+.arrow-hl { fill: var(--edge-hl); }
+.node { cursor: default; transition: opacity .5s ease; }
+.node .shape { stroke-width: 1.6; }
+.node.svc .shape { fill: var(--accent-soft); stroke: var(--accent); }
+.node.virt .shape { fill: var(--virtual); stroke: var(--virtual-stroke); }
+.node.ext .shape { stroke-dasharray: 3 2.5; }
+.node.err .shape { stroke: var(--err); stroke-width: 2.4; }
+.node.hub .shape { stroke-width: 3; }
+.node .label { fill: var(--ink); font-family: var(--font-mono); font-size: 11.5px; text-anchor: middle; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.node.hub .label { font-weight: 600; }
+.node.tray { opacity: .55; }
+.node.dimmed { opacity: .3; }
+.trail { stroke: var(--warn); stroke-width: 1.6; stroke-dasharray: 4 3; fill: none; }
+.trail-dot { fill: none; stroke: var(--warn); stroke-width: 1.4; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { overflow: visible; }
+
+.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.yes { color: var(--ok); font-weight: 500; }
+.no { color: var(--err); font-weight: 500; }
+.part { color: var(--warn); font-weight: 500; }
+.note { font-size: 12.5px; color: var(--muted); max-width: 90ch; }
+
+/* Scale check */
+.scale { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.toolbar input { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; min-width: 0; width: 220px; max-width: 100%; }
+.toolbar input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.toolbar .sep { flex: 1 1 auto; }
+.scale svg.map { height: 560px; touch-action: none; cursor: grab; }
+.scale svg.map.dragging { cursor: grabbing; }
+@media (max-width: 500px) { .scale svg.map { height: 420px; } }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.checks .chip { font-weight: 400; }
+.chip.info { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.lod .node:not(.hub):not(.found):not(.rel):not(:hover):not(:focus) .label { display: none; }
+.node.found .shape { stroke: var(--warn); stroke-width: 4; }
+.empty-msg { fill: var(--muted); font-family: var(--font-body); font-size: 15px; text-anchor: middle; }
+.empty-title { fill: var(--ink); font-family: var(--font-heading); font-size: 20px; font-weight: 600; text-anchor: middle; }
+.scale-note { font-size: 13px; color: var(--muted); max-width: 90ch; }
+.scale-note b { color: var(--ink); font-weight: 500; }
+
+@media (prefers-reduced-motion: reduce) {
+  .edge, .node { transition: none; }
+  .pill.scan .dot { animation: none; }
+}
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Service map layouts</h1>
+    <p class="lead">Four ways to lay out the same example system: an online shop with <strong>14 services</strong> and <strong>6 databases, queues and external APIs</strong>, scanned over the past 60 minutes. Step through the five checkpoints of a scan to see how each layout behaves as connections arrive. The rule we care about most is that <strong>nodes already on screen should not move</strong>. Orange dashed lines show nodes that moved at the current step. The data is made up but has realistic proportions.</p>
+  </header>
+
+  <section class="scanbar" aria-label="Scan progress">
+    <div class="counter">
+      <span class="name">Service map</span>
+      <span class="text" id="counterText"></span>
+      <span id="counterPill"></span>
+    </div>
+    <div class="steps" role="group" aria-label="Scan checkpoint" id="steps"></div>
+    <p class="what" id="what"></p>
+  </section>
+
+  <div class="legend" aria-label="Legend">
+    <span><svg width="22" height="14"><circle cx="7" cy="7" r="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.6"/></svg>Service, size = spans in past 60 min</span>
+    <span><svg width="16" height="14"><rect x="1" y="1" width="12" height="12" rx="3" fill="var(--virtual)" stroke="var(--virtual-stroke)" stroke-width="1.6"/></svg>Database / cache</span>
+    <span><svg width="16" height="14"><polygon points="7,0 14,7 7,14 0,7" fill="var(--virtual)" stroke="var(--virtual-stroke)" stroke-width="1.6"/></svg>Queue</span>
+    <span><svg width="16" height="14"><circle cx="7" cy="7" r="6" fill="var(--virtual)" stroke="var(--virtual-stroke)" stroke-width="1.6" stroke-dasharray="3 2.5"/></svg>External API</span>
+    <span><svg width="16" height="14"><circle cx="7" cy="7" r="6" fill="var(--accent-soft)" stroke="var(--err)" stroke-width="2.4"/></svg>Error rate above 1%</span>
+    <span><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--edge)" stroke-width="3"/></svg>Line width = calls</span>
+    <span><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" class="trail"/></svg>Moved at this step</span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>Scale check for layout D</h2>
+    <p class="scale-note">The same centred-flow algorithm on systems from empty to about 480 nodes. In large systems, a column that would grow past a fixed height wraps into extra <b>lanes</b>. Labels hide when they would be too small to read, and come back on hover, on search and when you zoom in. Drag to pan, scroll or use the buttons to zoom, and type a service name to find it. The chips under the map are the checks an automated test would assert.</p>
+    <div class="scale">
+      <div class="steps" role="group" aria-label="Example system" id="scn"></div>
+      <div class="toolbar">
+        <div class="steps" role="group" aria-label="Scan checkpoint" id="scnStage"></div>
+        <span class="sep"></span>
+        <input id="find" list="findList" placeholder="Find a service" aria-label="Find a service" autocomplete="off">
+        <datalist id="findList"></datalist>
+        <div class="steps"><button type="button" id="zin" aria-label="Zoom in">+</button><button type="button" id="zout" aria-label="Zoom out">−</button><button type="button" id="zfit">Fit</button></div>
+      </div>
+      <div class="svgbox" id="scaleBox"></div>
+      <div class="checks" id="checks"></div>
+      <p class="scale-note" id="scnNote"></p>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>Side by side</h2>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>Layout</th><th>Busiest in centre</th><th>Call direction readable</th><th>Moves across all 5 steps</th><th>How it's built</th><th>Who uses it</th></tr></thead>
+        <tbody id="cmp"></tbody>
+      </table>
+    </div>
+    <p class="note">"Moves" counts nodes that were already on screen and changed position at a later step, with the total distance in layout pixels (about 150 px between rings or columns). Nodes joining from the "not connected yet" tray are not counted. The force layout caps each move at 40 px, which is why its numbers are small but never zero.</p>
+    <p class="note">All 20 nodes are known on the first frame because the aggregate query lists every service and every database or external call (decision R2-6). What arrives page by page are the connections between services. Until a service connects to the rest of the map, it waits in the tray at the bottom.</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  const HUB = 'api-gateway';
+  // type: svc | db | queue | ext ; spans in past 60 min ; err = error rate %
+  const NODES = [
+    { id: 'api-gateway', type: 'svc', spans: 48200, err: 0.4 },
+    { id: 'web-frontend', type: 'svc', spans: 31500, err: 0.2 },
+    { id: 'catalog', type: 'svc', spans: 22800, err: 0.1 },
+    { id: 'cart', type: 'svc', spans: 15400, err: 0.3 },
+    { id: 'user-auth', type: 'svc', spans: 12900, err: 0.2 },
+    { id: 'pricing', type: 'svc', spans: 9800, err: 0.1 },
+    { id: 'search', type: 'svc', spans: 8600, err: 0.2 },
+    { id: 'inventory', type: 'svc', spans: 7400, err: 0.5 },
+    { id: 'checkout', type: 'svc', spans: 6100, err: 1.8 },
+    { id: 'recommendations', type: 'svc', spans: 5300, err: 0.0 },
+    { id: 'payments', type: 'svc', spans: 3900, err: 2.6 },
+    { id: 'shipping', type: 'svc', spans: 2100, err: 0.9 },
+    { id: 'notifications-worker', type: 'svc', spans: 1700, err: 0.4 },
+    { id: 'report-cron', type: 'svc', spans: 900, err: 0.0 },
+    { id: 'postgres', label: 'postgres · orders', type: 'db', spans: 0 },
+    { id: 'redis', label: 'redis · sessions', type: 'db', spans: 0 },
+    { id: 'elasticsearch', label: 'elasticsearch · products', type: 'db', spans: 0 },
+    { id: 'kafka', label: 'kafka · order-events', type: 'queue', spans: 0 },
+    { id: 'stripe', label: 'api.stripe.com', type: 'ext', spans: 0 },
+    { id: 'sendgrid', label: 'api.sendgrid.com', type: 'ext', spans: 0 },
+  ];
+  const NI = Object.fromEntries(NODES.map((n, i) => [n.id, i]));
+  const NM = Object.fromEntries(NODES.map(n => [n.id, n]));
+  // [from, to, calls in past 60 min, checkpoint at which the connection is first known]
+  const EDGES = [
+    // from the aggregate query on frame 1 (calls to databases, queues, external APIs)
+    ['catalog', 'postgres', 14200, 1], ['cart', 'redis', 21000, 1], ['user-auth', 'redis', 9400, 1],
+    ['user-auth', 'postgres', 2300, 1], ['payments', 'postgres', 3700, 1], ['payments', 'stripe', 3800, 1],
+    ['inventory', 'postgres', 6800, 1], ['shipping', 'postgres', 1800, 1], ['checkout', 'kafka', 3600, 1],
+    ['kafka', 'notifications-worker', 3500, 1], ['notifications-worker', 'sendgrid', 1600, 1],
+    ['search', 'elasticsearch', 8100, 1], ['report-cron', 'postgres', 850, 1],
+    // service-to-service connections, found by paging spans
+    ['web-frontend', 'api-gateway', 29800, 1], ['api-gateway', 'catalog', 18200, 1], ['api-gateway', 'cart', 12100, 1],
+    ['api-gateway', 'user-auth', 11800, 1], ['catalog', 'pricing', 8900, 1],
+    ['api-gateway', 'checkout', 4100, 2], ['checkout', 'cart', 3900, 2], ['checkout', 'payments', 3800, 2], ['checkout', 'inventory', 3700, 2],
+    ['checkout', 'shipping', 1900, 3], ['api-gateway', 'search', 7300, 3],
+    ['api-gateway', 'recommendations', 4600, 4], ['recommendations', 'catalog', 4400, 4],
+    ['payments', 'user-auth', 3700, 5],
+  ].map(([s, t, calls, stage]) => ({ s, t, calls, stage, key: s + '>' + t }));
+
+  const STAGES = [
+    { btn: '1 · Aggregate + page 1', spans: '2,000', range: '14:35–14:36', cover: 'under 1 of 60 min', live: false,
+      what: '<b>Frame 1.</b> The aggregate query lists all 20 nodes. Page 1 links 13 of them to api-gateway, the service with the most spans, which becomes the centre. The other 7 wait in the tray.' },
+    { btn: '2 · Page 3', spans: '6,000', range: '14:34–14:36', cover: '2 of 60 min', live: false,
+      what: '<b>Page 3.</b> api-gateway → checkout is found, so checkout, kafka, notifications-worker and api.sendgrid.com join the map.' },
+    { btn: '3 · Page 12', spans: '24,000', range: '14:29–14:36', cover: '7 of 60 min', live: false,
+      what: '<b>Page 12.</b> api-gateway → search and checkout → shipping are found. search brings elasticsearch with it.' },
+    { btn: '4 · Page 41', spans: '82,000', range: '14:11–14:36', cover: '25 of 60 min', live: false,
+      what: '<b>Page 41.</b> recommendations is a quieter service. Its calls finally show up, and the tray is empty.' },
+    { btn: '5 · Done + live', spans: '201,400', range: '13:36–14:37', cover: '60 of 60 min', live: true,
+      what: '<b>Scan complete, now live.</b> A forward poll finds a new connection between two existing nodes: payments → user-auth.' },
+  ];
+  const S = STAGES.length;
+
+  function graphAt(st) {
+    const es = EDGES.filter(e => e.stage <= st);
+    const adj = {};
+    NODES.forEach(n => (adj[n.id] = []));
+    es.forEach(e => {
+      adj[e.s].push({ n: e.t, calls: e.calls, out: true });
+      adj[e.t].push({ n: e.s, calls: e.calls, out: false });
+    });
+    Object.values(adj).forEach(a => a.sort((x, y) => y.calls - x.calls));
+    const order = [HUB], seen = new Set([HUB]);
+    for (let i = 0; i < order.length; i++)
+      for (const { n } of adj[order[i]]) if (!seen.has(n)) { seen.add(n); order.push(n); }
+    const inG = new Set(order);
+    return { es: es.filter(e => inG.has(e.s) && inG.has(e.t)), adj, order, inG };
+  }
+  const snap = (pos, inG) => { const o = {}; inG.forEach(id => (o[id] = { x: pos[id].x, y: pos[id].y })); return o; };
+  const TAU = Math.PI * 2;
+  const norm = a => ((a % TAU) + TAU) % TAU;
+  const angDist = (a, b) => { const d = norm(a - b); return Math.min(d, TAU - d); };
+
+  // A. Anchored radial rings: hop distance from the hub, fixed once placed
+  function layoutRadial() {
+    const R = 150, pos = {}, ring = {}, ang = {}, out = [];
+    const occupied = r => Object.keys(ring).filter(k => ring[k] === r).map(k => ang[k]);
+    function largestGap(occ) {
+      if (!occ.length) return Math.PI;
+      if (occ.length === 1) return occ[0] + Math.PI;
+      const s = occ.map(norm).sort((a, b) => a - b);
+      let best = 0, at = 0;
+      for (let i = 0; i < s.length; i++) {
+        const a = s[i], b = i + 1 < s.length ? s[i + 1] : s[0] + TAU;
+        if (b - a > best) { best = b - a; at = a + (b - a) / 2; }
+      }
+      return at;
+    }
+    function freeAngle(r, desired) {
+      const occ = occupied(r), min = 92 / (R * r), step = min / 4;
+      for (let k = 0; k < 600; k++) {
+        const a = desired + Math.ceil(k / 2) * step * (k % 2 ? 1 : -1);
+        if (occ.every(o => angDist(o, a) >= min)) return a;
+      }
+      return desired;
+    }
+    for (let st = 1; st <= S; st++) {
+      const g = graphAt(st);
+      for (const id of g.order) {
+        if (pos[id]) continue;
+        if (id === HUB) { pos[id] = { x: 0, y: 0 }; ring[id] = 0; ang[id] = 0; continue; }
+        const placed = g.adj[id].filter(p => pos[p.n]).sort((a, b) => ring[a.n] - ring[b.n] || b.calls - a.calls);
+        const par = placed[0].n, r = ring[par] + 1;
+        const desired = par === HUB ? largestGap(occupied(1)) : ang[par];
+        const a = freeAngle(r, desired);
+        ring[id] = r; ang[id] = a;
+        pos[id] = { x: Math.cos(a) * R * r, y: Math.sin(a) * R * r };
+      }
+      out.push(snap(pos, g.inG));
+    }
+    const maxRing = Math.max(...Object.values(ring));
+    out.guides = Array.from({ length: maxRing }, (_, i) => ({ kind: 'ring', r: R * (i + 1), label: (i + 1) + (i ? ' hops' : ' hop') }));
+    return out;
+  }
+
+  // B. Layered left-to-right, recomputed from scratch at every step (what dagre does)
+  function layoutLayered() {
+    const out = [];
+    for (let st = 1; st <= S; st++) {
+      const g = graphAt(st);
+      const ids = [...g.inG].sort((a, b) => NI[a] - NI[b]);
+      const preds = {}, succs = {}, indeg = {};
+      ids.forEach(id => { preds[id] = []; succs[id] = []; indeg[id] = 0; });
+      g.es.forEach(e => { succs[e.s].push(e.t); preds[e.t].push(e.s); indeg[e.t]++; });
+      const layer = {}, q = ids.filter(id => !indeg[id]);
+      q.forEach(id => (layer[id] = 0));
+      for (let i = 0; i < q.length; i++) {
+        const u = q[i];
+        for (const v of succs[u]) {
+          layer[v] = Math.max(layer[v] ?? 0, layer[u] + 1);
+          if (--indeg[v] === 0) q.push(v);
+        }
+      }
+      ids.forEach(id => { if (layer[id] == null) layer[id] = 0; });
+      const L = Math.max(...ids.map(id => layer[id])) + 1;
+      const order = Array.from({ length: L }, () => []);
+      ids.forEach(id => order[layer[id]].push(id));
+      const rel = () => { const m = {}; order.forEach(l => l.forEach((id, i) => (m[id] = i - (l.length - 1) / 2))); return m; };
+      for (let it = 0; it < 8; it++) {
+        const down = it % 2 === 0;
+        const seq = [...Array(L).keys()];
+        if (!down) seq.reverse();
+        for (const li of seq.slice(1)) {
+          const m = rel(), nb = down ? preds : succs;
+          const bary = id => (nb[id].length ? nb[id].reduce((s, x) => s + m[x], 0) / nb[id].length : m[id]);
+          const b = Object.fromEntries(order[li].map(id => [id, bary(id)]));
+          order[li].sort((x, y) => b[x] - b[y]);
+        }
+      }
+      const pos = {};
+      order.forEach((l, li) => l.forEach((id, i) => (pos[id] = { x: li * 175, y: (i - (l.length - 1) / 2) * 76 })));
+      out.push(pos);
+    }
+    out.guides = [];
+    return out;
+  }
+
+  // C. Force-directed, hub pinned, existing nodes may move at most 40 px per step
+  function layoutForce() {
+    let seed = 11;
+    const rnd = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const pos = {}, out = [];
+    function simulate(g, iters) {
+      const ids = [...g.inG];
+      for (let i = 0; i < iters; i++) {
+        const alpha = 1 - i / iters, disp = {};
+        ids.forEach(id => (disp[id] = { x: 0, y: 0 }));
+        for (let a = 0; a < ids.length; a++) for (let b = a + 1; b < ids.length; b++) {
+          const p = pos[ids[a]], q = pos[ids[b]];
+          let dx = p.x - q.x, dy = p.y - q.y;
+          const d2 = Math.max(dx * dx + dy * dy, 400), d = Math.sqrt(d2), f = 16000 / d2;
+          dx /= d; dy /= d;
+          disp[ids[a]].x += dx * f; disp[ids[a]].y += dy * f;
+          disp[ids[b]].x -= dx * f; disp[ids[b]].y -= dy * f;
+        }
+        g.es.forEach(e => {
+          const p = pos[e.s], q = pos[e.t];
+          const dx = q.x - p.x, dy = q.y - p.y, d = Math.max(Math.hypot(dx, dy), 1), f = (d - 135) * 0.06;
+          disp[e.s].x += dx / d * f; disp[e.s].y += dy / d * f;
+          disp[e.t].x -= dx / d * f; disp[e.t].y -= dy / d * f;
+        });
+        ids.forEach(id => {
+          if (id === HUB) return;
+          const v = disp[id];
+          v.x -= pos[id].x * 0.012; v.y -= pos[id].y * 0.012;
+          const len = Math.hypot(v.x, v.y);
+          if (!len) return;
+          const cap = Math.min(len, 16 * alpha + 0.5);
+          pos[id].x += v.x / len * cap; pos[id].y += v.y / len * cap;
+        });
+      }
+    }
+    for (let st = 1; st <= S; st++) {
+      const g = graphAt(st);
+      const prev = {};
+      Object.keys(pos).forEach(id => (prev[id] = { ...pos[id] }));
+      for (const id of g.order) {
+        if (pos[id]) continue;
+        if (id === HUB) { pos[id] = { x: 0, y: 0 }; continue; }
+        const par = g.adj[id].find(p => pos[p.n]).n, base = pos[par];
+        const away = par === HUB ? rnd() * TAU : Math.atan2(base.y, base.x);
+        const a = away + (rnd() - 0.5) * 1.4;
+        pos[id] = { x: base.x + Math.cos(a) * 120, y: base.y + Math.sin(a) * 120 };
+      }
+      simulate(g, st === 1 ? 700 : 300);
+      Object.keys(prev).forEach(id => {
+        if (!g.inG.has(id)) return;
+        const dx = pos[id].x - prev[id].x, dy = pos[id].y - prev[id].y, d = Math.hypot(dx, dy);
+        if (d > 40) { pos[id].x = prev[id].x + dx / d * 40; pos[id].y = prev[id].y + dy / d * 40; }
+      });
+      out.push(snap(pos, g.inG));
+    }
+    out.guides = [];
+    return out;
+  }
+
+  // D. Centred flow: callers left of the hub, callees right, columns by hops, anchored
+  function layoutFlow() {
+    const COL = 175, ROW = 72, col = {}, pos = {}, occ = {}, out = [];
+    function freeSlot(c, d) {
+      occ[c] = occ[c] || [];
+      const base = Math.round(d / ROW) * ROW;
+      for (let k = 0; k < 200; k++) {
+        const y = base + Math.ceil(k / 2) * ROW * (k % 2 ? 1 : -1);
+        if (occ[c].every(o => Math.abs(o - y) >= ROW - 1)) { occ[c].push(y); return y; }
+      }
+      return base;
+    }
+    function bfs(start, next) {
+      const d = { [start]: 0 }, q = [start];
+      for (let i = 0; i < q.length; i++) for (const v of next[q[i]] || []) if (d[v] == null) { d[v] = d[q[i]] + 1; q.push(v); }
+      return d;
+    }
+    let minC = 0, maxC = 0;
+    for (let st = 1; st <= S; st++) {
+      const g = graphAt(st), outE = {}, inE = {};
+      g.es.forEach(e => { (outE[e.s] = outE[e.s] || []).push(e.t); (inE[e.t] = inE[e.t] || []).push(e.s); });
+      const down = bfs(HUB, outE), up = bfs(HUB, inE);
+      for (const id of g.order) {
+        if (pos[id]) continue;
+        if (id === HUB) { col[id] = 0; pos[id] = { x: 0, y: freeSlot(0, 0) }; continue; }
+        const placed = g.adj[id].filter(p => pos[p.n]);
+        const par = placed[0];
+        let c;
+        if (down[id] != null) c = down[id];
+        else if (up[id] != null) c = -up[id];
+        else c = par.out ? col[par.n] - 1 : col[par.n] + 1;
+        const near = placed.find(p => Math.abs(col[p.n] - c) === 1) || par;
+        col[id] = c; minC = Math.min(minC, c); maxC = Math.max(maxC, c);
+        pos[id] = { x: c * COL, y: freeSlot(c, pos[near.n].y) };
+      }
+      out.push(snap(pos, g.inG));
+    }
+    out.guides = [];
+    for (let c = minC; c <= maxC; c++) out.guides.push({ kind: 'col', x: c * COL, label: c === 0 ? 'centre' : c < 0 ? 'calls in ' + (-c) : 'calls out ' + c });
+    return out;
+  }
+
+  const LAYOUTS = [
+    { key: 'A', title: 'Radial rings', frames: layoutRadial(), used: 'Asked for in the proposal', centre: 'yes', dir: 'part', built: 'Custom, about 80 lines. React Flow draws it.',
+      pros: ['Busiest service is the visual centre', 'Nothing moves once placed', 'Distance from the centre reads as "hops away"'],
+      cons: ['Call direction only from arrowheads', 'Outer rings get wide with deep call chains', 'A node keeps its first ring even if a shorter path appears later'] },
+    { key: 'B', title: 'Layered, left to right', frames: layoutLayered(), used: 'Grafana, Kiali, PostHog, HyperDX', centre: 'no', dir: 'yes', built: 'dagre or elkjs. React Flow draws it.',
+      pros: ['Call direction is obvious: callers left, callees right', 'Familiar from other tools', 'Off-the-shelf libraries'],
+      cons: ['No centre. The busiest service lands wherever its layer is', 'Recomputed from scratch, so one new connection can shift many nodes', 'Pinning nodes breaks the layering'] },
+    { key: 'C', title: 'Force-directed, hub pinned', frames: layoutForce(), used: 'SigNoz (unpinned), Kiali cose', centre: 'yes', dir: 'part', built: 'd3-force with each move capped at 40 px. React Flow draws it.',
+      pros: ['Clusters form naturally (checkout and payments group together)', 'Handles any graph shape', 'Moves are small and capped'],
+      cons: ['Every step still nudges nodes a little', 'Differs between sessions unless seeded', 'Labels can overlap; needs tuning'] },
+    { key: 'D', title: 'Centred flow', frames: layoutFlow(), used: 'No reference tool. A hybrid of A and B.', centre: 'yes', dir: 'yes', built: 'Custom, about 80 lines. React Flow draws it.',
+      pros: ['Busiest service in the middle column', 'Callers on the left, callees on the right', 'Anchored: nothing moves once placed'],
+      cons: ['Services that only share a database get an arbitrary column', 'Some edges run inside a column or backwards', 'No library to lean on'] },
+  ];
+
+  function movement(frames) {
+    const steps = [];
+    for (let s = 1; s < frames.length; s++) {
+      let n = 0, max = 0, sum = 0;
+      for (const id in frames[s - 1]) {
+        const a = frames[s - 1][id], b = frames[s][id];
+        if (!b) continue;
+        const d = Math.hypot(b.x - a.x, b.y - a.y);
+        if (d > 1) { n++; sum += d; max = Math.max(max, d); }
+      }
+      steps.push({ n, max, sum });
+    }
+    return steps;
+  }
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const radius = n => (n.type === 'svc' ? 6 + 3.4 * Math.log10(n.spans / 200) : 9);
+  const width = c => Math.max(0.8, 0.8 + 1.25 * Math.log10(c / 500));
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let uid = 0;
+
+  function makePanel(L, grid) {
+    const panel = document.createElement('article');
+    panel.className = 'panel';
+    panel.innerHTML = `
+      <div class="phead"><span class="key">${L.key}</span><h3>${L.title}</h3><span class="used">${L.used}</span></div>
+      <div class="svgbox"></div>
+      <div class="stat"><span class="step"></span><span class="cum"></span></div>
+      <div class="pc"><div><h4>Good</h4><ul>${L.pros.map(p => `<li>${p}</li>`).join('')}</ul></div><div><h4>Costs</h4><ul>${L.cons.map(p => `<li>${p}</li>`).join('')}</ul></div></div>`;
+    grid.appendChild(panel);
+    const id = 'm' + uid++;
+    const frames = L.frames;
+    L.moves = movement(frames);
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    frames.forEach(f => Object.values(f).forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }));
+    (frames.guides || []).forEach(g => { if (g.kind === 'ring') { minX = Math.min(minX, -g.r); maxX = Math.max(maxX, g.r); minY = Math.min(minY, -g.r); maxY = Math.max(maxY, g.r); } });
+    minX -= 95; maxX += 95; minY -= 50; maxY += 40;
+    const trayY = maxY + 70, H = trayY + 50 - minY, W = maxX - minX;
+
+    const svg = el('svg', { class: 'map', viewBox: `${minX} ${minY} ${W} ${H}`, preserveAspectRatio: 'xMidYMid meet', role: 'img', 'aria-label': L.title + ' layout of the example service map' });
+    panel.querySelector('.svgbox').appendChild(svg);
+    const defs = el('defs', {}, svg);
+    for (const [name, cls] of [['a', 'arrow'], ['h', 'arrow-hl']]) {
+      const m = el('marker', { id: id + name, viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '9', markerHeight: '9', markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, defs);
+      el('path', { d: 'M0,1 L10,5 L0,9 z', class: cls }, m);
+    }
+    const gGuide = el('g', {}, svg);
+    (frames.guides || []).forEach(g => {
+      if (g.kind === 'ring') {
+        el('circle', { cx: 0, cy: 0, r: g.r, class: 'guide' }, gGuide);
+        el('text', { x: 6, y: -g.r - 6, class: 'guide-label' }, gGuide).textContent = g.label;
+      } else {
+        el('line', { x1: g.x, x2: g.x, y1: minY + 28, y2: maxY, class: 'guide' }, gGuide);
+        el('text', { x: g.x, y: minY + 18, class: 'guide-label', 'text-anchor': 'middle' }, gGuide).textContent = g.label;
+      }
+    });
+    const trayBand = el('rect', { x: minX + 12, y: trayY - 36, width: W - 24, height: 76, rx: 8, class: 'tray-band' }, svg);
+    const trayLabel = el('text', { x: minX + 24, y: trayY - 18, class: 'guide-label' }, svg);
+    trayLabel.textContent = 'Not connected to the map yet';
+    const gEdge = el('g', {}, svg), gTrail = el('g', {}, svg), gNode = el('g', {}, svg);
+
+    const edgeEls = {};
+    EDGES.forEach(e => {
+      edgeEls[e.key] = el('line', { class: 'edge', 'stroke-width': width(e.calls), 'marker-end': `url(#${id}a)` }, gEdge);
+    });
+    const nodeEls = {};
+    NODES.forEach(n => {
+      const r = radius(n);
+      const g = el('g', { class: 'node ' + (n.type === 'svc' ? 'svc' : 'virt') + (n.type === 'ext' ? ' ext' : '') + (n.err > 1 ? ' err' : '') + (n.id === HUB ? ' hub' : ''), tabindex: '0' }, gNode);
+      if (n.type === 'db') el('rect', { x: -r, y: -r, width: 2 * r, height: 2 * r, rx: 3, class: 'shape' }, g);
+      else if (n.type === 'queue') el('polygon', { points: `0,${-r - 2} ${r + 2},0 0,${r + 2} ${-r - 2},0`, class: 'shape' }, g);
+      else el('circle', { r, class: 'shape' }, g);
+      const t = el('text', { y: r + 14, class: 'label' }, g);
+      t.textContent = n.label || n.id;
+      const title = el('title', {}, g);
+      title.textContent = n.type === 'svc' ? `${n.id}\n${n.spans.toLocaleString('en-US')} spans in the past 60 min\nError rate ${n.err}%` : `${n.label}\n${n.type === 'db' ? 'Database / cache' : n.type === 'queue' ? 'Queue' : 'External API'}, seen from client spans`;
+      const on = () => hover(n.id), off = () => hover(null);
+      g.addEventListener('mouseenter', on); g.addEventListener('mouseleave', off);
+      g.addEventListener('focus', on); g.addEventListener('blur', off);
+      nodeEls[n.id] = g;
+    });
+
+    let stage = 1, cur = {}, raf = 0, hoverId = null;
+    function trayPos(st) {
+      const f = frames[st - 1], ids = NODES.map(n => n.id).filter(x => !f[x]), out = {};
+      const gap = Math.min(150, (W - 80) / Math.max(ids.length, 1));
+      ids.forEach((x, i) => (out[x] = { x: minX + 40 + gap * (i + 0.5), y: trayY + 8 }));
+      return out;
+    }
+    function target(st) { return Object.assign({}, trayPos(st), frames[st - 1]); }
+    function drawEdges() {
+      const f = frames[stage - 1];
+      EDGES.forEach(e => {
+        const ln = edgeEls[e.key];
+        const visible = e.stage <= stage && f[e.s] && f[e.t];
+        const a = cur[e.s], b = cur[e.t];
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.max(Math.hypot(dx, dy), 1);
+        const ra = radius(NM[e.s]) + 3, rb = radius(NM[e.t]) + 4;
+        ln.setAttribute('x1', a.x + dx / d * ra); ln.setAttribute('y1', a.y + dy / d * ra);
+        ln.setAttribute('x2', b.x - dx / d * rb); ln.setAttribute('y2', b.y - dy / d * rb);
+        const hl = hoverId && (e.s === hoverId || e.t === hoverId);
+        ln.setAttribute('class', 'edge' + (visible ? ' on' : '') + (visible && hoverId && !hl ? ' dim' : '') + (visible && hl ? ' hl' : ''));
+        ln.setAttribute('marker-end', `url(#${id}${hl ? 'h' : 'a'})`);
+      });
+    }
+    function drawNodes() {
+      const f = frames[stage - 1];
+      const related = new Set();
+      if (hoverId) { related.add(hoverId); EDGES.forEach(e => { if (e.stage <= stage && (e.s === hoverId || e.t === hoverId)) { related.add(e.s); related.add(e.t); } }); }
+      NODES.forEach(n => {
+        const p = cur[n.id], g = nodeEls[n.id];
+        g.setAttribute('transform', `translate(${p.x.toFixed(1)},${p.y.toFixed(1)})`);
+        g.classList.toggle('tray', !f[n.id]);
+        g.classList.toggle('dimmed', !!hoverId && !related.has(n.id));
+      });
+      const anyTray = NODES.some(n => !f[n.id]);
+      trayBand.style.display = trayLabel.style.display = anyTray ? '' : 'none';
+    }
+    function hover(nid) { hoverId = nid; drawEdges(); drawNodes(); }
+    function drawTrails(st) {
+      gTrail.replaceChildren();
+      if (st < 2) return;
+      const a = frames[st - 2], b = frames[st - 1];
+      for (const nid in a) {
+        if (!b[nid]) continue;
+        if (Math.hypot(b[nid].x - a[nid].x, b[nid].y - a[nid].y) <= 1) continue;
+        el('line', { x1: a[nid].x, y1: a[nid].y, x2: b[nid].x, y2: b[nid].y, class: 'trail' }, gTrail);
+        el('circle', { cx: a[nid].x, cy: a[nid].y, r: 4, class: 'trail-dot' }, gTrail);
+      }
+    }
+    function stats(st) {
+      const step = panel.querySelector('.step'), cum = panel.querySelector('.cum');
+      if (st === 1) step.innerHTML = '<span class="chip ok">First frame</span>';
+      else {
+        const m = L.moves[st - 2];
+        step.innerHTML = m.n ? `<span class="chip warn">${m.n} node${m.n > 1 ? 's' : ''} moved</span> up to ${Math.round(m.max)} px` : '<span class="chip ok">Nothing moved</span>';
+      }
+      const tot = L.moves.slice(0, st - 1).reduce((a, m) => ({ n: a.n + m.n, sum: a.sum + m.sum }), { n: 0, sum: 0 });
+      cum.textContent = st > 1 ? `So far: ${tot.n} moves, ${Math.round(tot.sum).toLocaleString('en-US')} px in total` : '';
+    }
+    function set(st) {
+      const to = target(st), from = Object.keys(cur).length ? { ...cur } : to;
+      stage = st;
+      drawTrails(st); stats(st);
+      cancelAnimationFrame(raf);
+      if (reduced || from === to) { cur = to; drawEdges(); drawNodes(); return; }
+      const t0 = performance.now(), dur = 750;
+      const ease = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+      const tick = now => {
+        const k = ease(Math.min(1, (now - t0) / dur));
+        cur = {};
+        for (const nid in to) { const a = from[nid] || to[nid], b = to[nid]; cur[nid] = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k }; }
+        drawEdges(); drawNodes();
+        if (k < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }
+    return { set };
+  }
+
+  const grid = document.getElementById('grid');
+  const panels = LAYOUTS.map(L => makePanel(L, grid));
+
+  const cmp = document.getElementById('cmp');
+  const label = v => (v === 'yes' ? '<span class="yes">Yes</span>' : v === 'no' ? '<span class="no">No</span>' : '<span class="part">Arrows only</span>');
+  LAYOUTS.forEach(L => {
+    const tot = L.moves.reduce((a, m) => ({ n: a.n + m.n, sum: a.sum + m.sum }), { n: 0, sum: 0 });
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${L.key}</b> · ${L.title}</td><td>${label(L.centre)}</td><td>${label(L.dir)}</td>
+      <td class="num">${tot.n ? `<span class="part">${tot.n} moves · ${Math.round(tot.sum).toLocaleString('en-US')} px</span>` : '<span class="yes">0</span>'}</td>
+      <td>${L.built}</td><td>${L.used}</td>`;
+    cmp.appendChild(tr);
+  });
+
+  const stepsEl = document.getElementById('steps');
+  const buttons = STAGES.map((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.id = 'step' + (i + 1); b.textContent = s.btn;
+    b.addEventListener('click', () => { stopPlay(); go(i + 1); });
+    stepsEl.appendChild(b);
+    return b;
+  });
+  const play = document.createElement('button');
+  play.type = 'button'; play.id = 'play'; play.className = 'play'; play.textContent = 'Play scan';
+  stepsEl.appendChild(play);
+  let timer = 0, current = 1;
+  function stopPlay() { clearInterval(timer); timer = 0; play.textContent = 'Play scan'; }
+  play.addEventListener('click', () => {
+    if (timer) return stopPlay();
+    play.textContent = 'Pause';
+    go(1);
+    timer = setInterval(() => { if (current >= S) return stopPlay(); go(current + 1); }, 2000);
+  });
+
+  function go(st) {
+    current = st;
+    const s = STAGES[st - 1];
+    buttons.forEach((b, i) => b.setAttribute('aria-pressed', String(i + 1 === st)));
+    document.getElementById('counterText').innerHTML = `Past 60 min · built from <b>${s.spans}</b> spans, ${s.range} · covers <b>${s.cover}</b>`;
+    document.getElementById('counterPill').innerHTML = s.live
+      ? '<span class="pill live"><span class="dot"></span>Live · 30 s delay</span>'
+      : '<span class="pill scan"><span class="dot"></span>Scanning older spans</span>';
+    document.getElementById('what').innerHTML = s.what;
+    panels.forEach(p => p.set(st));
+  }
+  go(1);
+  window.__shop = { NODES, EDGES };
+})();
+</script>
+
+<script>
+(function () {
+  const S = 5;
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const radius = n => (n.type === 'svc' ? Math.max(5, 6 + 3.4 * Math.log10(Math.max(n.spans, 20) / 200)) : 9);
+  const width = c => Math.max(0.8, 0.8 + 1.25 * Math.log10(c / 500));
+  const short = s => (s.length > 21 ? s.slice(0, 20) + '…' : s);
+  function rng(seed) {
+    return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+
+  // ---------- example systems ----------
+  function genSystem(nSvc, seed) {
+    const r = rng(seed), pick = a => a[Math.floor(r() * a.length)];
+    const W1 = ['order', 'cart', 'user', 'payment', 'shipment', 'stock', 'price', 'promo', 'review', 'search', 'recs', 'media', 'auth', 'tax', 'fraud', 'loyalty', 'invoice', 'refund', 'notify', 'geo', 'catalog', 'vendor', 'ledger', 'quote', 'route', 'label', 'audit', 'consent', 'session', 'profile', 'wallet', 'coupon', 'return', 'warehouse', 'courier', 'rating', 'feed', 'chat', 'report', 'billing', 'plan', 'quota', 'export', 'import', 'image', 'pdf', 'sms', 'email', 'ab-test', 'pricing'];
+    const W2 = ['-svc', '-api', '-worker', '-core', '-reader', '-writer', '-gw', '-engine', '-store', '-proxy'];
+    const hub = 'edge-gateway';
+    const ups = nSvc > 50 ? ['web-app', 'mobile-bff', 'partner-api', 'admin-console'] : ['web-app', 'mobile-bff'];
+    const used = new Set([hub, ...ups]);
+    const nm = () => { for (let i = 0; i < 80; i++) { const n = pick(W1) + pick(W2); if (!used.has(n)) { used.add(n); return n; } } const n = 'svc-' + used.size; used.add(n); return n; };
+    const nodes = [], E = new Map();
+    const edge = (s, t, calls, stage) => { if (s === t) return; const k = s + '>' + t; if (!E.has(k)) E.set(k, { s, t, calls: Math.max(5, Math.round(calls)), stage, key: k }); };
+    const nDom = Math.max(1, nSvc - 1 - ups.length);
+    const dom = Array.from({ length: nDom }, nm);
+    const all = [hub, ...ups, ...dom], spans = {};
+    all.forEach((id, i) => (spans[id] = Math.round((90000 / Math.pow(1 + i, 0.8)) * (0.7 + 0.6 * r()))));
+    spans[hub] = Math.max(...Object.values(spans)) + 5000;
+    all.forEach(id => nodes.push({ id, type: 'svc', spans: spans[id] }));
+    const nFront = Math.max(3, Math.round(nDom * 0.15));
+    const nIso = Math.max(1, Math.round(nDom * 0.03)), nWork = Math.max(1, Math.round(nDom * 0.08));
+    const workers = dom.slice(nDom - nIso - nWork, nDom - nIso), iso = dom.slice(nDom - nIso);
+    ups.forEach(u => edge(u, hub, spans[u] * 0.8, 1));
+    ups.slice(1).forEach(u => edge(u, pick(dom.slice(0, nFront)), spans[u] * 0.2, 1));
+    dom.forEach((s, i) => {
+      if (workers.includes(s) || iso.includes(s)) return;
+      if (i < nFront) { edge(hub, s, spans[s] * 0.6, 0); return; }
+      edge(dom[Math.floor(i * Math.pow(r(), 1.6))], s, spans[s] * 0.5, 0);
+      if (r() < 0.25) edge(dom[Math.floor(i * r())], s, spans[s] * 0.2, 0);
+    });
+    const virt = (prefix, n, type, lab) => Array.from({ length: n }, (_, i) => { const id = prefix + i; nodes.push({ id, type, spans: 0, label: lab() }); return id; });
+    const dbs = virt('db', Math.max(2, Math.round(nSvc * 0.12)), 'db', () => pick(['postgres', 'mysql', 'mongodb']) + ' · ' + pick(W1));
+    const caches = virt('cache', Math.max(1, Math.round(nSvc * 0.02)), 'db', () => 'redis · ' + pick(W1));
+    const qs = virt('q', Math.max(1, Math.round(nSvc * 0.03)), 'queue', () => 'kafka · ' + pick(W1) + '-events');
+    const exts = ['api.stripe.com', 'api.twilio.com', 'maps.googleapis.com', 'api.sendgrid.com', 's3.amazonaws.com'].slice(0, nSvc > 50 ? 5 : 3).map(x => { nodes.push({ id: 'x:' + x, type: 'ext', spans: 0, label: x }); return 'x:' + x; });
+    const zipf = a => a[Math.min(a.length - 1, Math.floor(a.length * Math.pow(r(), 2)))];
+    dom.forEach(s => {
+      if (iso.includes(s)) { if (r() < 0.5) edge(s, zipf(dbs), spans[s] * 0.9, 1); return; }
+      if (r() < 0.6) edge(s, zipf(dbs), spans[s] * 0.7, 1);
+      if (r() < 0.2) edge(s, pick(caches), spans[s] * 0.9, 1);
+      if (r() < 0.1) edge(s, pick(qs), spans[s] * 0.3, 1);
+      if (r() < 0.06) edge(s, pick(exts), spans[s] * 0.2, 1);
+    });
+    workers.forEach(w => { edge(pick(qs), w, spans[w] * 0.8, 1); if (r() < 0.5) edge(w, zipf(dbs), spans[w] * 0.5, 1); });
+    qs.forEach(q => { if (![...E.values()].some(e => e.t === q)) edge(pick(dom.slice(0, nFront)), q, 500, 1); });
+    const late = [...E.values()].filter(e => e.stage === 0).sort((a, b) => b.calls - a.calls);
+    late.forEach((e, i) => (e.stage = 1 + Math.min(4, Math.floor((i / late.length) * 5 * (0.6 + 0.8 * r())))));
+    const touched = new Set();
+    E.forEach(e => { touched.add(e.s); touched.add(e.t); });
+    return { nodes: nodes.filter(n => n.type === 'svc' || touched.has(n.id)), edges: [...E.values()] };
+  }
+  function chain(n) {
+    const ids = Array.from({ length: n }, (_, i) => 'step-' + String(i + 1).padStart(2, '0'));
+    const mid = Math.floor(n / 2);
+    return {
+      nodes: ids.map((id, i) => ({ id, type: 'svc', spans: 22000 - Math.abs(i - mid) * 1300 })),
+      edges: ids.slice(1).map((id, i) => ({ s: ids[i], t: id, calls: 9000, stage: 1 + Math.min(4, Math.floor(Math.abs(i + 0.5 - mid) / 1.5)), key: ids[i] + '>' + id })),
+    };
+  }
+  function star(n) {
+    const r = rng(5), nodes = [{ id: 'api-gateway', type: 'svc', spans: 95000 }, { id: 'web-app', type: 'svc', spans: 60000 }], edges = [];
+    const dbs = ['postgres · main', 'postgres · events', 'redis · cache', 'mongodb · docs'].map((l, i) => { nodes.push({ id: 'db' + i, type: 'db', spans: 0, label: l }); return 'db' + i; });
+    edges.push({ s: 'web-app', t: 'api-gateway', calls: 50000, stage: 1, key: 'w' });
+    for (let i = 0; i < n; i++) {
+      const id = 'fn-' + String(i + 1).padStart(3, '0');
+      const spans = Math.round(30000 / Math.pow(i + 1, 0.7));
+      nodes.push({ id, type: 'svc', spans });
+      edges.push({ s: 'api-gateway', t: id, calls: spans * 0.8, stage: 1 + Math.min(4, Math.floor((i / n) * 5)), key: 'g' + i });
+      if (r() < 0.5) edges.push({ s: id, t: dbs[Math.floor(r() * 4)], calls: spans * 0.5, stage: 1, key: 'd' + i });
+    }
+    return { nodes, edges };
+  }
+  const shop = () => ({ nodes: window.__shop.NODES, edges: window.__shop.EDGES });
+
+  const SCN = [
+    { key: 'empty', label: 'Empty', g: () => ({ nodes: [], edges: [] }), note: 'No spans in the past 60 minutes. The map shows an empty state that says what to do next, never a blank canvas.' },
+    { key: 'one', label: '1 service', g: () => ({ nodes: [{ id: 'my-app', type: 'svc', spans: 4200 }], edges: [] }), note: 'One service with no outgoing calls, the typical first run. It sits in the centre at normal size: fitting the view never zooms past 100%, so a single node never fills the screen.' },
+    { key: 'onedb', label: '1 service + DBs', g: () => ({ nodes: [{ id: 'my-app', type: 'svc', spans: 4200 }, { id: 'pg', type: 'db', spans: 0, label: 'postgres · app' }, { id: 'rd', type: 'db', spans: 0, label: 'redis · cache' }, { id: 'oa', type: 'ext', spans: 0, label: 'api.openai.com' }], edges: [{ s: 'my-app', t: 'pg', calls: 3100, stage: 1, key: 'a' }, { s: 'my-app', t: 'rd', calls: 2600, stage: 1, key: 'b' }, { s: 'my-app', t: 'oa', calls: 240, stage: 1, key: 'c' }] }), note: 'One service and the things it calls, all known from the aggregate query on frame 1.' },
+    { key: 'two', label: '2, not connected', g: () => ({ nodes: [{ id: 'api', type: 'svc', spans: 5200 }, { id: 'nightly-export', type: 'svc', spans: 300 }], edges: [] }), note: 'Neither service calls the other, so the one with more spans takes the centre. The other stays in the tray for the whole session, which is the honest answer.' },
+    { key: 'chain', label: 'Deep chain (15)', g: () => chain(15), note: 'Each service calls the next. The busiest sits mid-chain, so callers go left and callees right. The map gets wide, not tall.' },
+    { key: 'shop', label: 'Shop (20)', g: shop, note: 'The example system from the panels above.' },
+    { key: 'star', label: 'Star (150 callees)', g: () => star(150), note: 'The worst case for column height: one gateway calling 150 functions. Column 1 wraps into lanes, so it stays a block instead of a 10,000 px tower. Labels hide at full view; zoom or search to read them.' },
+    { key: 'm120', label: '120 services', g: () => genSystem(120, 42), note: 'A generated system with gateways, domain services, workers on queues, shared databases, a few external APIs and isolated cron jobs. Some cron jobs never connect and stay in the tray.' },
+    { key: 'm400', label: '400 services', g: () => genSystem(400, 7), note: 'The same generator at 400 services, about 480 nodes in total. Use Find to jump to a service, for example "edge-gateway" or a database.' },
+  ];
+
+  // ---------- layout D with lanes ----------
+  function computeFlow(G) {
+    const t0 = performance.now();
+    const nodes = G.nodes, N = nodes.length;
+    if (!N) return { frames: Array.from({ length: S }, () => ({})), hub: null, ms: 0, K: 0, maxLanes: 0 };
+    const conn = new Set();
+    G.edges.filter(e => e.stage <= 1).forEach(e => { conn.add(e.s); conn.add(e.t); });
+    const svc = nodes.filter(n => n.type === 'svc');
+    const pool = svc.filter(n => conn.has(n.id));
+    const cands = pool.length ? pool : svc.length ? svc : nodes;
+    const hub = cands.reduce((a, b) => ((b.spans || 0) > (a.spans || 0) ? b : a)).id;
+    const K = Math.max(6, Math.min(14, Math.ceil(Math.sqrt(N))));
+    const lo = -Math.floor((K - 1) / 2), hi = lo + K - 1;
+    const ROW = 64, LANE = 170, GAP = 50;
+    const lanes = {}, slot = {}, occ = {};
+    const occSet = (c, l) => occ[c + ':' + l] || (occ[c + ':' + l] = new Set());
+    function place(id, c, dRow) {
+      const L = lanes[c] || (lanes[c] = 1);
+      let best = null, bs = Infinity;
+      for (let l = 0; l < L; l++) for (let r = lo; r <= hi; r++) {
+        if (occSet(c, l).has(r)) continue;
+        const sc = Math.abs(r - dRow) + l * 2.5;
+        if (sc < bs) { bs = sc; best = [l, r]; }
+      }
+      if (!best) { lanes[c] = L + 1; best = [L, Math.max(lo, Math.min(hi, dRow))]; }
+      occSet(c, best[0]).add(best[1]);
+      slot[id] = { c, l: best[0], r: best[1] };
+    }
+    function bfs(start, next) {
+      const d = { [start]: 0 }, q = [start];
+      for (let i = 0; i < q.length; i++) for (const v of next[q[i]] || []) if (d[v] == null) { d[v] = d[q[i]] + 1; q.push(v); }
+      return d;
+    }
+    function xOf(c, l) {
+      if (c === 0) return l * LANE;
+      if (c > 0) {
+        let right = ((lanes[0] || 1) - 1) * LANE + LANE / 2, left = 0;
+        for (let k = 1; k <= c; k++) { left = right + GAP; right = left + (lanes[k] || 0) * LANE; }
+        return left + LANE / 2 + l * LANE;
+      }
+      let left = -LANE / 2, right = 0;
+      for (let k = -1; k >= c; k--) { right = left - GAP; left = right - (lanes[k] || 0) * LANE; }
+      return right - LANE / 2 - l * LANE;
+    }
+    const frames = [];
+    for (let st = 1; st <= S; st++) {
+      const es = G.edges.filter(e => e.stage <= st);
+      const adj = {}, outE = {}, inE = {};
+      nodes.forEach(n => (adj[n.id] = []));
+      es.forEach(e => {
+        adj[e.s].push({ n: e.t, calls: e.calls, out: true }); adj[e.t].push({ n: e.s, calls: e.calls, out: false });
+        (outE[e.s] = outE[e.s] || []).push(e.t); (inE[e.t] = inE[e.t] || []).push(e.s);
+      });
+      Object.values(adj).forEach(a => a.sort((x, y) => y.calls - x.calls));
+      const order = [hub], seen = new Set([hub]);
+      for (let i = 0; i < order.length; i++) for (const { n } of adj[order[i]]) if (!seen.has(n)) { seen.add(n); order.push(n); }
+      const down = bfs(hub, outE), up = bfs(hub, inE);
+      for (const id of order) {
+        if (slot[id]) continue;
+        if (id === hub) { lanes[0] = 1; occSet(0, 0).add(0); slot[id] = { c: 0, l: 0, r: 0 }; continue; }
+        const placed = adj[id].filter(p => slot[p.n]);
+        const par = placed[0];
+        let c;
+        if (down[id] != null) c = down[id];
+        else if (up[id] != null) c = -up[id];
+        else c = par.out ? slot[par.n].c - 1 : slot[par.n].c + 1;
+        const near = placed.find(p => Math.abs(slot[p.n].c - c) === 1) || par;
+        place(id, c, slot[near.n].r);
+      }
+      const f = {};
+      order.forEach(id => { const s = slot[id]; f[id] = { x: xOf(s.c, s.l), y: s.r * ROW }; });
+      frames.push(f);
+    }
+    return { frames, hub, ms: performance.now() - t0, K, maxLanes: Math.max(...Object.values(lanes)) };
+  }
+
+  // ---------- rendering ----------
+  const box = document.getElementById('scaleBox'), checks = document.getElementById('checks');
+  const find = document.getElementById('find'), findList = document.getElementById('findList');
+  let overview, partial = false;
+  let G, R, NM, st = S, svg, vb, fit, nodeEls = {}, edgeEls = [], hoverId = null, foundId = null, scnKey = 'shop';
+
+  function bboxAll() {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    R.frames.forEach(f => Object.values(f).forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }));
+    return { minX: minX - 100, maxX: maxX + 100, minY: minY - 40, maxY: maxY + 40 };
+  }
+  function trayLayout(frame, bb) {
+    const ids = G.nodes.map(n => n.id).filter(id => !frame[id]);
+    const perRow = Math.max(1, Math.floor((bb.maxX - bb.minX - 40) / 160));
+    const top = bb.maxY + 70, out = {};
+    ids.forEach((id, i) => (out[id] = { x: bb.minX + 40 + 160 * (i % perRow) + 70, y: top + 10 + Math.floor(i / perRow) * 54 }));
+    return { ids, out, top, rows: Math.ceil(ids.length / perRow), perRow };
+  }
+  function scale() { return svg ? Math.min(svg.clientWidth / vb.w, svg.clientHeight / vb.h) : 1; }
+  function applyVB() {
+    svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+    const px = 11.5 * scale();
+    svg.classList.toggle('lod', px < 7.5);
+    const lab = document.getElementById('labelChip');
+    if (lab) { lab.className = 'chip ' + (px < 7.5 ? 'info' : 'ok'); lab.textContent = (px < 7.5 ? `Labels hidden at this zoom (${px.toFixed(1)} px); hover, find or zoom in` : `Labels readable (${px.toFixed(1)} px)`) + (partial ? ' · too big to fit: opened on the centre, zoom out for all' : ''); }
+  }
+  function render() {
+    box.replaceChildren(); nodeEls = {}; edgeEls = [];
+    svg = el('svg', { class: 'map', role: 'img', 'aria-label': 'Layout D on the selected example system' }, box);
+    if (!G.nodes.length) {
+      vb = fit = { x: 0, y: 0, w: 1000, h: 460 };
+      el('text', { x: 500, y: 210, class: 'empty-title' }, svg).textContent = 'No traces in the past 60 minutes';
+      el('text', { x: 500, y: 242, class: 'empty-msg' }, svg).textContent = 'Send OpenTelemetry traces to Kopai and services appear here as soon as spans arrive.';
+      applyVB(); return;
+    }
+    const frame = R.frames[st - 1], bb = bboxAll();
+    let maxTrayRows = 0;
+    R.frames.forEach(f => (maxTrayRows = Math.max(maxTrayRows, trayLayout(f, bb).rows)));
+    const tray = trayLayout(frame, bb);
+    let w = bb.maxX - bb.minX, h = bb.maxY - bb.minY + (maxTrayRows ? 70 + maxTrayRows * 54 + 20 : 0);
+    let x = bb.minX, y = bb.minY;
+    const cw = svg.clientWidth || 1000, ch = svg.clientHeight || 560;
+    const minW = cw, minH = ch; // never zoom past 100% when fitting
+    if (w < minW) { x -= (minW - w) / 2; w = minW; }
+    if (h < minH) { y -= (minH - h) / 2; h = minH; }
+    const aspect = cw / ch;
+    if (w / h > aspect) { const nh = w / aspect; y -= (nh - h) / 2; h = nh; } else { const nw = h * aspect; x -= (nw - w) / 2; w = nw; }
+    overview = { x, y, w, h };
+    const MIN_SCALE = 0.4; // below this, nodes are dots: start centred on the hub instead
+    if (cw / w < MIN_SCALE) { const fw = cw / MIN_SCALE, fh = ch / MIN_SCALE; fit = { x: -fw / 2, y: -fh / 2, w: fw, h: fh }; }
+    else fit = overview;
+    partial = fit !== overview;
+    if (!vb || vb.key !== scnKey) vb = { ...fit, key: scnKey };
+    svg.style.setProperty('--edge-op', G.nodes.length > 60 ? '.45' : '.9');
+
+    const id = 'sc';
+    const defs = el('defs', {}, svg);
+    for (const [name, cls] of [['a', 'arrow'], ['h', 'arrow-hl']]) {
+      const m = el('marker', { id: id + name, viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '8', markerHeight: '8', markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, defs);
+      el('path', { d: 'M0,1 L10,5 L0,9 z', class: cls }, m);
+    }
+    if (tray.ids.length) {
+      el('rect', { x: bb.minX + 12, y: tray.top - 30, width: bb.maxX - bb.minX - 24, height: tray.rows * 54 + 44, rx: 8, class: 'tray-band' }, svg);
+      el('text', { x: bb.minX + 26, y: tray.top - 12, class: 'guide-label' }, svg).textContent = `Not connected to the map yet · ${tray.ids.length}`;
+    }
+    const pos = Object.assign({}, tray.out, frame);
+    const gE = el('g', {}, svg), gT = el('g', {}, svg), gN = el('g', {}, svg);
+    G.edges.forEach(e => {
+      if (e.stage > st || !frame[e.s] || !frame[e.t]) return;
+      const a = pos[e.s], b = pos[e.t];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.max(Math.hypot(dx, dy), 1);
+      const ra = radius(NM[e.s]) + 3, rb = radius(NM[e.t]) + 4;
+      const ln = el('line', { x1: a.x + dx / d * ra, y1: a.y + dy / d * ra, x2: b.x - dx / d * rb, y2: b.y - dy / d * rb, class: 'edge on', 'stroke-width': width(e.calls), 'marker-end': `url(#${id}a)` }, gE);
+      edgeEls.push({ e, ln });
+    });
+    if (st > 1) {
+      const pf = R.frames[st - 2];
+      for (const k in pf) if (frame[k] && Math.hypot(frame[k].x - pf[k].x, frame[k].y - pf[k].y) > 1) {
+        el('line', { x1: pf[k].x, y1: pf[k].y, x2: frame[k].x, y2: frame[k].y, class: 'trail' }, gT);
+        el('circle', { cx: pf[k].x, cy: pf[k].y, r: 4, class: 'trail-dot' }, gT);
+      }
+    }
+    G.nodes.forEach(n => {
+      const p = pos[n.id], r = radius(n);
+      const g = el('g', { class: 'node ' + (n.type === 'svc' ? 'svc' : 'virt') + (n.type === 'ext' ? ' ext' : '') + (n.err > 1 ? ' err' : '') + (n.id === R.hub ? ' hub' : '') + (frame[n.id] ? '' : ' tray') + (n.id === foundId ? ' found' : ''), transform: `translate(${p.x.toFixed(1)},${p.y.toFixed(1)})`, tabindex: '0' }, gN);
+      if (n.type === 'db') el('rect', { x: -r, y: -r, width: 2 * r, height: 2 * r, rx: 3, class: 'shape' }, g);
+      else if (n.type === 'queue') el('polygon', { points: `0,${-r - 2} ${r + 2},0 0,${r + 2} ${-r - 2},0`, class: 'shape' }, g);
+      else el('circle', { r, class: 'shape' }, g);
+      el('text', { y: r + 14, class: 'label' }, g).textContent = short(n.label || n.id);
+      el('title', {}, g).textContent = (n.label || n.id) + (n.type === 'svc' ? `\n${n.spans.toLocaleString('en-US')} spans in the past 60 min` : '');
+      const on = () => hover(n.id), off = () => hover(null);
+      g.addEventListener('mouseenter', on); g.addEventListener('mouseleave', off);
+      g.addEventListener('focus', on); g.addEventListener('blur', off);
+      nodeEls[n.id] = g;
+    });
+    applyVB();
+    wire();
+  }
+  function hover(nid) {
+    hoverId = nid;
+    const rel = new Set(nid ? [nid] : []);
+    edgeEls.forEach(({ e, ln }) => {
+      const hl = nid && (e.s === nid || e.t === nid);
+      if (hl) { rel.add(e.s); rel.add(e.t); }
+      ln.setAttribute('class', 'edge on' + (nid && !hl ? ' dim' : '') + (hl ? ' hl' : ''));
+      ln.setAttribute('marker-end', `url(#sc${hl ? 'h' : 'a'})`);
+    });
+    for (const k in nodeEls) { nodeEls[k].classList.toggle('rel', rel.has(k)); nodeEls[k].classList.toggle('dimmed', !!nid && !rel.has(k)); }
+  }
+  function wire() {
+    svg.addEventListener('wheel', e => {
+      e.preventDefault();
+      const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+      zoom(Math.exp(e.deltaY * 0.0015), p);
+    }, { passive: false });
+    let drag = null;
+    svg.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y, s: scale() }; svg.setPointerCapture(e.pointerId); svg.classList.add('dragging'); });
+    svg.addEventListener('pointermove', e => { if (!drag) return; vb.x = drag.vx - (e.clientX - drag.x) / drag.s; vb.y = drag.vy - (e.clientY - drag.y) / drag.s; applyVB(); });
+    const end = () => { drag = null; svg.classList.remove('dragging'); };
+    svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
+  }
+  function zoom(f, p) {
+    if (!vb) return;
+    p = p || { x: vb.x + vb.w / 2, y: vb.y + vb.h / 2 };
+    const nw = Math.max(180, Math.min(Math.max(fit.w, overview.w) * 1.2, vb.w * f)), k = nw / vb.w;
+    vb.x = p.x - (p.x - vb.x) * k; vb.y = p.y - (p.y - vb.y) * k; vb.w = nw; vb.h = vb.h * k;
+    applyVB();
+  }
+  document.getElementById('zin').onclick = () => zoom(0.7);
+  document.getElementById('zout').onclick = () => zoom(1 / 0.7);
+  document.getElementById('zfit').onclick = () => { vb = { ...fit, key: scnKey }; applyVB(); };
+  function doFind() {
+    const q = find.value.trim().toLowerCase();
+    if (!q || !G.nodes.length) return;
+    const n = G.nodes.find(n => (n.label || n.id).toLowerCase() === q) || G.nodes.find(n => (n.label || n.id).toLowerCase().includes(q));
+    if (!n) return;
+    foundId = n.id;
+    render();
+    const tf = nodeEls[n.id].transform.baseVal.consolidate().matrix;
+    const w = Math.min(fit.w, 900), h = w * fit.h / fit.w;
+    vb = { x: tf.e - w / 2, y: tf.f - h / 2, w, h, key: scnKey };
+    applyVB();
+  }
+  find.addEventListener('change', doFind);
+  find.addEventListener('keydown', e => { if (e.key === 'Enter') doFind(); });
+
+  function runChecks() {
+    const N = G.nodes.length, f = R.frames[S - 1], ids = Object.keys(f);
+    let overlaps = 0, nan = 0, moves = 0, maxMove = 0;
+    ids.forEach(a => { if (!isFinite(f[a].x) || !isFinite(f[a].y)) nan++; });
+    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+      const p = f[ids[i]], q = f[ids[j]];
+      if (Math.abs(p.x - q.x) < 40 && Math.abs(p.y - q.y) < 40) overlaps++;
+    }
+    for (let s = 1; s < S; s++) for (const k in R.frames[s - 1]) {
+      const a = R.frames[s - 1][k], b = R.frames[s][k];
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (d > 1) { moves++; maxMove = Math.max(maxMove, d); }
+    }
+    const tray = N - ids.length;
+    const chip = (ok, text, cls) => `<span class="chip ${cls || (ok ? 'ok' : 'warn')}">${text}</span>`;
+    checks.innerHTML = [
+      chip(true, `${N} nodes · ${G.edges.length} connections`, 'info'),
+      N ? chip(true, `Centre: ${R.hub}`, 'info') : '',
+      chip(!nan, nan ? `${nan} invalid positions` : 'No invalid positions'),
+      chip(!overlaps, overlaps ? `${overlaps} overlapping nodes` : 'No overlapping nodes'),
+      chip(!moves, moves ? `${moves} moves when lanes were added, up to ${Math.round(maxMove)} px` : 'Nothing moved across 5 steps'),
+      chip(true, tray ? `${tray} never connected (stay in tray)` : 'Tray empty at the end', 'info'),
+      N ? chip(true, `${R.K} rows per lane · widest column ${R.maxLanes} lane${R.maxLanes > 1 ? 's' : ''}`, 'info') : '',
+      chip(R.ms < 50, `Layout ${R.ms.toFixed(1)} ms for all 5 steps`),
+      N ? '<span class="chip ok" id="labelChip"></span>' : '',
+    ].join('');
+  }
+
+  const scnEl = document.getElementById('scn'), stEl = document.getElementById('scnStage');
+  const scnBtns = SCN.map(s => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.id = 'scn-' + s.key; b.textContent = s.label;
+    b.onclick = () => load(s.key);
+    scnEl.appendChild(b);
+    return b;
+  });
+  const stBtns = ['Frame 1', 'Page 3', 'Page 12', 'Page 41', 'Done'].map((l, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.id = 'scnst' + (i + 1); b.textContent = l;
+    b.onclick = () => { st = i + 1; stBtns.forEach((x, j) => x.setAttribute('aria-pressed', String(j === i))); render(); };
+    stEl.appendChild(b);
+    return b;
+  });
+  function load(key) {
+    const s = SCN.find(x => x.key === key);
+    scnKey = key; foundId = null; vb = null; find.value = '';
+    G = s.g(); NM = Object.fromEntries(G.nodes.map(n => [n.id, n])); R = computeFlow(G);
+    scnBtns.forEach(b => b.setAttribute('aria-pressed', String(b.id === 'scn-' + key)));
+    st = S; stBtns.forEach((x, j) => x.setAttribute('aria-pressed', String(j === S - 1)));
+    findList.innerHTML = G.nodes.map(n => `<option value="${(n.label || n.id).replace(/"/g, '&quot;')}"></option>`).join('');
+    document.getElementById('scnNote').textContent = s.note;
+    runChecks();
+    render();
+  }
+  window.__scaleTest = { SCN, computeFlow };
+  load('star');
+  addEventListener('resize', () => { if (G) { vb = null; render(); } });
+})();
+</script>

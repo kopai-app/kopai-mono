@@ -1,0 +1,439 @@
+/**
+ * The Service Map canvas (React Flow, plan §5 step 2).
+ *
+ * - Positions come from layout D; nodes are not draggable or connectable.
+ * - `onlyRenderVisibleElements` keeps pan and zoom cheap on large maps.
+ * - The initial viewport (`initialViewport`: fit ≤ 100 %, or centred on the
+ *   hub when the fit would be < 0.4) is applied once, when the map first has
+ *   something to show. After that only the Fit button and Find move the view
+ *   (PR P16), so the map never jumps under the user.
+ * - A Q19 block shift moves already-placed nodes; that change is tweened over
+ *   300 ms with requestAnimationFrame, and applied at once under
+ *   `prefers-reduced-motion`.
+ */
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Background,
+  BackgroundVariant,
+  MarkerType,
+  Panel,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  type Edge,
+  type NodeTypes,
+} from "@xyflow/react";
+import type { ServiceMapSnapshot } from "../engine/types.js";
+import { FIT_PAD_X, FIT_PAD_Y, MIN_ZOOM_FLOOR } from "../layout/constants.js";
+import type { Bounds, LayoutResult, Point } from "../layout/layout-d.js";
+import { initialViewport, type Size } from "../layout/viewport.js";
+import { EDGE_COLOR, EDGE_COLOR_HIGHLIGHT, edgeVisual } from "./edge-style.js";
+import { FindBox, type FindItem } from "./FindBox.js";
+import {
+  ServiceNode,
+  type ServiceFlowNode,
+  type ServiceNodeData,
+} from "./ServiceNode.js";
+import { TrayBandNode, type TrayBandFlowNode } from "./TrayBandNode.js";
+
+export const TRAY_BAND_ID = "__service-map-tray-band__";
+export const MAX_ZOOM = 2;
+/** Duration of the Q19 block-shift tween and of Fit/Find view moves. */
+export const SHIFT_TWEEN_MS = 300;
+
+const nodeTypes: NodeTypes = {
+  service: ServiceNode,
+  trayBand: TrayBandNode,
+};
+
+type FlowNode = ServiceFlowNode | TrayBandFlowNode;
+
+export interface ServiceMapCanvasProps {
+  snapshot: ServiceMapSnapshot;
+  layout: LayoutResult;
+  /** CSS height of the canvas (default 640 px). */
+  height?: number | string;
+  /** Called with the service name when a service node is clicked. */
+  onServiceClick?: (service: string) => void;
+}
+
+/** True when the user asked the OS for reduced motion. */
+export function prefersReducedMotion(): boolean {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Every rendered node position: map nodes and tray nodes. */
+export function allPositions(layout: LayoutResult): Map<string, Point> {
+  const out = new Map<string, Point>(layout.positions);
+  for (const [id, p] of layout.tray.positions) out.set(id, p);
+  return out;
+}
+
+/**
+ * Viewport that shows the whole map (the Fit button). Never zooms past
+ * 100 %, and never below `minZoom`.
+ */
+export function fitAllViewport(
+  bounds: Bounds,
+  size: Size,
+  minZoom: number
+): { x: number; y: number; zoom: number } {
+  const W = Math.max(1, size.width);
+  const H = Math.max(1, size.height);
+  const w = bounds.maxX - bounds.minX + 2 * FIT_PAD_X;
+  const h = bounds.maxY - bounds.minY + 2 * FIT_PAD_Y;
+  const zoom = Math.max(minZoom, Math.min(1, W / w, H / h));
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
+  return { x: W / 2 - cx * zoom, y: H / 2 - cy * zoom, zoom };
+}
+
+/** Only edges whose two endpoints are on the canvas (grafana#133391); no self-loops. */
+export function renderableEdges(
+  snapshot: ServiceMapSnapshot,
+  positions: ReadonlyMap<string, Point>
+): ServiceMapSnapshot["edges"] {
+  return snapshot.edges.filter(
+    (e) =>
+      e.source !== e.target &&
+      positions.has(e.source) &&
+      positions.has(e.target)
+  );
+}
+
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+/**
+ * Positions on screen. When already-shown nodes change position (a Q19
+ * block shift), they are tweened from where they are drawn now to the new
+ * target over 300 ms; new nodes appear at their target at once.
+ */
+export function useTweenedPositions(
+  target: ReadonlyMap<string, Point>
+): ReadonlyMap<string, Point> {
+  const [shown, setShown] = useState<ReadonlyMap<string, Point>>(target);
+  const drawnRef = useRef<ReadonlyMap<string, Point>>(target);
+
+  useLayoutEffect(() => {
+    const from = drawnRef.current;
+    const moved: { id: string; a: Point; b: Point }[] = [];
+    for (const [id, b] of target) {
+      const a = from.get(id);
+      if (a && (Math.abs(a.x - b.x) > 0.5 || Math.abs(a.y - b.y) > 0.5)) {
+        moved.push({ id, a, b });
+      }
+    }
+    if (
+      moved.length === 0 ||
+      prefersReducedMotion() ||
+      typeof requestAnimationFrame !== "function"
+    ) {
+      drawnRef.current = target;
+      setShown(target);
+      return;
+    }
+    let raf = 0;
+    let start: number | null = null;
+    const step = (now: number) => {
+      start ??= now;
+      const t = Math.min(1, (now - start) / SHIFT_TWEEN_MS);
+      const k = easeOutCubic(t);
+      const frame = new Map(target);
+      for (const m of moved) {
+        frame.set(m.id, {
+          x: m.a.x + (m.b.x - m.a.x) * k,
+          y: m.a.y + (m.b.y - m.a.y) * k,
+        });
+      }
+      drawnRef.current = frame;
+      setShown(frame);
+      if (t < 1) raf = requestAnimationFrame(step);
+      else drawnRef.current = target;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+
+  return shown;
+}
+
+function measure(el: HTMLElement | null): Size {
+  return {
+    width: el?.offsetWidth || el?.clientWidth || 800,
+    height: el?.offsetHeight || el?.clientHeight || 600,
+  };
+}
+
+function CanvasInner({
+  snapshot,
+  layout,
+  height = 640,
+  onServiceClick,
+}: ServiceMapCanvasProps) {
+  const rf = useReactFlow<FlowNode, Edge>();
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+  const [minZoom, setMinZoom] = useState(MIN_ZOOM_FLOOR);
+  const [foundId, setFoundId] = useState<string | null>(null);
+  // Hovering a node highlights its connections, like Find does.
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const focusId = hoverId ?? foundId;
+  const appliedRef = useRef(false);
+
+  const target = useMemo(() => allPositions(layout), [layout]);
+  const shown = useTweenedPositions(target);
+  const hubPos = snapshot.hub ? (target.get(snapshot.hub) ?? null) : null;
+  const trayIds = useMemo(() => new Set(layout.tray.ids), [layout]);
+
+  // Initial viewport, applied once (and the zoom floor, kept up to date).
+  useEffect(() => {
+    if (!ready || !layout.bounds) return;
+    const iv = initialViewport(layout.bounds, measure(boxRef.current), hubPos);
+    setMinZoom(iv.minZoom);
+    if (appliedRef.current) return;
+    appliedRef.current = true;
+    void rf.setViewport({ x: iv.x, y: iv.y, zoom: iv.zoom });
+  }, [ready, layout.bounds, hubPos, rf]);
+
+  const nodes = useMemo<FlowNode[]>(() => {
+    const out: FlowNode[] = [];
+    const band = layout.tray.band;
+    if (band) {
+      out.push({
+        id: TRAY_BAND_ID,
+        type: "trayBand",
+        position: { x: band.x, y: band.y },
+        origin: [0, 0],
+        data: {
+          count: layout.tray.count,
+          width: band.width,
+          height: band.height,
+        },
+        width: band.width,
+        height: band.height,
+        zIndex: -1,
+        draggable: false,
+        selectable: false,
+        focusable: false,
+      });
+    }
+    for (const n of snapshot.nodes) {
+      const p = shown.get(n.id) ?? target.get(n.id);
+      if (!p) continue;
+      const data: ServiceNodeData = {
+        label: n.label,
+        kind: n.kind,
+        spans: n.spans,
+        errorRate: n.errorRate,
+        active: n.active,
+        hub: n.id === snapshot.hub,
+        found: n.id === foundId,
+        inTray: trayIds.has(n.id),
+        clickable: !!onServiceClick && n.kind === "service",
+      };
+      out.push({
+        id: n.id,
+        type: "service",
+        position: p,
+        data,
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        ariaLabel: n.label,
+      });
+    }
+    return out;
+  }, [snapshot, layout, shown, target, foundId, trayIds, onServiceClick]);
+
+  const edges = useMemo<Edge[]>(
+    () =>
+      renderableEdges(snapshot, target).map((e) => {
+        const v = edgeVisual(e);
+        const hl =
+          focusId !== null && (e.source === focusId || e.target === focusId);
+        const color = hl ? EDGE_COLOR_HIGHLIGHT : EDGE_COLOR;
+        return {
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          className: [
+            "sm-edge",
+            e.active ? "" : "sm-edge-dim",
+            e.virtual ? "sm-edge-virtual" : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+          style: {
+            stroke: color,
+            strokeWidth: v.strokeWidth,
+            opacity: hl ? 1 : v.opacity,
+            strokeDasharray: v.strokeDasharray,
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color,
+            width: 10,
+            height: 10,
+            markerUnits: "userSpaceOnUse",
+          },
+          focusable: false,
+          selectable: false,
+          ariaLabel: `${e.source} to ${e.target}: ${e.calls.toLocaleString("en-US")} calls in the past 60 min`,
+        };
+      }),
+    [snapshot, target, focusId]
+  );
+
+  const findItems = useMemo<FindItem[]>(
+    () =>
+      snapshot.nodes.flatMap((n) => {
+        const p = target.get(n.id);
+        return p
+          ? [
+              {
+                id: n.id,
+                label: n.label,
+                kind: n.kind,
+                x: p.x,
+                y: p.y,
+                inTray: trayIds.has(n.id),
+              },
+            ]
+          : [];
+      }),
+    [snapshot, target, trayIds]
+  );
+
+  const duration = () => (prefersReducedMotion() ? 0 : SHIFT_TWEEN_MS);
+
+  const onFind = useCallback(
+    (item: FindItem) => {
+      setFoundId(item.id);
+      void rf.setCenter(item.x, item.y, {
+        zoom: Math.max(rf.getZoom(), 1),
+        duration: duration(),
+      });
+    },
+    [rf]
+  );
+
+  const onNodeClick = useCallback(
+    (_: unknown, node: FlowNode) => {
+      if (node.type !== "service" || !onServiceClick) return;
+      // A service node's id is the service name.
+      if ((node.data as ServiceNodeData).kind === "service") {
+        onServiceClick(node.id);
+      }
+    },
+    [onServiceClick]
+  );
+
+  const onNodeMouseEnter = useCallback((_: unknown, node: FlowNode) => {
+    if (node.type === "service") setHoverId(node.id);
+  }, []);
+  const onNodeMouseLeave = useCallback(() => setHoverId(null), []);
+
+  const onFit = useCallback(() => {
+    if (!layout.bounds) return;
+    void rf.setViewport(
+      fitAllViewport(layout.bounds, measure(boxRef.current), minZoom),
+      { duration: duration() }
+    );
+  }, [rf, layout.bounds, minZoom]);
+
+  return (
+    <div
+      ref={boxRef}
+      className="sm-canvas relative w-full overflow-hidden rounded-lg border border-border bg-background"
+      style={{ height }}
+    >
+      <ReactFlow<FlowNode, Edge>
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        nodeOrigin={[0.5, 0.5]}
+        onInit={() => setReady(true)}
+        onlyRenderVisibleElements
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        edgesFocusable={false}
+        minZoom={minZoom}
+        maxZoom={MAX_ZOOM}
+        colorMode="dark"
+        zoomOnDoubleClick={false}
+        onNodeClick={onNodeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1}
+          color="hsl(0 0% 18%)"
+        />
+        <Panel position="top-left">
+          <FindBox
+            items={findItems}
+            onFind={onFind}
+            onClear={() => setFoundId(null)}
+          />
+        </Panel>
+        <Panel position="top-right">
+          <div className="flex gap-1">
+            <button
+              type="button"
+              aria-label="Zoom in"
+              onClick={() => void rf.zoomIn({ duration: duration() })}
+              className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground hover:bg-muted"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom out"
+              onClick={() => void rf.zoomOut({ duration: duration() })}
+              className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground hover:bg-muted"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={onFit}
+              className="rounded-md border border-border bg-background px-2.5 py-1 text-sm text-foreground hover:bg-muted"
+            >
+              Fit
+            </button>
+          </div>
+        </Panel>
+      </ReactFlow>
+    </div>
+  );
+}
+
+function ServiceMapCanvasImpl(props: ServiceMapCanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+export const ServiceMapCanvas = memo(ServiceMapCanvasImpl);

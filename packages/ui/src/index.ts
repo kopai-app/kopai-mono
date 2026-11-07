@@ -30,3 +30,4 @@ export {
   type UseLiveLogsOptions,
   type UseLiveLogsResult,
 } from "@kopai/ui-core";
+export type { ServiceMapWorkerOptions } from "./pages/observability.js";

@@ -5,6 +5,8 @@ import {
   useCallback,
   useSyncExternalStore,
   useRef,
+  lazy,
+  Suspense,
 } from "react";
 import {
   KopaiSDKProvider,
@@ -46,12 +48,13 @@ type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 // Tab config
 // ---------------------------------------------------------------------------
 
-type Tab = "logs" | "services" | "metrics";
+type Tab = "logs" | "services" | "metrics" | "service-map";
 
 const TABS: { key: Tab; label: string; shortcutKey: string }[] = [
   { key: "services", label: "Traces", shortcutKey: "T" },
   { key: "logs", label: "Logs", shortcutKey: "L" },
   { key: "metrics", label: "Metrics", shortcutKey: "M" },
+  { key: "service-map", label: "Service map", shortcutKey: "S" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -94,7 +97,7 @@ function readURLState(): URLState {
   const rawTab = params.get("tab");
   const tab = service
     ? "services"
-    : rawTab === "logs" || rawTab === "metrics"
+    : rawTab === "logs" || rawTab === "metrics" || rawTab === "service-map"
       ? rawTab
       : "services";
   const rawLimit = params.get("limit");
@@ -979,6 +982,68 @@ function MetricsTab() {
 }
 
 // ---------------------------------------------------------------------------
+// Service map tab
+// ---------------------------------------------------------------------------
+
+/**
+ * Loaded on demand: the engine, layout, React Flow and the inline worker
+ * stay out of the page's main chunk until the tab is opened.
+ */
+const ServiceMap = lazy(
+  () => import("../components/observability/ServiceMap/index.js")
+);
+
+/** Where the Service Map worker sends its requests (PD-7). */
+export interface ServiceMapWorkerOptions {
+  /** Kopai server URL; a relative URL is resolved against the page. */
+  baseUrl: string;
+  headers?: Record<string, string>;
+  token?: string;
+}
+
+/** A service clicked on the map: its traces, as `?service=<name>`. */
+function openServiceTraces(service: string) {
+  pushURLState({ tab: "services", service });
+}
+
+function ServiceMapTab({
+  client,
+  worker,
+}: {
+  /** A custom client: the engine runs in-process with it. */
+  client?: KopaiClient;
+  worker?: ServiceMapWorkerOptions;
+}) {
+  // A custom client's base URL and headers are private, so it cannot be
+  // handed to a worker: run in-process with it unless the host says where
+  // the worker should connect. The default client is the page's own origin.
+  const options = worker
+    ? {
+        baseUrl: worker.baseUrl,
+        headers: worker.headers,
+        token: worker.token,
+      }
+    : client
+      ? { client }
+      : { baseUrl: "" };
+  return (
+    <Suspense
+      fallback={
+        <p className="text-muted-foreground text-sm" role="status">
+          Loading service map…
+        </p>
+      }
+    >
+      <ServiceMap
+        {...options}
+        height="fill"
+        onServiceClick={openServiceTraces}
+      />
+    </Suspense>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -990,9 +1055,17 @@ function getDefaultClient() {
 
 interface ObservabilityPageProps {
   client?: KopaiClient;
+  /**
+   * Where the Service Map's Web Worker connects. Only needed with a custom
+   * `client`: without it the map runs in-process with that client.
+   */
+  serviceMapWorker?: ServiceMapWorkerOptions;
 }
 
-export default function ObservabilityPage({ client }: ObservabilityPageProps) {
+export default function ObservabilityPage({
+  client,
+  serviceMapWorker,
+}: ObservabilityPageProps) {
   const activeClient = client ?? getDefaultClient();
   const {
     tab: activeTab,
@@ -1054,6 +1127,7 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
         onNavigateServices={() => pushURLState({ tab: "services" })}
         onNavigateLogs={() => pushURLState({ tab: "logs" })}
         onNavigateMetrics={() => pushURLState({ tab: "metrics" })}
+        onNavigateServiceMap={() => pushURLState({ tab: "service-map" })}
       >
         <div>
           <TabBar
@@ -1075,6 +1149,9 @@ export default function ObservabilityPage({ client }: ObservabilityPageProps) {
             />
           )}
           {activeTab === "metrics" && <MetricsTab />}
+          {activeTab === "service-map" && (
+            <ServiceMapTab client={client} worker={serviceMapWorker} />
+          )}
         </div>
       </KeyboardShortcutsProvider>
     </KopaiSDKProvider>
