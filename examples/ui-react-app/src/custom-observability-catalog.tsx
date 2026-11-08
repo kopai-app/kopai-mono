@@ -16,6 +16,7 @@
  *   4. Data-backed renderers: MetricStat, MetricTimeSeries, MetricHistogram,
  *                             MetricTable, AggregateTable, MetricDiscovery,
  *                             LogTimeline, TraceDetail
+ *      Self-fetching renderer: ServiceMap
  *   5. Kitchen-sink `UITree` exercising every component
  *   6. Provider-wrapped <ExampleObservabilityCatalog /> export
  */
@@ -36,9 +37,10 @@ import {
   KopaiSDKProvider,
   createRendererFromCatalog,
   observabilityCatalog,
+  useKopaiSDK,
   type RendererComponentProps,
 } from "@kopai/ui-core";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { z } from "zod";
 
 type Catalog = typeof observabilityCatalog.components;
@@ -707,8 +709,48 @@ function TraceDetail(props: TraceDetailProps) {
   );
 }
 
+// ---------- ServiceMap (self-fetching, no dataSource) -----------------------
+// ServiceMap declares no `acceptsDataFrom`: the renderer always gets
+// `hasData: false` and reads from the provider's client itself. `@kopai/ui`
+// ships the real map (`ServiceMap`, built from the past 60 minutes of trace
+// spans); this minimal stand-in only lists the known services.
+function ServiceMap({ element }: RendererProps<"ServiceMap">) {
+  const client = useKopaiSDK();
+  const [services, setServices] = useState<string[] | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  useEffect(() => {
+    const ctl = new AbortController();
+    client
+      .getServices({ signal: ctl.signal })
+      .then((r) => setServices(r.services))
+      .catch((e: unknown) => {
+        if (!ctl.signal.aborted) {
+          setError(e instanceof Error ? e : new Error(String(e)));
+        }
+      });
+    return () => ctl.abort();
+  }, [client]);
+  return (
+    <div style={{ minHeight: element.props.height ?? 480, fontSize: 13 }}>
+      <RequestState loading={services === null && !error} error={error}>
+        {services?.length ? (
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {services.map((s) => (
+              <li key={s}>
+                <code>{s}</code>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div style={{ color: "#999" }}>(no services yet)</div>
+        )}
+      </RequestState>
+    </div>
+  );
+}
+
 // =============================================================================
-// Register all 16 renderers with the catalog. `createRendererFromCatalog`
+// Register all 17 renderers with the catalog. `createRendererFromCatalog`
 // enforces at compile time that the registry matches the catalog shape.
 // =============================================================================
 const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
@@ -730,6 +772,7 @@ const ObservabilityRenderer = createRendererFromCatalog(observabilityCatalog, {
   MetricDiscovery,
   LogTimeline,
   TraceDetail,
+  ServiceMap,
 });
 
 // =============================================================================
@@ -764,6 +807,8 @@ const kitchenSinkTree = {
         "badges",
         "divider-data",
         "grid",
+        "divider-service-map",
+        "service-map",
         "divider-empty",
         "empty",
       ],
@@ -1091,6 +1136,21 @@ const kitchenSinkTree = {
         params: { limit: 10, sortOrder: "DESC" as const },
       },
       props: { height: 200 },
+    },
+
+    "divider-service-map": {
+      key: "divider-service-map",
+      type: "Divider" as const,
+      parentKey: "root",
+      children: [],
+      props: { label: "Service map (no dataSource)" },
+    },
+    "service-map": {
+      key: "service-map",
+      type: "ServiceMap" as const,
+      parentKey: "root",
+      children: [],
+      props: { height: 240 },
     },
 
     "divider-empty": {

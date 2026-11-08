@@ -23,6 +23,7 @@ import {
   OtelMetricStat,
   OtelMetricTable,
   OtelMetricTimeSeries,
+  OtelServiceMap,
   OtelTraceDetail,
 } from "../renderers/index.js";
 
@@ -43,6 +44,7 @@ const MetricsRenderer = createRendererFromCatalog(observabilityCatalog, {
   MetricTable: OtelMetricTable,
   AggregateTable: OtelAggregateTable,
   MetricDiscovery: OtelMetricDiscovery,
+  ServiceMap: OtelServiceMap,
 });
 
 export { type UITree };

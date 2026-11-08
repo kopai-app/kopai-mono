@@ -86,7 +86,7 @@ Code mode: build each leaf tile's data with `kq`, embed it as `dataSource: { met
 
 ## DataSource Rules
 
-- Leaf components (no children) carry a `dataSource`; layout components (Stack/Grid/Card) do not.
+- Leaf data components (no children) carry a `dataSource`; layout components (Stack/Grid/Card), static components (Heading/Text/Badge/Divider/Empty) and **ServiceMap** do not. ServiceMap fetches its own trace data; a `dataSource` on it makes it render nothing.
 - `dataSource.method` must be valid. Prefer **`"query"`** with a built `kq` query as `params`. Legacy methods still work as fallback: `searchMetricsPage`, `searchAggregatedMetrics`, `searchLogsPage`, `searchTracesPage`.
 - `dataSource.params` must match the method: a `kq` `KopaiQuery` for `"query"`, or the method's own param schema for legacy methods.
 - Data tiles render **raw rows** — build their `kq` query with `kq.<signal>.raw()…build()`, **not** `.aggregate()`. The renderers reject aggregate/`summary`/`timeSeries` rows (_"this panel displays raw metric rows … use a raw metric query"_).
@@ -115,6 +115,7 @@ Code mode: build each leaf tile's data with `kq`, embed it as `dataSource: { met
 - Set `height: 600` on LogTimeline — smaller values collapse the log content to a count badge
 - Set `height: 300` on MetricTimeSeries and MetricHistogram
 - MetricStat does not need a height prop
+- Add a `ServiceMap` (`props: { height: 480 }`, no `dataSource`) when the user wants to see how services connect (dependencies, call graph, blast radius) and traces exist. It shows the past 60 minutes of service-to-service calls. One per dashboard is enough; put it full width in its own Card, not inside a multi-column Grid
 
 ## Component Compatibility
 

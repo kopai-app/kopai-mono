@@ -1,0 +1,8 @@
+{
+  "extends": "@kopai/tsconfig/node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["build", "tsdown.config.ts"]
+}

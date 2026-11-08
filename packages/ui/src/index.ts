@@ -11,6 +11,7 @@ export {
   createCatalog,
   KopaiSDKProvider,
   useKopaiSDK,
+  useOptionalKopaiSDK,
   queryClient,
   useKopaiData,
   useLiveLogs,
@@ -30,3 +31,15 @@ export {
   type UseLiveLogsOptions,
   type UseLiveLogsResult,
 } from "@kopai/ui-core";
+export type { ServiceMapWorkerOptions } from "./pages/observability.js";
+
+// Standalone Service Map. Its engine, layout, React Flow view and worker are
+// in a lazily loaded chunk that downloads when a map first renders.
+export {
+  ServiceMap,
+  ServiceMapSourceProvider,
+  type ServiceMapProps,
+  type ServiceMapClientLike,
+  type ServiceMapSource,
+  type ServiceMapSourceProviderProps,
+} from "./components/observability/ServiceMap/ServiceMapLazy.js";

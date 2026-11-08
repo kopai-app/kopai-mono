@@ -1,10 +1,10 @@
 ---
 name: create-dashboard
-description: Build Kopai observability dashboards from OpenTelemetry metrics, logs, and traces by composing tiles — time-series charts, stat/KPI numbers, histograms, log timelines, and trace-detail views — into a dashboard via the Kopai SDK. Use this skill whenever the user wants to visualize, chart, monitor, or 'keep an eye on' telemetry — e.g. 'make a dashboard', 'monitoring view', 'KPI panel', 'chart request latency and throughput', 'an incident board with error logs and a trace viewer' — even if they don't say the word 'dashboard' — and when another workflow needs to present telemetry visually (e.g. after a root-cause analysis). This creates Kopai dashboards specifically. Do NOT use it to investigate or root-cause an issue (use root-cause-analysis), to add instrumentation (use otel-instrumentation), to build Grafana/Prometheus dashboards, or to code React/UI chart components. When the Kopai connector is attached, use create-live-page instead unless the user asks for a Kopai dashboard.
+description: Build Kopai observability dashboards from OpenTelemetry metrics, logs, and traces by composing tiles — time-series charts, stat/KPI numbers, histograms, log timelines, trace-detail views, and a service map — into a dashboard via the Kopai SDK. Use this skill whenever the user wants to visualize, chart, monitor, or 'keep an eye on' telemetry — e.g. 'make a dashboard', 'monitoring view', 'KPI panel', 'chart request latency and throughput', 'an incident board with error logs and a trace viewer' — even if they don't say the word 'dashboard' — and when another workflow needs to present telemetry visually (e.g. after a root-cause analysis). This creates Kopai dashboards specifically. Do NOT use it to investigate or root-cause an issue (use root-cause-analysis), to add instrumentation (use otel-instrumentation), to build Grafana/Prometheus dashboards, or to code React/UI chart components. When the Kopai connector is attached, use create-live-page instead unless the user asks for a Kopai dashboard.
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.5.0"
+  version: "1.6.0"
 ---
 
 # Create Dashboard with Kopai
@@ -141,7 +141,8 @@ console.log(`Created dashboard ${dash.id}`);
 ## Components
 
 Layout (have children, no `dataSource`): **Stack**, **Grid**, **Card**. Static:
-**Heading**, **Text**, **Badge**, **Divider**, **Empty**.
+**Heading**, **Text**, **Badge**, **Divider**, **Empty**. Self-fetching (no `dataSource`):
+**ServiceMap**.
 
 Data tiles — feed each with a **raw** `kq` query via `method: "query"` (legacy methods
 still work, listed for fallback):
@@ -154,6 +155,23 @@ still work, listed for fallback):
 | MetricTable      | Tabular         | any                             | `searchMetricsPage`, `query`                            | `kq.metrics("Gauge").raw().where(f=>f.eq("MetricName",NAME)).timeRelative("1h").limit(500).build()`     |
 | LogTimeline      | Log stream      | n/a                             | `searchLogsPage`, `query`                               | `kq.logs.raw().where(f=>f.gte("SeverityNumber",17)).timeRelative("1h").limit(100).build()`              |
 | TraceDetail      | Trace inspector | n/a                             | `searchTracesPage`, `searchTraceSummariesPage`, `query` | `kq.traces.raw().where(f=>f.eq("StatusCode","Error")).timeRelative("1h").limit(50).build()`             |
+
+**ServiceMap** — a self-fetching tile: which services call each other in the past 60
+minutes, plus the databases, queues and external APIs they use, built from trace spans.
+It takes **no `dataSource`** (with one it renders nothing) and only `props: { height }`
+(canvas px; `null` = 480). Use it for "how do my services connect", dependency or
+blast-radius views when traces exist; one per dashboard, full width (a Card in the root
+Stack, not inside a multi-column Grid):
+
+```ts
+"map-1": {
+  key: "map-1",
+  type: "ServiceMap",
+  props: { height: 480 },
+  children: [],
+  parentKey: "card-map", // a Card titled e.g. "Service map"
+},
+```
 
 Sizing/props: set `height: 300` on MetricTimeSeries/MetricHistogram, `height: 600` on
 LogTimeline (smaller collapses it to a count badge); MetricStat needs no height. Set
