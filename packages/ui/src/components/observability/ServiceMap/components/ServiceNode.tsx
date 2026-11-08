@@ -193,7 +193,7 @@ function ServiceNodeImpl({ id, data }: NodeProps<ServiceFlowNode>) {
           "sm-label pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[11.5px] leading-none",
           isService ? "" : "text-foreground",
           data.hub ? "font-semibold" : "",
-          showLabel ? "" : "hidden group-hover:block",
+          showLabel ? "" : "hidden group-hover:block group-focus-visible:block",
         ]
           .filter(Boolean)
           .join(" ")}

@@ -31,9 +31,11 @@ import {
  * in the worker and the session, so switching to another tab and back shows
  * the map at once and the scan continues where it was. A session nobody
  * comes back to within M is stopped (resuming it would rebuild from scratch
- * anyway). A worker session that is unused and superseded by another one for
- * the same base URL (a rotated token, changed headers) is stopped at once
- * instead, so idle workers do not pile up. While the document is hidden every session is paused; the engine
+ * anyway). A worker session that is unused and superseded by another one
+ * that differs only in its credentials (a rotated token or Authorization
+ * header; same base URL and same other headers) is stopped at once instead,
+ * so idle workers do not pile up. Sessions that differ in other headers (a
+ * tenant or scope header) keep the normal pause-and-resume path. While the document is hidden every session is paused; the engine
  * restarts itself on resume when the gap was longer than M (A8).
  */
 
@@ -87,6 +89,20 @@ export function workerKey(init: Partial<WorkerInit>): string {
     "\n" +
     stableJson({ headers: init.headers ?? {}, token: init.token ?? null })
   );
+}
+
+/**
+ * A worker session's key without its credentials: the absolute base URL plus
+ * the headers other than Authorization (names lowercased). Two sessions with
+ * the same scope differ only in their token or Authorization header.
+ */
+export function credentialScope(init: Partial<WorkerInit>): string {
+  const rest: Record<string, string> = {};
+  for (const [k, v] of Object.entries(init.headers ?? {})) {
+    const name = k.toLowerCase();
+    if (name !== "authorization") rest[name] = v;
+  }
+  return absoluteBaseUrl(init.baseUrl) + "\n" + stableJson(rest);
 }
 
 // ------------------------------------------------------------- transports
@@ -314,28 +330,30 @@ function lookup(opts: AcquireOptions): Session | undefined {
   return s && live.has(s) ? s : undefined;
 }
 
-/** The absolute base URL of a worker session; null for a custom client. */
-function baseOf(s: Session): string | null {
-  return s.opts.init?.baseUrl ?? null;
+/** A worker session's credential scope; null for a custom client. */
+function scopeOf(s: Session): string | null {
+  return s.opts.init ? credentialScope(s.opts.init) : null;
 }
 
 /**
- * True when an unused worker session has a newer sibling for the same base
- * URL (different auth) that a view uses: nobody will come back to it.
+ * True when an unused worker session has a sibling in use that differs from
+ * it only in its credentials (a rotated token): nobody will come back to it.
  */
 function superseded(s: Session): boolean {
-  const base = baseOf(s);
-  if (base === null) return false;
+  const scope = scopeOf(s);
+  if (scope === null) return false;
   for (const o of workerSessions.values()) {
-    if (o !== s && o.refs > 0 && live.has(o) && baseOf(o) === base) return true;
+    if (o !== s && o.refs > 0 && live.has(o) && scopeOf(o) === scope) {
+      return true;
+    }
   }
   return false;
 }
 
-/** Stops every unused, idle worker session for `base` other than `keep`. */
-function dropIdleSiblings(keep: Session, base: string): void {
+/** Stops every unused, idle worker session in `scope` other than `keep`. */
+function dropIdleSiblings(keep: Session, scope: string): void {
   for (const o of [...workerSessions.values()]) {
-    if (o !== keep && o.refs === 0 && o.isIdle() && baseOf(o) === base) {
+    if (o !== keep && o.refs === 0 && o.isIdle() && scopeOf(o) === scope) {
       destroy(o);
     }
   }
@@ -365,8 +383,9 @@ export function acquire(opts: AcquireOptions): ServiceMapSessionHandle {
       };
       s = new Session(workerKey(opts), { init });
       workerSessions.set(s.key, s);
-      // A new auth for this server: unused sessions with the old auth go.
-      dropIdleSiblings(s, init.baseUrl);
+      // New credentials for this server and scope: unused sessions with the
+      // old credentials go.
+      dropIdleSiblings(s, credentialScope(init));
     }
     live.add(s);
     hookVisibility();
@@ -397,7 +416,7 @@ export function acquire(opts: AcquireOptions): ServiceMapSessionHandle {
       session.graceTimer = setTimeout(() => {
         session.graceTimer = null;
         if (session.refs > 0) return;
-        // Replaced by a session with other auth for the same server (a
+        // Replaced by a session that differs only in its credentials (a
         // rotated token): nobody comes back to this one.
         if (superseded(session)) {
           destroy(session);

@@ -133,7 +133,7 @@ A client cannot cross to a worker, so a map that reads with a client (for exampl
 
 In dashboards, add a `ServiceMap` element (`props: { height: number | null }`, no `dataSource`).
 
-The canvas follows the host's theme: a `.dark` / `.light` class on an ancestor, else `prefers-color-scheme`.
+The canvas follows the host's theme: a `.dark` / `.light` class on an ancestor (watched for changes), else dark, to match the package's dark-only default tokens.
 
 The worker is inlined into the lazy chunk as a string, with its own copies of `@kopai/sdk`, `@kopai/core` and `zod` (a Blob worker cannot import the host's modules). That adds about 200 KB to each of the ESM and CJS builds, downloaded only when a map first renders, and an SDK fix reaches the worker only through a new `@kopai/ui` build.
 

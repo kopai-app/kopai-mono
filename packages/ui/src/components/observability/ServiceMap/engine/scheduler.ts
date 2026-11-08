@@ -117,6 +117,8 @@ export class ScanRun {
   private clientNoPeer = 0;
   private probeSelfCalls = 0;
   private lastSeedMs = 0;
+  /** Seed refreshes in a row that failed in live (for their backoff). */
+  private liveSeedFails = 0;
   private seeded = false;
   /**
    * The clock time of the last snapshot built while running. A paused run
@@ -317,7 +319,9 @@ export class ScanRun {
     const q = buildSeedQueries(builtAt, this.cfg.windowMs);
     // Before live the seed never eats into the probe reserve (PD-8).
     const canSpend = () => this.remaining() > this.cfg.probeReserve;
-    const max = SEED_MAX_FAILURES;
+    // In live a refresh gets one try per cycle: a hanging call must not hold
+    // the forward poll for several timeouts (the cycle backs off instead).
+    const max = this.phase === "live" ? 1 : SEED_MAX_FAILURES;
     const known = await this.attempt(
       canSpend,
       (signal) => this.client.getServices({ signal }),
@@ -545,9 +549,10 @@ export class ScanRun {
 
   /**
    * R2-4: forward poll every 10 s; PD-2: seed refresh every 5 min. Not counted.
-   * The forward tick runs first, and a failing seed refresh gives up after a
-   * few tries (keeping the last good seed) and is tried again 30 s later, so
-   * an aggregate outage never stops the forward poll.
+   * The forward tick runs first, and a failing seed refresh gets one try
+   * (keeping the last good seed) and is tried again after a backoff that
+   * starts at 30 s and doubles up to the refresh interval, so an aggregate
+   * outage holds the forward poll for at most one request at a time.
    */
   private async livePhase(): Promise<void> {
     this.setPhase("live");
@@ -567,8 +572,8 @@ export class ScanRun {
       if (this.clock.now() >= this.nextFwdMs) await this.forwardTick(always);
       if (this.clock.now() >= this.nextSeedMs) {
         const ok = await this.seed();
-        this.nextSeedMs =
-          this.clock.now() + (ok ? this.cfg.seedRefreshMs : BACKOFF_MAX_MS);
+        this.liveSeedFails = ok ? 0 : this.liveSeedFails + 1;
+        this.nextSeedMs = this.clock.now() + this.liveSeedDelayMs();
       }
       // R2-2: if no backward page ever arrived (e.g. the scan failed until the
       // budget ran out), choose the hub from live data. A no-op once chosen.
@@ -576,6 +581,14 @@ export class ScanRun {
       this.graph.trim(this.clock.now());
       this.onChange();
     }
+  }
+
+  /** Wait before the next live seed refresh: 30 s, 60 s … up to seedRefreshMs after failures. */
+  private liveSeedDelayMs(): number {
+    const refresh = this.cfg.seedRefreshMs;
+    if (this.liveSeedFails === 0) return refresh;
+    const exp = Math.min(this.liveSeedFails - 1, 20);
+    return Math.min(refresh, BACKOFF_MAX_MS * 2 ** exp);
   }
 
   // --------------------------------------------------------------- forward

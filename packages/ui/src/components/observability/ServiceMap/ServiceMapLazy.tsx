@@ -20,11 +20,14 @@
  * maps show it. A session nobody shows is paused, and stopped after 60 min.
  */
 import {
+  Component,
   createContext,
   lazy,
   Suspense,
+  useCallback,
   useContext,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
 import { useOptionalKopaiSDK } from "@kopai/ui-core";
@@ -34,7 +37,57 @@ import {
   type ServiceMapClientLike,
 } from "./session/client-adapter.js";
 
-const LiveServiceMap = lazy(() => import("./index.js"));
+/**
+ * A fresh lazy component: React caches a rejected import per lazy component,
+ * so a retry after a failed chunk load needs a new one.
+ */
+const loadLiveServiceMap = () => lazy(() => import("./index.js"));
+let sharedLiveServiceMap = loadLiveServiceMap();
+
+interface MapErrorBoundaryProps {
+  onRetry: () => void;
+  children?: ReactNode;
+}
+
+/**
+ * Keeps a failed chunk load (a stale hash after a redeploy, offline) or a
+ * render error inside the map's own area instead of unmounting the page or
+ * the dashboard around it.
+ */
+export class ServiceMapErrorBoundary extends Component<
+  MapErrorBoundaryProps,
+  { error: unknown }
+> {
+  override state: { error: unknown } = { error: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error: error ?? new Error("unknown error") };
+  }
+
+  private readonly retry = () => {
+    this.props.onRetry();
+    this.setState({ error: null });
+  };
+
+  override render() {
+    if (this.state.error === null) return this.props.children;
+    return (
+      <div
+        role="alert"
+        className="flex flex-col items-start gap-2 text-sm text-muted-foreground"
+      >
+        <p>Service map failed to load.</p>
+        <button
+          type="button"
+          onClick={this.retry}
+          className="rounded border border-border px-2 py-1 text-foreground hover:bg-muted"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+}
 
 export type { ServiceMapClientLike };
 
@@ -154,13 +207,22 @@ export function ServiceMap({
       ),
     [client, baseUrl, headers, token, contextClient, contextSource]
   );
+  const [LiveServiceMap, setLiveServiceMap] = useState(
+    () => sharedLiveServiceMap
+  );
+  const onRetry = useCallback(() => {
+    sharedLiveServiceMap = loadLiveServiceMap();
+    setLiveServiceMap(() => sharedLiveServiceMap);
+  }, []);
   return (
-    <Suspense fallback={fallback}>
-      <LiveServiceMap
-        {...source}
-        height={height}
-        onServiceClick={onServiceClick}
-      />
-    </Suspense>
+    <ServiceMapErrorBoundary onRetry={onRetry}>
+      <Suspense fallback={fallback}>
+        <LiveServiceMap
+          {...source}
+          height={height}
+          onServiceClick={onServiceClick}
+        />
+      </Suspense>
+    </ServiceMapErrorBoundary>
   );
 }

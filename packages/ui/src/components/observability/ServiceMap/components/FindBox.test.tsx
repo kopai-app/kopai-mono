@@ -28,6 +28,27 @@ function shopItems(): { items: FindItem[]; trayIds: Set<string> } {
 }
 
 describe("FindBox", () => {
+  it("ArrowDown with no matches still lets Enter pick a match that appears later", () => {
+    const onFind = vi.fn();
+    const item: FindItem = {
+      id: "cart",
+      label: "cart",
+      kind: "service",
+      x: 0,
+      y: 0,
+      inTray: false,
+    };
+    const { rerender } = render(<FindBox items={[]} onFind={onFind} />);
+    const input = screen.getByRole("combobox", { name: "Find a service" });
+    fireEvent.change(input, { target: { value: "car" } });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    // A snapshot adds the matching service.
+    rerender(<FindBox items={[item]} onFind={onFind} />);
+    expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onFind).toHaveBeenCalledWith(item);
+  });
+
   it("lists full names (CSS truncates them) and turns spellcheck off", () => {
     const long = "payments-reconciliation-worker";
     const items: FindItem[] = [

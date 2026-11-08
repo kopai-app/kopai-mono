@@ -714,6 +714,33 @@ describe("failing seed (never blocks the scan or the forward poll)", () => {
     engine.stop();
   });
 
+  it("gives a live seed refresh one try per cycle and backs off 30 s, 60 s … up to the refresh interval", async () => {
+    const { engine, mock, untilPhase, clock } = setup({
+      fail: (call) => {
+        if (isAgg(call)) throw new Error("aggregate down");
+      },
+      backward: abPages(2),
+    });
+    engine.start();
+    await untilPhase("live", 6 * M_MS);
+    const liveAt = clock.now();
+    await clock.advance(20 * 60_000);
+    const starts = mock.calls
+      .filter((c) => isAgg(c) && c.startMs >= liveAt)
+      .map((c) => c.startMs);
+    // One try per refresh cycle: consecutive tries are never back to back.
+    const gaps = starts.slice(1).map((t, i) => t - starts[i]!);
+    expect(gaps.length).toBeGreaterThanOrEqual(4);
+    for (const g of gaps) expect(g).toBeGreaterThanOrEqual(30_000);
+    // The gaps grow, then stay at the 5-minute refresh interval.
+    expect(gaps[1]!).toBeGreaterThan(gaps[0]!);
+    expect(gaps[2]!).toBeGreaterThan(gaps[1]!);
+    for (const g of gaps) {
+      expect(g).toBeLessThanOrEqual(DEFAULT_CONFIG.seedRefreshMs + 15_000);
+    }
+    engine.stop();
+  });
+
   it("an aggregate outage at a 5-minute refresh keeps the map live", async () => {
     let down = false;
     const { engine, mock, untilPhase, clock } = setup({

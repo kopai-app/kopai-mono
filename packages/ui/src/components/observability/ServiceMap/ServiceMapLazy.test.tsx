@@ -11,11 +11,12 @@ import {
   vi,
 } from "vitest";
 import { createElement, type ReactNode } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { KopaiSDKProvider, type KopaiClient } from "@kopai/ui-core";
 import type { kopaiQuery } from "@kopai/core";
 import {
   ServiceMap,
+  ServiceMapErrorBoundary,
   ServiceMapSourceProvider,
   resolveServiceMapSource,
 } from "./ServiceMapLazy.js";
@@ -240,5 +241,40 @@ describe("<ServiceMap /> standalone", () => {
       ...container.querySelectorAll<HTMLElement>(".sm-canvas"),
     ].map((c) => c.style.height);
     expect(heights).toEqual(["300px", "500px"]);
+  });
+});
+
+describe("ServiceMapErrorBoundary", () => {
+  it("keeps a failed load inside the map area and retries on demand", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let fail = true;
+    const onRetry = vi.fn(() => {
+      fail = false;
+    });
+    function Child() {
+      if (fail) throw new Error("chunk load failed");
+      return createElement("p", null, "map loaded");
+    }
+    render(
+      createElement(
+        "div",
+        null,
+        createElement("p", null, "sibling tile"),
+        createElement(
+          ServiceMapErrorBoundary,
+          { onRetry },
+          createElement(Child)
+        )
+      )
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Service map failed to load"
+    );
+    // The rest of the page stays mounted.
+    expect(screen.getByText("sibling tile")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("map loaded")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

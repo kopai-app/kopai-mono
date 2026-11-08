@@ -393,6 +393,42 @@ describe("worker sessions (default client)", () => {
     expect(wOther!.terminated).toBe(false);
   });
 
+  it("switching a non-credential header (a tenant) keeps the old session paused for M", async () => {
+    const a = acquire({ baseUrl: "/", headers: { "X-Tenant": "a" } });
+    await flush();
+    const wA = FakeWorker.instances[0]!;
+    a.release();
+    const b = acquire({ baseUrl: "/", headers: { "X-Tenant": "b" } });
+    await flush();
+    await vi.advanceTimersByTimeAsync(RELEASE_GRACE_MS);
+    expect(wA.terminated).toBe(false);
+    expect(wA.types().at(-1)).toBe("pause");
+    // Switching back resumes the same worker instead of a new scan.
+    b.release();
+    const again = acquire({ baseUrl: "/", headers: { "X-Tenant": "a" } });
+    expect(wA.types().at(-1)).toBe("resume");
+    expect(FakeWorker.instances).toHaveLength(2);
+    again.release();
+  });
+
+  it("a rotated Authorization header (same other headers) supersedes the old session", async () => {
+    const old = acquire({
+      baseUrl: "/",
+      headers: { "X-Tenant": "a", Authorization: "Bearer 1" },
+    });
+    await flush();
+    const w1 = FakeWorker.instances[0]!;
+    old.release();
+    const next = acquire({
+      baseUrl: "/",
+      headers: { "x-tenant": "a", authorization: "Bearer 2" },
+    });
+    await flush();
+    await vi.advanceTimersByTimeAsync(RELEASE_GRACE_MS);
+    expect(w1.terminated).toBe(true);
+    next.release();
+  });
+
   it("two views with different auth for one server keep both workers while used", async () => {
     acquire({ baseUrl: "/", token: "a" });
     acquire({ baseUrl: "/", token: "b" });

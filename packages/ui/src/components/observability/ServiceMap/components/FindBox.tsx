@@ -77,7 +77,7 @@ export function FindBox({
     [items, query, maxResults]
   );
   const expanded = open && query.trim().length > 0;
-  const current = Math.min(active, Math.max(0, matches.length - 1));
+  const current = Math.max(0, Math.min(active, matches.length - 1));
 
   const choose = (item: FindItem) => {
     setQuery(item.label);
@@ -89,7 +89,7 @@ export function FindBox({
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setOpen(true);
-      setActive((a) => Math.min(matches.length - 1, a + 1));
+      setActive((a) => Math.max(0, Math.min(matches.length - 1, a + 1)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => Math.max(0, a - 1));
