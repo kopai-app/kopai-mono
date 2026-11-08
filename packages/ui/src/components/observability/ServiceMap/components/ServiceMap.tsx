@@ -100,7 +100,14 @@ export function useMapLayout(
       }
       result = updateLayout(state, snapshotGraph(snapshot));
     } else {
-      result = updateLayout(c ? c.result.state : null, snapshotGraph(snapshot));
+      // A restarted engine (hidden longer than M) may choose another hub:
+      // lay the new graph out around it instead of the old centre.
+      const prev = c?.result.state ?? null;
+      const base =
+        prev && snapshot.hub !== null && prev.hub !== snapshot.hub
+          ? null
+          : prev;
+      result = updateLayout(base, snapshotGraph(snapshot));
     }
     cache.current = { key, result };
     return result;
@@ -147,8 +154,10 @@ export const FILL_MIN_HEIGHT = 420;
 /**
  * Height that makes `ref`'s element end exactly at the bottom of the window:
  * the window height minus where the element starts and minus the bottom
- * padding and borders of its ancestors. Re-measured on resize, then
- * corrected once if the page still overflows, so the page never scrolls.
+ * padding and borders of its ancestors. Re-measured on resize and whenever
+ * the element moves (something above it changed height: a wrapping tab bar,
+ * late fonts), then corrected once if the page still overflows, so the page
+ * never scrolls.
  */
 export function useFillHeight(
   ref: RefObject<HTMLElement | null>,
@@ -158,8 +167,11 @@ export function useFillHeight(
   useLayoutEffect(() => {
     const el = ref.current;
     if (!enabled || !el || typeof window === "undefined") return;
+    const topOf = () => el.getBoundingClientRect().top + window.scrollY;
+    let lastTop = Number.NaN;
     const measure = () => {
-      const top = el.getBoundingClientRect().top + window.scrollY;
+      const top = topOf();
+      lastTop = top;
       let below = 0;
       for (
         let n = el.parentElement;
@@ -177,7 +189,20 @@ export function useFillHeight(
     };
     measure();
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    // The page's own size changes when anything on it does; re-measure only
+    // when that moved the element, so the map's own height change (and the
+    // overflow correction below) never loops.
+    const ro =
+      typeof ResizeObserver === "function"
+        ? new ResizeObserver(() => {
+            if (topOf() !== lastTop) measure();
+          })
+        : null;
+    ro?.observe(document.body);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro?.disconnect();
+    };
   }, [ref, enabled]);
   // Anything the ancestors add that the measure missed (margins, siblings
   // below): shrink by exactly the overflow, once per measured height.
@@ -209,7 +234,11 @@ export function ServiceMapView({
   const starting = state === "idle" || state === "seeding";
 
   let body;
-  if (!snapshot || (snapshot.nodes.length === 0 && starting)) {
+  // Nodes can be known (getServices) before the hub is chosen: nothing can
+  // be placed until then, so keep the placeholder rather than a blank canvas.
+  const nothingPlaced =
+    !!snapshot && snapshot.nodes.length > 0 && layout.state === null;
+  if (!snapshot || (snapshot.nodes.length === 0 && starting) || nothingPlaced) {
     body = (
       <div
         className="sm-loading flex animate-pulse items-center justify-center rounded-lg border border-border bg-card/40 text-sm text-muted-foreground"

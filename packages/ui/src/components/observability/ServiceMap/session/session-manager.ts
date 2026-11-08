@@ -96,13 +96,16 @@ interface Transport {
 
 function inProcessTransport(
   client: ServiceMapClient,
-  onSnapshot: (s: ServiceMapSnapshot) => void
+  onSnapshot: (s: ServiceMapSnapshot) => void,
+  paused: boolean
 ): Transport {
   const engine = createServiceMapEngine({
     client,
     clock: systemClock,
     onSnapshot,
   });
+  // Paused before the first request can leave (hidden document, unused).
+  if (paused) engine.pause();
   engine.start();
   return {
     send: (cmd) => applyCommand(engine, cmd),
@@ -162,8 +165,11 @@ class Session {
   private startInProcess(client: ServiceMapClient): void {
     if (this.disposed) return;
     this.kind = "in-process";
-    this.transport = inProcessTransport(client, (s) => this.publish(s));
-    if (this.paused) this.transport.send({ type: "pause" });
+    this.transport = inProcessTransport(
+      client,
+      (s) => this.publish(s),
+      this.paused
+    );
   }
 
   private attachWorker(w: Worker, init: WorkerInit): void {
@@ -183,8 +189,8 @@ class Session {
       if (this.worker === w) this.fallback(init);
     });
     const post = (m: MainToWorker) => w.postMessage(m);
-    post({ type: "init", ...init });
-    if (this.paused) post({ type: "pause" });
+    // The pause travels with the init, so the worker starts paused.
+    post({ type: "init", ...init, ...(this.paused ? { paused: true } : {}) });
     for (const cmd of this.queued) if (cmd.type === "retry") post(cmd);
     this.queued = [];
     this.transport = { send: post, terminate: () => w.terminate() };

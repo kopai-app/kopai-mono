@@ -48,6 +48,15 @@ export function KopaiSDKProvider({ client, children }: KopaiSDKProviderProps) {
   );
 }
 
+/**
+ * The client from the nearest `KopaiSDKProvider`, or `null` outside one.
+ * For components that also work on their own (they then fall back to their
+ * own data source instead of throwing like `useKopaiSDK`).
+ */
+export function useOptionalKopaiSDK(): KopaiClient | null {
+  return useContext(KopaiSDKContext)?.client ?? null;
+}
+
 export function useKopaiSDK(): KopaiClient {
   const ctx = useContext(KopaiSDKContext);
   if (!ctx) {

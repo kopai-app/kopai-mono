@@ -10,8 +10,10 @@
  * Q19: on frame 1 (the first call with a hub) lanes are reserved for every
  * column from the expected final size, so later frames rarely need a new lane.
  * Reservations never shrink. When a column still overflows, it gains a lane and
- * every column further out shifts as one block; the shift is reported as a
- * `ShiftEvent` so the canvas can animate it.
+ * every column further out shifts as one block. The shift is reported as a
+ * `ShiftEvent`: the property tests use it to check that placed nodes move only
+ * by reported shifts. The canvas does not read it; it tweens any position
+ * change it sees.
  *
  * Pure and deterministic: `prev` is never mutated, and every iteration order
  * is fixed (calls desc, then id).

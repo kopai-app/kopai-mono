@@ -45,19 +45,6 @@ export function nodeSize(kind: NodeKind, spans: number): number {
   return SERVICE_SIZE_MAX;
 }
 
-export type ErrorLevel = "none" | "warn" | "high";
-
-/** Error rate (fraction) at which a node gets the amber cue. */
-export const ERROR_WARN = 0.01;
-/** Error rate (fraction) at which a node gets the red cue. */
-export const ERROR_HIGH = 0.05;
-
-/** ≥1 % amber, ≥5 % red. */
-export function errorLevel(errorRate: number): ErrorLevel {
-  if (!(errorRate >= ERROR_WARN)) return "none";
-  return errorRate >= ERROR_HIGH ? "high" : "warn";
-}
-
 /** Opacity of nodes and edges with no traffic in the last 60 min (R2-3). */
 export const DIM_OPACITY = 0.35;
 export const EDGE_DIM_OPACITY = 0.2;
@@ -67,10 +54,6 @@ export const VIRTUAL_DASH = "5 4";
 
 export const EDGE_COLOR = "hsl(0 0% 55%)";
 export const EDGE_COLOR_HIGHLIGHT = "hsl(210 90% 65%)";
-export const ERROR_COLOR: Record<Exclude<ErrorLevel, "none">, string> = {
-  warn: "hsl(38 92% 55%)",
-  high: "hsl(0 84% 60%)",
-};
 
 export interface EdgeVisual {
   strokeWidth: number;

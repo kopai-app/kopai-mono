@@ -15,8 +15,9 @@ export interface WorkerInit {
 export type EngineCommand =
   { type: "pause" } | { type: "resume" } | { type: "retry" } | { type: "stop" };
 
-/** main → worker */
-export type MainToWorker = ({ type: "init" } & WorkerInit) | EngineCommand;
+/** main → worker. `paused`: start the engine paused (no request leaves). */
+export type MainToWorker =
+  ({ type: "init"; paused?: boolean } & WorkerInit) | EngineCommand;
 
 /** worker → main */
 export type WorkerToMain =

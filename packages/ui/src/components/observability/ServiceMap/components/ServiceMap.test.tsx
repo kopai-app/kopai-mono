@@ -48,7 +48,6 @@ import {
   EDGE_MIN_WIDTH,
   edgeStrokeWidth,
   edgeVisual,
-  errorLevel,
   nodeSize,
 } from "./edge-style.js";
 
@@ -116,7 +115,7 @@ describe("ServiceMapView (shop20)", () => {
       screen.getByTestId("sm-node-kafka · order-events").classList
     ).toContain("sm-kind-messaging");
     const payments = screen.getByTestId("sm-node-payments");
-    expect(payments.classList).toContain("sm-err-warn");
+    expect(payments.className).not.toMatch(/sm-err/);
     expect(payments.querySelector(".sm-err-glyph")).toBeNull();
     expect(payments.getAttribute("title")).toBeNull();
 
@@ -216,6 +215,28 @@ describe("ServiceMapView (shop20)", () => {
     await act(async () => {});
     expect(screen.queryByText(NO_CALLS_HINT)).toBeNull();
   });
+
+  it("keeps the placeholder, not a blank canvas, while services are known but no hub is chosen yet", async () => {
+    const frame = shopFrame1();
+    const noHub: ServiceMapSnapshot = {
+      ...frame,
+      hub: null,
+      scan: { ...frame.scan, state: "scanning" },
+    };
+    const { container, rerender } = render(<ServiceMapView snapshot={noHub} />);
+    await act(async () => {});
+    expect(container.querySelector(".react-flow")).toBeNull();
+    expect(container.querySelector(".sm-loading")?.textContent).toBe(
+      LOADING_TEXT
+    );
+
+    rerender(<ServiceMapView snapshot={frame} />);
+    await act(async () => {});
+    expect(container.querySelector(".sm-loading")).toBeNull();
+    expect(screen.getByTestId("sm-node-api-gateway").classList).toContain(
+      "sm-hub"
+    );
+  });
 });
 
 describe("useMapLayout", () => {
@@ -250,6 +271,22 @@ describe("useMapLayout", () => {
       expect(b.positions.get(id)).toEqual(p);
     }
     expect(b.tray.count).toBeLessThan(a.tray.count);
+  });
+
+  it("lays the graph out again around a new hub (a restarted engine), keeping the slot", () => {
+    const frame = fixtureSnapshots(shop()).at(-1)!;
+    const slot = { current: null };
+    const { result, rerender } = renderHook(
+      ({ s }: { s: ServiceMapSnapshot }) => useMapLayout(s, undefined, slot),
+      { initialProps: { s: frame } }
+    );
+    expect(result.current.state?.hub).toBe("api-gateway");
+    // The restarted run has no hub yet: the old layout stays meanwhile.
+    rerender({ s: { ...frame, seq: 2, hub: null } });
+    expect(result.current.state?.hub).toBe("api-gateway");
+    rerender({ s: { ...frame, seq: 3, hub: "checkout" } });
+    expect(result.current.state?.hub).toBe("checkout");
+    expect(result.current.positions.get("checkout")).toEqual({ x: 0, y: 0 });
   });
 
   it("with layoutFrames, gives the same layout as seeing every frame in turn", () => {
@@ -294,15 +331,11 @@ describe("edge and node style scales", () => {
     expect(off.strokeWidth).toBe(on.strokeWidth);
   });
 
-  it("node size uses fixed breakpoints; error cue thresholds are 1 % and 5 %", () => {
+  it("node size uses fixed breakpoints", () => {
     expect(nodeSize("service", 50)).toBe(16);
     expect(nodeSize("service", 5_000)).toBe(24);
     expect(nodeSize("service", 5_000_000)).toBe(36);
     expect(nodeSize("database", 0)).toBe(nodeSize("external", 1e6));
-    expect(errorLevel(0.009)).toBe("none");
-    expect(errorLevel(0.01)).toBe("warn");
-    expect(errorLevel(0.05)).toBe("high");
-    expect(errorLevel(Number.NaN)).toBe("none");
   });
 });
 

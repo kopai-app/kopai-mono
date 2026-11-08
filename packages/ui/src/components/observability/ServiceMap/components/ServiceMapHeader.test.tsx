@@ -67,6 +67,27 @@ describe("ServiceMapHeader", () => {
     );
   });
 
+  it("keeps what the scan does now in its own non-shrinking piece, so a narrow window truncates the details first", () => {
+    render(
+      <ServiceMapHeader
+        snapshot={snap({
+          coveredMin: 6,
+          scan: { state: "live", stopReason: "budget" },
+        })}
+      />
+    );
+    const state = screen.getByTestId("sm-scan-state");
+    expect(state.textContent).toBe(" · Live · 30 s delay");
+    expect(state.className).toContain("shrink-0");
+    // The details and the stop reason share the piece that truncates.
+    const details = state.previousElementSibling as HTMLElement;
+    expect(details.textContent).toBe(
+      " · past 60 min · built from 42,180 spans · covers 6 of 60 min · stopped: request budget reached"
+    );
+    expect(details.className).toContain("text-ellipsis");
+    expect(details.className).not.toContain("shrink-0");
+  });
+
   it("shows 'Live · 30 s delay' after full coverage, and 'behind by N s' when the poll lags", () => {
     const { rerender } = render(<ServiceMapHeader snapshot={snap()} />);
     expect(summary()).toBe(

@@ -80,7 +80,7 @@ export interface GraphSnapshot {
 
 export interface GraphState {
   /** Applies a (re)seed: registers nodes and virtual edges, replaces seed counts. */
-  applySeed(seed: ParsedSeed, nowMs: number): void;
+  applySeed(seed: ParsedSeed): void;
   /**
    * Registers every known service (from getServices) as a node up front, so
    * the map lists all services before spans work out how they connect. A
@@ -191,14 +191,13 @@ export function createGraphState(opts: GraphStateOptions = {}): GraphState {
     addServices(ids) {
       for (const id of ids) if (id) ensureNode(id, "service");
     },
-    applySeed(seed, nowMs) {
+    applySeed(seed) {
       const listed = new Set<string>();
       for (const s of seed.nodes) {
         const n = ensureNode(s.id, "service");
         if (!n) continue;
         n.seedSpans = s.spans;
         n.seedErrors = s.errors;
-        if (s.spans > 0) n.lastSeenMs = Math.max(n.lastSeenMs, nowMs);
         listed.add(s.id);
       }
       for (const v of seed.virtualNodes) {
@@ -234,7 +233,6 @@ export function createGraphState(opts: GraphStateOptions = {}): GraphState {
         } else {
           n.seedSpans = virtualCalls.get(n.id) ?? 0;
           n.seedErrors = virtualErrors.get(n.id) ?? 0;
-          if (n.seedSpans > 0) n.lastSeenMs = Math.max(n.lastSeenMs, nowMs);
         }
       }
     },

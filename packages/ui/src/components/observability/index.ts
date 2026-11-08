@@ -72,6 +72,18 @@ export type { DynamicDashboardProps } from "./DynamicDashboard/index.js";
 export { TraceComparison } from "./TraceComparison/index.js";
 export type { TraceComparisonProps } from "./TraceComparison/index.js";
 
+// Lazy: the map's engine, layout and worker load when it first renders.
+export {
+  ServiceMap,
+  ServiceMapSourceProvider,
+} from "./ServiceMap/ServiceMapLazy.js";
+export type {
+  ServiceMapProps,
+  ServiceMapClientLike,
+  ServiceMapSource,
+  ServiceMapSourceProviderProps,
+} from "./ServiceMap/ServiceMapLazy.js";
+
 // Types
 export type {
   SpanNode,

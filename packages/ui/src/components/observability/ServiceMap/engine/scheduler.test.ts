@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { OtelTracesRow } from "@kopai/sdk";
 import {
+  DEFAULT_CONFIG,
   DELAY_MS,
   M_MS,
   PROBE_RESERVE,
@@ -9,6 +10,7 @@ import {
 } from "./config.js";
 import { createServiceMapEngine, formatCoverage } from "./engine.js";
 import { edgeId } from "./graph-state.js";
+import { ScanRun } from "./scheduler.js";
 import { msToNs, nsMinusOne } from "./time.js";
 import {
   backwardSource,
@@ -21,6 +23,7 @@ import {
   pairRows,
   row,
   seedNodeRows,
+  seedPeerRow,
   serialGaps,
   type MockHandlers,
 } from "./test-utils.js";
@@ -571,6 +574,41 @@ describe("hub (R2-2)", () => {
     engine.stop();
   });
 
+  it("is chosen from the seed as soon as page 1 fails, when the seed connects anything", async () => {
+    const { engine, clock, mock } = setup({
+      seed: (w) =>
+        w === "nodes"
+          ? seedNodeRows({ a: 10, b: 50 })
+          : [seedPeerRow("a", 7, { "db.system.name": "postgresql" })],
+      fail: (call) => {
+        if (isBackward(call)) throw new Error("backend down");
+      },
+    });
+    engine.start();
+    await clock.runUntil(() => mock.calls.filter(isBackward).length >= 1);
+    await clock.advance(1000);
+    const s = engine.getSnapshot()!;
+    expect(s.scan.state).toBe("error");
+    // `a` is the only service the seed connects (to its database).
+    expect(s.hub).toBe("a");
+    expect(mock.calls.filter(isBackward)).toHaveLength(1);
+    engine.stop();
+  });
+
+  it("waits for page 1 when a failing scan has a seed that connects nothing", async () => {
+    const { engine, clock, mock } = setup({
+      seed: (w) => (w === "nodes" ? seedNodeRows({ a: 10, b: 50 }) : []),
+      fail: (call) => {
+        if (isBackward(call)) throw new Error("backend down");
+      },
+    });
+    engine.start();
+    await clock.runUntil(() => mock.calls.filter(isBackward).length >= 3);
+    await clock.advance(1000);
+    expect(engine.getSnapshot()?.hub).toBeNull();
+    engine.stop();
+  });
+
   it("is chosen after seed + page 1 and does not change when a busier connected service shows up", async () => {
     const pages = backwardSource({
       pages: 6,
@@ -600,5 +638,36 @@ describe("hub (R2-2)", () => {
     expect(edgeCalls(s, "c", "d")).toBeGreaterThan(0);
     expect(s?.hub).toBe("a");
     engine.stop();
+  });
+});
+
+describe("snapshots while paused", () => {
+  it("keep the time of the last running snapshot: counts never shrink while no data can arrive", async () => {
+    const clock = createFakeClock(START);
+    const mock = createMockClient(clock, {
+      seed: (w) => (w === "nodes" ? seedNodeRows({ a: 10, b: 5 }) : []),
+      backward: abPages(10),
+    });
+    const run = new ScanRun({
+      client: mock.client,
+      clock,
+      config: DEFAULT_CONFIG,
+      onChange: () => {},
+    });
+    void run.start();
+    await clock.runUntil(() => run.stats().phase === "live");
+    const before = run.snapshot(1);
+    expect(before.spansInWindow).toBeGreaterThan(0);
+    run.pause();
+    // Half the window later the oldest spans would have left it.
+    await clock.advance(M_MS / 2);
+    const paused = run.snapshot(2);
+    expect(paused.scan.state).toBe("paused");
+    expect(paused.spansInWindow).toBe(before.spansInWindow);
+    expect(paused.edges).toEqual(before.edges);
+    run.resume();
+    await clock.advance(1000);
+    expect(run.snapshot(3).spansInWindow).toBeLessThan(before.spansInWindow);
+    run.abort();
   });
 });

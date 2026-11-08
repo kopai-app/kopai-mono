@@ -2,6 +2,8 @@
 
 Status: plan, revised after review (see "Review notes" at the end) · 2026-11-06 · branch `service-map`
 
+> **As built (differs from the plan below; the code is authoritative):** the shared scan budget is `SCAN_MAX_REQUESTS = 50` with `PROBE_RESERVE = 15` (not 200 / 30). The seed starts with `getServices` (every known service is a node from the start), then the 2 aggregates, all counted. A session nobody shows is **paused** after the 1 s grace period (graph and layout kept) and **stopped** after M = 60 min unused; it is not terminated after the grace period. When page 1 of the backward scan fails, the hub is chosen from the seed if the seed connects anything. Other user-requested changes are listed in the changeset.
+
 The plan builds the Service Map MVP. The map is built step by step in the browser from trace pages and uses **only existing `@kopai/sdk` `KopaiClient` methods**. There is no new endpoint and no new SDK method.
 
 ## Sources
@@ -58,7 +60,7 @@ These fill gaps that §0 leaves open. Each is the smallest choice that stays con
 - **PD-5 Edge cap 2500** (≈0.9 MB of buckets: 61 minutes × (Uint32 calls + Uint16 errors) per edge, about 366 B). Overflow counts as `edgesDropped`, and the header says the map is incomplete. Nodes use `lastSeenMs`, not buckets.
 - **PD-6 Engine location.** The engine lives in `packages/ui` (not `@kopai/core`), because only the map uses it and the worker bundles it from there. It has no React or DOM imports, so it can move later.
 - **PD-7 Client prop.** `ObservabilityPage` keeps `client?: KopaiClient`. A `KopaiClient`'s base URL and headers are private and cannot be passed to a worker. So when a **custom** client is passed in, the engine runs in-process on the main thread with that client (same engine, same snapshots) unless the new optional prop `serviceMapWorker={{ baseUrl, headers?, token? }}` is given. With the default client (the Kopai app), the worker is used. **Session keys:** in-process sessions are keyed by the client **instance** (`WeakMap<ServiceMapClient, Session>`), because a custom client's base URL is private and two different clients may share one. Worker sessions are keyed by `absoluteBaseUrl + "\n" + stable JSON of {headers, token}`, so two views with the same server and the same auth share one worker, and different auth never shares.
-- **PD-8 Probe reserve.** Without a reserve, a large dataset spends the whole budget on backward pages and the probes (R2-5) never run, which is exactly when they matter. So the backward phase stops when `remaining ≤ PROBE_RESERVE = 30` requests (enough for 10 probed services), with `stopReason: "budget"`. Unused reserve is simply not spent. Seed (2) + backward + interleaved forward + probes is still ≤ 200 in total.
+- **PD-8 Probe reserve.** Without a reserve, a large dataset spends the whole budget on backward pages and the probes (R2-5) never run, which is exactly when they matter. So the backward phase stops when `remaining ≤ PROBE_RESERVE = 15` requests (enough for 5 probed services), with `stopReason: "budget"`. Unused reserve is simply not spent. Seed (getServices + 2 aggregates) + backward + interleaved forward + probes is still ≤ `SCAN_MAX_REQUESTS = 50` in total. (Planned as 30 of 200; changed at the user's request.)
 - **PD-9 Virtual targets per source.** R1-D3a's high-cardinality rule applies to the seed: per source service, the top **20** virtual targets by calls keep their own node; the rest are folded into one `ext:<src>/other` node (calls and errors summed). This keeps IP or pod-name `server.address` values from using up `EDGE_CAP`. A target that drops out of a source's top 20 at a seed refresh keeps its existing node (nodes never disappear, R2-3); it just stops getting traffic and dims.
 
 ---
@@ -71,10 +73,10 @@ Everything lives under `packages/ui/src/components/observability/ServiceMap/`. D
 ServiceMap/
   engine/            PURE. No React, no DOM, no Worker. Injectable clock + client.
     config.ts          constants (M_MS=3_600_000, DELAY_MS=30_000, POLL_MS=10_000,
-                       PAGE_LIMIT=1000, GAP_MS=100, SCAN_MAX_REQUESTS=200, H_MS=120_000,
+                       PAGE_LIMIT=1000, GAP_MS=100, SCAN_MAX_REQUESTS=50, H_MS=120_000,
                        SKEW_MS=5_000, JOIN_CAP=50_000, NODE_CAP=2000, EDGE_CAP=2500,
                        SNAPSHOT_MS=750, SEED_REFRESH_MS=300_000, PROBE_MAX_SERVICES=50,
-                       PROBE_RESERVE=30, FWD_MAX_PAGES=20, VIRTUAL_PER_SOURCE=20)
+                       PROBE_RESERVE=15, FWD_MAX_PAGES=20, VIRTUAL_PER_SOURCE=20)
     types.ts           SpanTuple, SeedNode, SeedEdge, ServiceMapSnapshot, Diagnostics,
                        ScanState, ServiceMapClient = Pick<KopaiClient,
                        "searchTracesPage" | "queryTracesAggregate" | "getTrace">,
@@ -291,7 +293,7 @@ interface ServiceMapSnapshot {
 **Sharing (R2-7):**
 
 - `session-manager.ts` keeps a module-level `Map<workerKey, Session>` for worker sessions, where `workerKey = absoluteBaseUrl + "\n" + stableJson({headers, token})`, and a `WeakMap<ServiceMapClient, Session>` for in-process sessions keyed by the client instance (PD-7). Each has a refcount, so every view in a tab with the same key shares one engine.
-- When the refcount reaches 0, it terminates after a 1 s grace period. This means a React StrictMode double mount never starts two loops (PR P20).
+- When the refcount reaches 0, the session is **paused** after a 1 s grace period: the graph stays in the engine and the layout in the session, so returning to the tab shows the map at once and the scan continues. A session nobody comes back to within M (60 min) is stopped. The grace period means a React StrictMode double mount never starts two loops (PR P20).
 - `visibilitychange` → `pause` / `resume`. When hidden for longer than M → `restart` (A8).
 
 ---
@@ -510,14 +512,14 @@ Constraints for every unit:
    - `acquire({baseUrl, headers?, token?, client?})` → `{subscribe, getSnapshot, retry, release}`;
    - the transport is a Worker when the default client is used, `Worker` exists, and `createServiceMapWorker()` succeeds; otherwise it is in-process;
    - session keys per PD-7: worker sessions in a `Map` keyed by absolute `baseUrl` + stable JSON of `{headers, token}`; in-process sessions in a `WeakMap<ServiceMapClient, Session>` keyed by the client instance;
-   - refcount with a 1 s release grace period;
+   - refcount with a 1 s release grace period, then paused; stopped after M unused;
    - `visibilitychange` handling;
    - a test-only `__resetSessionsForTests()` that stops every live session and clears timers.
 6. `use-service-map.ts`: `useSyncExternalStore` over the session. It is StrictMode-safe.
 
 **Acceptance:**
 
-- Two `acquire` calls with the same key → one engine (one transport) and the same snapshots. Release both → terminated after the grace period. Acquire, release, then acquire again within 1 s (StrictMode) → still one engine and no second scan.
+- Two `acquire` calls with the same key → one engine (one transport) and the same snapshots. Release both → paused after the grace period, stopped after M unused. Acquire, release, then acquire again within 1 s (StrictMode) → still one engine and no second scan.
 - Keying: two different custom client instances with the same (private) base URL → two in-process sessions; the same instance twice → one. Two worker acquires with the same `baseUrl` but different `token` → two sessions; same `baseUrl` given once relative (`/`) and once absolute → one.
 - `document.hidden = true` → `pause` is sent. Visible again → `resume`. Hidden for longer than M → `restart`.
 - The worker shell handler, tested with a fake scope: `init` builds the client with an absolute `baseUrl`, and snapshots are relayed.

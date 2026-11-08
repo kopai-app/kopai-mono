@@ -28,6 +28,22 @@ function shopItems(): { items: FindItem[]; trayIds: Set<string> } {
 }
 
 describe("FindBox", () => {
+  it("lists full names (CSS truncates them) and turns spellcheck off", () => {
+    const long = "payments-reconciliation-worker";
+    const items: FindItem[] = [
+      { id: long, label: long, kind: "service", x: 0, y: 0, inTray: false },
+    ];
+    render(<FindBox items={items} onFind={() => {}} width={200} />);
+    const input = screen.getByRole("combobox", { name: "Find a service" });
+    expect(input.getAttribute("spellcheck")).toBe("false");
+    fireEvent.change(input, { target: { value: "recon" } });
+    const option = screen.getByRole("option");
+    expect(option.textContent).toBe(`${long}service`);
+    expect((input.closest(".sm-find") as HTMLElement).style.width).toBe(
+      "200px"
+    );
+  });
+
   it("finds a tray node by substring and centres on its tray position", () => {
     const { items, trayIds } = shopItems();
     expect(trayIds.has("checkout")).toBe(true);

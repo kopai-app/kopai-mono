@@ -3,9 +3,10 @@
  *
  * Shape by kind (circle = service, rounded square = database, diamond =
  * queue, dashed circle = external), size from fixed log breakpoints of the
- * span count, a ring on the hub, an error cue that is a glyph as well as a
- * colour, dimmed when it had no traffic in the past 60 min, and a label that
- * hides below the level-of-detail zoom unless the node is hovered or found.
+ * span count, a ring on the hub, the service's own colour (the one it has in
+ * the traces and logs views), dimmed when it had no traffic in the past
+ * 60 min, and a label that hides below the level-of-detail zoom unless the
+ * node is hovered or found. The map shows no error cue on nodes.
  *
  * The node box is exactly the shape; the label hangs below it absolutely, so
  * React Flow measures the shape only and edges attach to it.
@@ -26,7 +27,6 @@ import {
   DIM_OPACITY,
   VIRTUAL_FILL,
   VIRTUAL_STROKE,
-  errorLevel,
   nodeSize,
 } from "./edge-style.js";
 
@@ -114,11 +114,9 @@ function Shape({
 function ServiceNodeImpl({ data }: NodeProps<ServiceFlowNode>) {
   const zoomLabels = useStore(selectLabelsVisible);
   const size = nodeSize(data.kind, data.spans);
-  const err = errorLevel(data.errorRate);
   const isService = data.kind === "service";
   // A service keeps the colour it has in the traces and logs views: filled
   // with getServiceColor, rimmed and labelled with the lighter label colour.
-  // Errors are shown by the "!" badge only, so they never hide that colour.
   const stroke = isService ? getServiceLabelColor(data.label) : VIRTUAL_STROKE;
   const fill = isService ? getServiceColor(data.label) : VIRTUAL_FILL;
   const strokeWidth = data.hub ? 2.6 : 1.6;
@@ -130,7 +128,6 @@ function ServiceNodeImpl({ data }: NodeProps<ServiceFlowNode>) {
     data.found ? "sm-found" : "",
     data.active ? "" : "sm-dim",
     data.clickable ? "cursor-pointer" : "",
-    err !== "none" ? `sm-err-${err}` : "",
   ]
     .filter(Boolean)
     .join(" ");

@@ -5,8 +5,6 @@ import {
   useCallback,
   useSyncExternalStore,
   useRef,
-  lazy,
-  Suspense,
 } from "react";
 import {
   KopaiSDKProvider,
@@ -30,8 +28,11 @@ import {
   KeyboardShortcutsProvider,
   useRegisterShortcuts,
   DynamicDashboard,
+  ServiceMap,
+  ServiceMapSourceProvider,
   filtersKey,
 } from "../components/observability/index.js";
+import type { ServiceMapSource } from "../components/observability/index.js";
 import type { UITree } from "../components/observability/DynamicDashboard/index.js";
 import type {
   TraceSummary,
@@ -985,14 +986,6 @@ function MetricsTab() {
 // Service map tab
 // ---------------------------------------------------------------------------
 
-/**
- * Loaded on demand: the engine, layout, React Flow and the inline worker
- * stay out of the page's main chunk until the tab is opened.
- */
-const ServiceMap = lazy(
-  () => import("../components/observability/ServiceMap/index.js")
-);
-
 /** Where the Service Map worker sends its requests (PD-7). */
 export interface ServiceMapWorkerOptions {
   /** Kopai server URL; a relative URL is resolved against the page. */
@@ -1006,40 +999,40 @@ function openServiceTraces(service: string) {
   pushURLState({ tab: "services", service });
 }
 
-function ServiceMapTab({
-  client,
-  worker,
-}: {
-  /** A custom client: the engine runs in-process with it. */
-  client?: KopaiClient;
-  worker?: ServiceMapWorkerOptions;
-}) {
-  // A custom client's base URL and headers are private, so it cannot be
-  // handed to a worker: run in-process with it unless the host says where
-  // the worker should connect. The default client is the page's own origin.
-  const options = worker
-    ? {
-        baseUrl: worker.baseUrl,
-        headers: worker.headers,
-        token: worker.token,
-      }
-    : client
-      ? { client }
-      : { baseUrl: "" };
+/**
+ * Where every Service Map on the page reads from: the tab and the dashboard
+ * tiles share it, so they share one session (and the worker).
+ *
+ * A custom client's base URL and headers are private, so it cannot be
+ * handed to a worker: run in-process with it unless the host says where
+ * the worker should connect. The default client is the page's own origin.
+ */
+function useServiceMapSource(
+  client: KopaiClient | undefined,
+  worker: ServiceMapWorkerOptions | undefined
+): ServiceMapSource {
+  const baseUrl = worker?.baseUrl;
+  const token = worker?.token;
+  const headersKey = worker?.headers ? JSON.stringify(worker.headers) : "";
+  return useMemo<ServiceMapSource>(() => {
+    if (baseUrl !== undefined) {
+      return {
+        baseUrl,
+        headers: headersKey
+          ? (JSON.parse(headersKey) as Record<string, string>)
+          : undefined,
+        token,
+      };
+    }
+    return client ? { client } : { baseUrl: "" };
+  }, [client, baseUrl, token, headersKey]);
+}
+
+function ServiceMapTab({ source }: { source: ServiceMapSource }) {
+  // The source is always explicit, so the page's KopaiSDKProvider client
+  // (the map's default inside a provider) is never used here.
   return (
-    <Suspense
-      fallback={
-        <p className="text-muted-foreground text-sm" role="status">
-          Loading service map…
-        </p>
-      }
-    >
-      <ServiceMap
-        {...options}
-        height="fill"
-        onServiceClick={openServiceTraces}
-      />
-    </Suspense>
+    <ServiceMap {...source} height="fill" onServiceClick={openServiceTraces} />
   );
 }
 
@@ -1067,6 +1060,7 @@ export default function ObservabilityPage({
   serviceMapWorker,
 }: ObservabilityPageProps) {
   const activeClient = client ?? getDefaultClient();
+  const mapSource = useServiceMapSource(client, serviceMapWorker);
   const {
     tab: activeTab,
     trace: selectedTraceId,
@@ -1123,37 +1117,39 @@ export default function ObservabilityPage({
 
   return (
     <KopaiSDKProvider client={activeClient}>
-      <KeyboardShortcutsProvider
-        onNavigateServices={() => pushURLState({ tab: "services" })}
-        onNavigateLogs={() => pushURLState({ tab: "logs" })}
-        onNavigateMetrics={() => pushURLState({ tab: "metrics" })}
-        onNavigateServiceMap={() => pushURLState({ tab: "service-map" })}
-      >
-        <div>
-          <TabBar
-            tabs={TABS}
-            active={activeTab}
-            onChange={handleTabChange as (key: string) => void}
-          />
-          {activeTab === "logs" && <LogsTab />}
-          {activeTab === "services" && (
-            <ServicesTab
-              selectedTraceId={selectedTraceId}
-              selectedSpanId={selectedSpanId}
-              compareParam={compareParam}
-              onSelectTrace={handleSelectTrace}
-              onSelectSpan={handleSelectSpan}
-              onDeselectSpan={handleDeselectSpan}
-              onBack={handleBack}
-              onCompare={handleCompare}
+      <ServiceMapSourceProvider source={mapSource}>
+        <KeyboardShortcutsProvider
+          onNavigateServices={() => pushURLState({ tab: "services" })}
+          onNavigateLogs={() => pushURLState({ tab: "logs" })}
+          onNavigateMetrics={() => pushURLState({ tab: "metrics" })}
+          onNavigateServiceMap={() => pushURLState({ tab: "service-map" })}
+        >
+          <div>
+            <TabBar
+              tabs={TABS}
+              active={activeTab}
+              onChange={handleTabChange as (key: string) => void}
             />
-          )}
-          {activeTab === "metrics" && <MetricsTab />}
-          {activeTab === "service-map" && (
-            <ServiceMapTab client={client} worker={serviceMapWorker} />
-          )}
-        </div>
-      </KeyboardShortcutsProvider>
+            {activeTab === "logs" && <LogsTab />}
+            {activeTab === "services" && (
+              <ServicesTab
+                selectedTraceId={selectedTraceId}
+                selectedSpanId={selectedSpanId}
+                compareParam={compareParam}
+                onSelectTrace={handleSelectTrace}
+                onSelectSpan={handleSelectSpan}
+                onDeselectSpan={handleDeselectSpan}
+                onBack={handleBack}
+                onCompare={handleCompare}
+              />
+            )}
+            {activeTab === "metrics" && <MetricsTab />}
+            {activeTab === "service-map" && (
+              <ServiceMapTab source={mapSource} />
+            )}
+          </div>
+        </KeyboardShortcutsProvider>
+      </ServiceMapSourceProvider>
     </KopaiSDKProvider>
   );
 }

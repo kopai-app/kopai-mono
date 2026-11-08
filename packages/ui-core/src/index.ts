@@ -20,6 +20,7 @@ export {
 export {
   KopaiSDKProvider,
   useKopaiSDK,
+  useOptionalKopaiSDK,
   queryClient,
   type KopaiClient,
 } from "./providers/kopai-provider.js";

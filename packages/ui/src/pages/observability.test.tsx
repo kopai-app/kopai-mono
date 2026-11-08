@@ -26,6 +26,7 @@ import type { KopaiClient } from "@kopai/sdk";
 import { installReactFlowJsdom } from "../components/observability/ServiceMap/test-utils/react-flow-jsdom.js";
 import {
   __resetSessionsForTests,
+  RELEASE_GRACE_MS,
   peekSnapshot,
 } from "../components/observability/ServiceMap/session/session-manager.js";
 import {
@@ -634,7 +635,7 @@ describe("service map tab", () => {
     expect(mockClient.searchTraceSummariesPage).not.toHaveBeenCalled();
   });
 
-  it("stops the engine on unmount: no session survives and no request follows", async () => {
+  it("pauses the session on unmount: the graph is kept and no request follows", async () => {
     scriptMapData(mockClient);
     setURL("?tab=service-map");
     const client = mockClient as unknown as KopaiClient;
@@ -643,18 +644,27 @@ describe("service map tab", () => {
       () => expect(mockClient.searchTracesPage).toHaveBeenCalled(),
       { timeout: 4000 }
     );
-    expect(peekSnapshot({ client })).not.toBeNull();
+    const built = peekSnapshot({ client });
+    expect(built).not.toBeNull();
 
     unmount();
-    __resetSessionsForTests();
-    expect(peekSnapshot({ client })).toBeNull();
+    // After the release grace period the session pauses but survives, so
+    // coming back to the tab shows the same graph at once.
+    await waitFor(
+      () => expect(peekSnapshot({ client })?.scan.state).toBe("paused"),
+      { timeout: RELEASE_GRACE_MS + 3000 }
+    );
+    expect(peekSnapshot({ client })?.nodes.length).toBeGreaterThanOrEqual(
+      built!.nodes.length
+    );
 
     const calls = () =>
+      mockClient.getServices.mock.calls.length +
       mockClient.searchTracesPage.mock.calls.length +
       mockClient.queryTracesAggregate.mock.calls.length +
       mockClient.getTrace.mock.calls.length;
     const before = calls();
-    // Longer than the request gap and the 1 s backoff: nothing is scheduled.
+    // Longer than the request gap and the 1 s backoff: nothing is sent.
     await new Promise((r) => setTimeout(r, 1200));
     expect(calls()).toBe(before);
   });
@@ -743,5 +753,59 @@ describe("service map tab", () => {
     expect(new Headers(init.headers).get("x-tenant")).toBe("a");
     expect(mockClient.queryTracesAggregate).not.toHaveBeenCalled();
     expect(mockClient.searchTracesPage).not.toHaveBeenCalled();
+  });
+
+  it("a ServiceMap dashboard tile reads from the page's map source (the worker), not the dashboard client", async () => {
+    const fetchMock = vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            String(url).endsWith("/signals/services")
+              ? { services: [] }
+              : { data: [] }
+          ),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }
+        )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    mockClient.getDashboard.mockResolvedValueOnce({
+      uiTree: {
+        root: "root",
+        elements: {
+          root: {
+            key: "root",
+            type: "Stack",
+            children: ["map"],
+            parentKey: "",
+            props: { direction: "vertical", gap: "md", align: null },
+          },
+          map: {
+            key: "map",
+            type: "ServiceMap",
+            children: [],
+            parentKey: "root",
+            props: { height: 300 },
+          },
+        },
+      },
+    });
+    setURL("?tab=metrics&dashboardId=map");
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+        serviceMapWorker: { baseUrl: "http://kopai.example" },
+      })
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled(), {
+      timeout: 4000,
+    });
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      "http://kopai.example/signals/services"
+    );
+    expect(mockClient.getServices).not.toHaveBeenCalled();
+    expect(mockClient.queryTracesAggregate).not.toHaveBeenCalled();
   });
 });

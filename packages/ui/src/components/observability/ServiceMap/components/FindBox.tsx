@@ -6,7 +6,6 @@
  */
 import { useId, useMemo, useState, type KeyboardEvent } from "react";
 import type { NodeKind } from "../engine/types.js";
-import { truncateName } from "../layout/viewport.js";
 
 export interface FindItem {
   id: string;
@@ -23,6 +22,8 @@ export interface FindBoxProps {
   /** Called when the query is cleared. */
   onClear?(): void;
   maxResults?: number;
+  /** Width in px (default 256). */
+  width?: number;
 }
 
 const KIND_LABEL: Record<NodeKind, string> = {
@@ -65,6 +66,7 @@ export function FindBox({
   onFind,
   onClear,
   maxResults = 8,
+  width,
 }: FindBoxProps) {
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -103,7 +105,14 @@ export function FindBox({
   };
 
   return (
-    <div className="sm-find relative w-64 max-w-full">
+    <div
+      className={
+        width === undefined
+          ? "sm-find relative w-64 max-w-full"
+          : "sm-find relative max-w-full"
+      }
+      style={width === undefined ? undefined : { width }}
+    >
       <input
         type="search"
         name="service-map-find"
@@ -117,6 +126,7 @@ export function FindBox({
         }
         placeholder={`Find a service (${items.length.toLocaleString("en-US")})`}
         autoComplete="off"
+        spellCheck={false}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -155,8 +165,8 @@ export function FindBox({
                   i === current ? "bg-muted text-foreground" : "text-foreground"
                 }`}
               >
-                <span className="truncate font-mono text-xs">
-                  {truncateName(m.label)}
+                <span className="min-w-0 truncate font-mono text-xs">
+                  {m.label}
                 </span>
                 <span className="shrink-0 text-[10px] text-muted-foreground">
                   {KIND_LABEL[m.kind]}

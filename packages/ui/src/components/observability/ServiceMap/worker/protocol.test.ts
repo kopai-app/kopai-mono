@@ -142,6 +142,18 @@ describe("worker shell handleMessage", () => {
     expect(snapshots().length).toBe(stoppedSnaps);
   });
 
+  it("an init with paused: true starts the engine paused: no request until resume", async () => {
+    const calls = stubFetch();
+    const { scope } = init({ baseUrl: "http://kopai.test", paused: true });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(calls).toHaveLength(0);
+    handleMessage(scope, { type: "resume" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls.map((c) => c.url)).toContain(
+      "http://kopai.test/signals/services"
+    );
+  });
+
   it("a second init on the same scope is ignored (one engine per worker)", async () => {
     const calls = stubFetch();
     const { scope, snapshots } = init({ baseUrl: "http://kopai.test" });

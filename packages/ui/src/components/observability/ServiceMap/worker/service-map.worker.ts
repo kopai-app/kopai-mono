@@ -38,6 +38,7 @@ export function handleMessage(scope: WorkerScope, msg: unknown): void {
     });
     engines.set(scope, engine);
     console.debug(`[${MARKER}] started`);
+    if (msg.paused === true) engine.pause();
     engine.start();
   } catch (e) {
     scope.postMessage({

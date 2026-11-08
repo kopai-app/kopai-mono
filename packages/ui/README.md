@@ -16,6 +16,9 @@ React component library for rendering LLM-generated UI trees. Define typed compo
 | `uiPlugin`                   | function  | Fastify plugin for serving UI                           |
 | `KopaiSDKProvider`           | component | React context provider for SDK                          |
 | `useKopaiSDK`                | hook      | Access SDK client in components                         |
+| `useOptionalKopaiSDK`        | hook      | SDK client, or `null` outside `KopaiSDKProvider`        |
+| `ServiceMap`                 | component | Live service map (lazy-loaded, fetches its own data)    |
+| `ServiceMapSourceProvider`   | component | Default data source for every `ServiceMap` below it     |
 
 ## Example
 
@@ -99,6 +102,40 @@ function App() {
   return <MyRenderer tree={tree} />;
 }
 ```
+
+## Service Map
+
+`ServiceMap` shows which services call each other in the past 60 minutes, plus the databases, queues and external APIs they use. It builds itself from trace pages and stays up to date. Its code (engine, layout, React Flow view, Web Worker) is loaded the first time a map renders. Import `@kopai/ui/globals.css` for its styles.
+
+```tsx
+import { ServiceMap, KopaiSDKProvider } from "@kopai/ui";
+
+// Inside a KopaiSDKProvider: reads with the provider's client.
+<KopaiSDKProvider client={client}>
+  <ServiceMap height={480} onServiceClick={(name) => openTraces(name)} />
+</KopaiSDKProvider>;
+
+// Anywhere else: a Web Worker reads from this server.
+<ServiceMap baseUrl="https://kopai.example.com" token={token} />;
+```
+
+Props: `client` (read in-process with this client), `baseUrl` / `headers` / `token` (read from a Web Worker), `height` (canvas height, default 640 px, or `"fill"` to fill the window), `onServiceClick`, `fallback`. Without `client` or `baseUrl` / `headers` / `token`, it uses the nearest `ServiceMapSourceProvider` source, then the `KopaiSDKProvider` client if there is one, else a worker on the page's origin. Maps with the same source share one scan.
+
+A client cannot cross to a worker, so a map that reads with a client (for example a dashboard tile, which gets the dashboard's client) runs the scan on the main thread. Wrap the dashboard in a `ServiceMapSourceProvider` to send its maps to the worker instead; `ObservabilityPage` does this, so its dashboard tiles share the Service map tab's worker session:
+
+```tsx
+<ServiceMapSourceProvider
+  source={{ baseUrl: "https://kopai.example.com", token }}
+>
+  <DynamicDashboard kopaiClient={client} uiTree={tree} />
+</ServiceMapSourceProvider>
+```
+
+In dashboards, add a `ServiceMap` element (`props: { height: number | null }`, no `dataSource`).
+
+The canvas follows the host's theme: a `.dark` / `.light` class on an ancestor, else `prefers-color-scheme`.
+
+The worker is inlined into the lazy chunk as a string, with its own copies of `@kopai/sdk`, `@kopai/core` and `zod` (a Blob worker cannot import the host's modules). That adds about 200 KB to each of the ESM and CJS builds, downloaded only when a map first renders, and an SDK fix reaches the worker only through a new `@kopai/ui` build.
 
 ## AI Dashboard Generation
 

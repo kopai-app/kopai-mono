@@ -17,32 +17,42 @@ const STOP_TEXT: Record<StopReason, string | null> = {
   error: "stopped: error",
 };
 
-/** The scan-state part of the summary line, or null when there is none. */
-export function scanStatusText(s: ServiceMapSnapshot): string | null {
+/**
+ * The scan-state part of the summary line in two pieces: why the scan
+ * stopped (if it did and the run is past the scan) and what it does now.
+ */
+export function scanStatusParts(s: ServiceMapSnapshot): {
+  stop: string | null;
+  now: string | null;
+} {
   const { state, stopReason, behindMs } = s.scan;
+  const stop = stopReason ? STOP_TEXT[stopReason] : null;
   switch (state) {
     case "idle":
     case "seeding":
-      return "Looking for spans…";
+      return { stop: null, now: "Looking for spans…" };
     case "scanning":
-      return "scanning older…";
+      return { stop: null, now: "scanning older…" };
     case "probing":
-      return joinParts([
-        stopReason ? STOP_TEXT[stopReason] : null,
-        "checking unconnected services…",
-      ]);
+      return { stop, now: "checking unconnected services…" };
     case "live": {
       const live =
         behindMs > 0
           ? `Live · behind by ${n(Math.max(1, Math.round(behindMs / 1000)))} s`
           : `Live · ${Math.round(DELAY_MS / 1000)} s delay`;
-      return joinParts([stopReason ? STOP_TEXT[stopReason] : null, live]);
+      return { stop, now: live };
     }
     case "paused":
-      return "paused while the tab is hidden";
+      return { stop: null, now: "paused while the tab is hidden" };
     case "error":
-      return null;
+      return { stop: null, now: null };
   }
+}
+
+/** The scan-state part of the summary line, or null when there is none. */
+export function scanStatusText(s: ServiceMapSnapshot): string | null {
+  const { stop, now } = scanStatusParts(s);
+  return joinParts([stop, now]) || null;
 }
 
 /** "312 calls could not be attributed · 18 duplicate spans skipped · …" */
@@ -71,16 +81,19 @@ export function incompleteText(s: ServiceMapSnapshot): string[] {
   return out;
 }
 
-/** "Service map · past 60 min · built from 42,180 spans · covers 6 of 60 min · scanning older…" */
-export function summaryText(s: ServiceMapSnapshot): string {
+/** "past 60 min · built from 42,180 spans · covers 6 of 60 min" */
+function detailsText(s: ServiceMapSnapshot): string {
   const minutes = Math.round(s.coverage.windowMs / 60_000);
   return joinParts([
-    "Service map",
     `past ${minutes} min`,
     `built from ${n(s.spansInWindow)} spans`,
     formatCoverage(s),
-    scanStatusText(s),
   ]);
+}
+
+/** "Service map · past 60 min · built from 42,180 spans · covers 6 of 60 min · scanning older…" */
+export function summaryText(s: ServiceMapSnapshot): string {
+  return joinParts(["Service map", detailsText(s), scanStatusText(s)]);
 }
 
 function joinParts(parts: (string | null)[]): string {
@@ -104,6 +117,8 @@ const HEADER =
 const ROW =
   "flex h-5 min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap";
 const CLIP = "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap";
+/** A summary piece that starts with " · ": `pre` keeps that leading space. */
+const PIECE = "min-w-0 overflow-hidden text-ellipsis whitespace-pre";
 
 function LiveDot({ live }: { live: boolean }) {
   return (
@@ -137,6 +152,7 @@ export function ServiceMapHeader({
   const showError = snapshot.scan.state === "error" || snapshot.error !== null;
   const live = snapshot.scan.state === "live";
   const summary = summaryText(snapshot);
+  const status = scanStatusParts(snapshot);
 
   let second;
   if (showError) {
@@ -208,9 +224,20 @@ export function ServiceMapHeader({
         title={summary}
       >
         <LiveDot live={live} />
-        <span data-testid="sm-summary" className={CLIP}>
-          <span className="font-semibold text-foreground">Service map</span>
-          {summary.slice("Service map".length)}
+        {/* On a narrow window the details (then the stop reason) truncate
+            first: what the scan does now ("Live · 30 s delay") stays. */}
+        <span data-testid="sm-summary" className="flex min-w-0">
+          <span className="shrink-0 font-semibold text-foreground">
+            Service map
+          </span>
+          <span className={PIECE}>
+            {` · ${joinParts([detailsText(snapshot), status.stop])}`}
+          </span>
+          {status.now && (
+            <span data-testid="sm-scan-state" className={`${PIECE} shrink-0`}>
+              {` · ${status.now}`}
+            </span>
+          )}
         </span>
       </p>
       {second}

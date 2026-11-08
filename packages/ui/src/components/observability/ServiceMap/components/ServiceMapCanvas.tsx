@@ -6,7 +6,11 @@
  * - The initial viewport (`initialViewport`: fit ≤ 100 %, or centred on the
  *   hub when the fit would be < 0.4) is applied once, when the map first has
  *   something to show. After that only the Fit button and Find move the view
- *   (PR P16), so the map never jumps under the user.
+ *   (PR P16), so the map never jumps under the user. One exception: when the
+ *   canvas changes size (window resize) and the user has not panned or zoomed
+ *   since the initial view or the last Fit, that view is applied again for
+ *   the new size, so a map opened in a small window grows with it.
+ * - The Find box narrows on a narrow canvas so it never covers the buttons.
  * - A Q19 block shift moves already-placed nodes; that change is tweened over
  *   300 ms with requestAnimationFrame, and applied at once under
  *   `prefers-reduced-motion`.
@@ -15,6 +19,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -76,6 +81,19 @@ export function prefersReducedMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Room kept beside the Find box for the zoom/Fit buttons and panel margins. */
+const FIND_RESERVE = 150;
+const FIND_MAX_WIDTH = 256;
+const FIND_MIN_WIDTH = 120;
+
+/** Find box width for a canvas this wide: 256 px, less on a narrow canvas. */
+export function findBoxWidth(canvasWidth: number): number {
+  return Math.max(
+    FIND_MIN_WIDTH,
+    Math.min(FIND_MAX_WIDTH, Math.floor(canvasWidth - FIND_RESERVE))
+  );
 }
 
 /** Every rendered node position: map nodes and tray nodes. */
@@ -173,6 +191,35 @@ export function useTweenedPositions(
   return shown;
 }
 
+export type MapColorMode = "dark" | "light";
+
+/**
+ * The theme the map sits in: a `.dark` / `.light` class on an ancestor (the
+ * shadcn convention the Kopai app uses) wins, else the OS preference.
+ */
+export function detectColorMode(el: Element | null): MapColorMode {
+  const themed = el?.closest(".dark, .light");
+  if (themed) return themed.classList.contains("dark") ? "dark" : "light";
+  try {
+    if (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    ) {
+      return "dark";
+    }
+  } catch {
+    // no media queries: light
+  }
+  return "light";
+}
+
+/** Background dot colour per theme (a faint grid on the canvas). */
+export const DOT_COLOR: Record<MapColorMode, string> = {
+  dark: "hsl(0 0% 18%)",
+  light: "hsl(0 0% 82%)",
+};
+
 function measure(el: HTMLElement | null): Size {
   return {
     width: el?.offsetWidth || el?.clientWidth || 800,
@@ -187,7 +234,15 @@ function CanvasInner({
   onServiceClick,
 }: ServiceMapCanvasProps) {
   const rf = useReactFlow<FlowNode, Edge>();
+  // React Flow builds its marker, pattern and aria ids from the flow id
+  // (default "1"); a unique one keeps several maps on a page apart.
+  const flowId = `sm-${useId().replace(/[^\w-]/g, "")}`;
   const boxRef = useRef<HTMLDivElement>(null);
+  // Dark until measured (the Kopai app is dark), then the host's theme.
+  const [colorMode, setColorMode] = useState<MapColorMode>("dark");
+  useLayoutEffect(() => {
+    setColorMode(detectColorMode(boxRef.current));
+  }, []);
   const [ready, setReady] = useState(false);
   const [minZoom, setMinZoom] = useState(MIN_ZOOM_FLOOR);
   const [foundId, setFoundId] = useState<string | null>(null);
@@ -195,21 +250,59 @@ function CanvasInner({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const focusId = hoverId ?? foundId;
   const appliedRef = useRef(false);
+  /**
+   * Which view follows a resize: the initial view or the last Fit, until the
+   * user pans or zooms (then null: the view stays where the user put it).
+   */
+  const autoViewRef = useRef<"initial" | "fit" | null>("initial");
+  const [size, setSize] = useState<Size | null>(null);
 
   const target = useMemo(() => allPositions(layout), [layout]);
   const shown = useTweenedPositions(target);
   const hubPos = snapshot.hub ? (target.get(snapshot.hub) ?? null) : null;
   const trayIds = useMemo(() => new Set(layout.tray.ids), [layout]);
 
+  // Canvas size, kept up to date (window resize, a dashboard's grid).
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver !== "function") return;
+    const ro = new ResizeObserver(() => {
+      const next = measure(el);
+      setSize((prev) =>
+        prev && prev.width === next.width && prev.height === next.height
+          ? prev
+          : next
+      );
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Initial viewport, applied once (and the zoom floor, kept up to date).
+  // After a resize, the automatic view (initial or Fit) is applied again for
+  // the new size while the user has not moved the view.
+  const appliedSizeRef = useRef<Size | null>(null);
   useEffect(() => {
     if (!ready || !layout.bounds) return;
-    const iv = initialViewport(layout.bounds, measure(boxRef.current), hubPos);
+    const box = size ?? measure(boxRef.current);
+    const iv = initialViewport(layout.bounds, box, hubPos);
     setMinZoom(iv.minZoom);
-    if (appliedRef.current) return;
-    appliedRef.current = true;
-    void rf.setViewport({ x: iv.x, y: iv.y, zoom: iv.zoom });
-  }, [ready, layout.bounds, hubPos, rf]);
+    if (!appliedRef.current) {
+      appliedRef.current = true;
+      appliedSizeRef.current = box;
+      void rf.setViewport({ x: iv.x, y: iv.y, zoom: iv.zoom });
+      return;
+    }
+    const last = appliedSizeRef.current;
+    if (last && last.width === box.width && last.height === box.height) return;
+    appliedSizeRef.current = box;
+    const auto = autoViewRef.current;
+    if (auto === "initial") {
+      void rf.setViewport({ x: iv.x, y: iv.y, zoom: iv.zoom });
+    } else if (auto === "fit") {
+      void rf.setViewport(fitAllViewport(layout.bounds, box, iv.minZoom));
+    }
+  }, [ready, layout.bounds, hubPos, rf, size]);
 
   const nodes = useMemo<FlowNode[]>(() => {
     const out: FlowNode[] = [];
@@ -324,6 +417,7 @@ function CanvasInner({
 
   const onFind = useCallback(
     (item: FindItem) => {
+      autoViewRef.current = null;
       setFoundId(item.id);
       void rf.setCenter(item.x, item.y, {
         zoom: Math.max(rf.getZoom(), 1),
@@ -351,6 +445,7 @@ function CanvasInner({
 
   const onFit = useCallback(() => {
     if (!layout.bounds) return;
+    autoViewRef.current = "fit";
     void rf.setViewport(
       fitAllViewport(layout.bounds, measure(boxRef.current), minZoom),
       { duration: duration() }
@@ -364,6 +459,7 @@ function CanvasInner({
       style={{ height }}
     >
       <ReactFlow<FlowNode, Edge>
+        id={flowId}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -376,21 +472,26 @@ function CanvasInner({
         edgesFocusable={false}
         minZoom={minZoom}
         maxZoom={MAX_ZOOM}
-        colorMode="dark"
+        colorMode={colorMode}
         zoomOnDoubleClick={false}
         onNodeClick={onNodeClick}
         onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={onNodeMouseLeave}
+        onMoveStart={(event) => {
+          // A pan or zoom by the user (programmatic moves have no event).
+          if (event) autoViewRef.current = null;
+        }}
         proOptions={{ hideAttribution: true }}
       >
         <Background
           variant={BackgroundVariant.Dots}
           gap={24}
           size={1}
-          color="hsl(0 0% 18%)"
+          color={DOT_COLOR[colorMode]}
         />
         <Panel position="top-left">
           <FindBox
+            width={findBoxWidth((size ?? measure(boxRef.current)).width)}
             items={findItems}
             onFind={onFind}
             onClear={() => setFoundId(null)}
@@ -401,7 +502,10 @@ function CanvasInner({
             <button
               type="button"
               aria-label="Zoom in"
-              onClick={() => void rf.zoomIn({ duration: duration() })}
+              onClick={() => {
+                autoViewRef.current = null;
+                void rf.zoomIn({ duration: duration() });
+              }}
               className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground hover:bg-muted"
             >
               +
@@ -409,7 +513,10 @@ function CanvasInner({
             <button
               type="button"
               aria-label="Zoom out"
-              onClick={() => void rf.zoomOut({ duration: duration() })}
+              onClick={() => {
+                autoViewRef.current = null;
+                void rf.zoomOut({ duration: duration() });
+              }}
               className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground hover:bg-muted"
             >
               −

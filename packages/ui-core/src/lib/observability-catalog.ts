@@ -179,6 +179,22 @@ export const observabilityCatalog = createCatalog({
       acceptsDataFrom: ["query"] as const,
     },
 
+    ServiceMap: {
+      props: z.object({ height: z.number().nullable() }),
+      hasChildren: false,
+      description:
+        "Service map: which services call each other in the past 60 minutes, " +
+        "plus the databases, queues and external APIs they use, drawn as a " +
+        "graph built from trace spans (line thickness = calls, dimmed = no " +
+        "recent traffic). It fetches its own data and keeps itself up to " +
+        "date, so it takes NO dataSource: omit `dataSource` (with one it " +
+        "renders nothing). Use it for architecture, dependency and blast-radius " +
+        "overviews of traced services; it needs trace data, not metrics. One " +
+        "per dashboard is enough; give it the full width (not inside a " +
+        "multi-column Grid). `height` is the canvas height in px (null = 480, " +
+        "at least 240).",
+    },
+
     MetricDiscovery: {
       props: z.object({}),
       hasChildren: false,

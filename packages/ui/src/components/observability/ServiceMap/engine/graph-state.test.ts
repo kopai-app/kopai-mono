@@ -82,8 +82,7 @@ describe("createGraphState", () => {
           { id: "a", spans: 100, errors: 0, errorRate: 0 },
           { id: "b", spans: 50, errors: 0, errorRate: 0 },
         ],
-      }),
-      NOW
+      })
     );
     g.addPair({ source: "a", target: "b", tsMs: NOW - MIN, err: false });
     expect(g.selectHub()).toBe("a");
@@ -93,8 +92,7 @@ describe("createGraphState", () => {
           { id: "a", spans: 100, errors: 0, errorRate: 0 },
           { id: "c", spans: 99_999, errors: 0, errorRate: 0 },
         ],
-      }),
-      NOW
+      })
     );
     g.addPair({ source: "c", target: "b", tsMs: NOW - MIN, err: false });
     expect(g.selectHub()).toBe("a");
@@ -125,8 +123,7 @@ describe("createGraphState", () => {
             errors: 0,
           },
         ],
-      }),
-      NOW
+      })
     );
     g.addPair({ source: "a", target: "b", tsMs: NOW - MIN, err: false });
     expect(g.selectHub()).toBe("batch");
@@ -149,8 +146,7 @@ describe("createGraphState", () => {
           { source: "cart", target: "db:redis", calls: 40, errors: 4 },
           { source: "mq:kafka/orders", target: "cart", calls: 6, errors: 0 },
         ],
-      }),
-      NOW
+      })
     );
     g.addPair({
       source: "web",
@@ -233,10 +229,9 @@ describe("createGraphState", () => {
         nodes: [{ id: "a", spans: 10, errors: 0, errorRate: 0 }],
         virtualNodes: [{ id: "ext:x", label: "x", kind: "external" }],
         edges: [{ source: "a", target: "ext:x", calls: 5, errors: 0 }],
-      }),
-      NOW - 2 * 60 * MIN
+      })
     );
-    g.applySeed(seed(), NOW);
+    g.applySeed(seed());
     const snap = g.buildSnapshot(NOW);
     expect(snap.nodes.map((n) => [n.id, n.active])).toEqual([
       ["a", false],
@@ -244,6 +239,27 @@ describe("createGraphState", () => {
     ]);
     expect(snap.edges).toEqual([
       expect.objectContaining({ id: "a->ext:x", calls: 0, active: false }),
+    ]);
+  });
+
+  it("a service the next reseed drops dims at once: listing it in a seed never extends its activity", () => {
+    const g = createGraphState();
+    // Last span of `a` at NOW − 50 min; the seed at NOW still lists it.
+    g.observeSpan("a", NOW - 50 * MIN, false);
+    g.applySeed(
+      seed({
+        nodes: [{ id: "a", spans: 10, errors: 0, errorRate: 0 }],
+        virtualNodes: [{ id: "ext:x", label: "x", kind: "external" }],
+        edges: [{ source: "a", target: "ext:x", calls: 5, errors: 0 }],
+      })
+    );
+    expect(g.buildSnapshot(NOW).nodes.every((n) => n.active)).toBe(true);
+    // The reseed 15 min later no longer lists it: its last span is > M old.
+    g.applySeed(seed());
+    const later = g.buildSnapshot(NOW + 15 * MIN);
+    expect(later.nodes.map((n) => [n.id, n.active])).toEqual([
+      ["a", false],
+      ["ext:x", false],
     ]);
   });
 

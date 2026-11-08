@@ -111,6 +111,13 @@ export class ScanRun {
   private clientNoPeer = 0;
   private probeSelfCalls = 0;
   private lastSeedMs = 0;
+  private seeded = false;
+  /**
+   * The clock time of the last snapshot built while running. A paused run
+   * keeps building its snapshots at that time, so the sliding window does
+   * not shrink the counts while no data can arrive.
+   */
+  private snapshotNowMs: number | null = null;
 
   // backward scan
   private backCursor: string | undefined;
@@ -212,7 +219,11 @@ export class ScanRun {
   }
 
   snapshot(seq: number): ServiceMapSnapshot {
-    const now = this.clock.now();
+    const now =
+      this.paused && this.snapshotNowMs !== null
+        ? this.snapshotNowMs
+        : this.clock.now();
+    if (!this.paused) this.snapshotNowMs = now;
     const g = this.graph.buildSnapshot(now);
     const jc = this.join.counters();
     const readers = [this.backReader, this.fwdReader, this.probeReader].map(
@@ -314,10 +325,11 @@ export class ScanRun {
     const parsed = parseSeed(nodes.data, edges.data, {
       perSource: this.cfg.virtualPerSource,
     });
-    this.graph.applySeed(parsed, builtAt);
+    this.graph.applySeed(parsed);
     this.seedTruncated = parsed.truncated;
     this.clientNoPeer = parsed.clientNoPeer;
     this.lastSeedMs = builtAt;
+    this.seeded = true;
     if (this.backPages > 0) this.graph.selectHub();
     this.onChange();
     return true;
@@ -695,6 +707,17 @@ export class ScanRun {
         this.failures++;
         this.lastRequestFailed = true;
         this.error = messageOf(e);
+        // R2-2 fallback: page 1 failed. Choose the hub from the seed when it
+        // connects anything, so the map can show what the seed found instead
+        // of waiting for a page that may keep failing until live.
+        if (
+          this.phase === "scanning" &&
+          this.backPages === 0 &&
+          this.seeded &&
+          this.graph.edgeCount() > 0
+        ) {
+          this.graph.selectHub();
+        }
         this.onChange();
         await this.waitWake(backoffMs(this.failures));
       }
@@ -704,7 +727,12 @@ export class ScanRun {
   private async request<T>(
     fn: (signal: AbortSignal) => Promise<T>
   ): Promise<T> {
-    await this.gate();
+    // A pause can arrive while `gate()`'s promise settles: check again, so
+    // nothing is sent once paused.
+    do {
+      await this.gate();
+      this.checkAbort();
+    } while (this.paused);
     if (this.counted()) this.scanRequests++;
     this.inFlight = true;
     try {

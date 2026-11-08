@@ -59,7 +59,7 @@ vi.mock("../worker/create-worker.js", () => ({
 // ------------------------------------------------------------ fake client
 
 function mockClient() {
-  const counts = { aggregate: 0, search: 0, backward: 0 };
+  const counts = { services: 0, aggregate: 0, search: 0, backward: 0 };
   const client = {
     queryTracesAggregate: vi.fn(async () => {
       counts.aggregate++;
@@ -71,7 +71,10 @@ function mockClient() {
       return { data: [], nextCursor: null };
     }),
     getTrace: vi.fn(async () => []),
-    getServices: vi.fn(async () => ({ services: [] })),
+    getServices: vi.fn(async () => {
+      counts.services++;
+      return { services: [] };
+    }),
   };
   return { client: client as unknown as ServiceMapClient, counts };
 }
@@ -271,8 +274,8 @@ describe("in-process sessions (custom client)", () => {
     const { client, counts } = mockClient();
     acquire({ client });
     await vi.advanceTimersByTimeAsync(60_000);
-    // At most the request that was already issued on start.
-    expect(counts.aggregate + counts.search).toBeLessThanOrEqual(1);
+    // Paused before the first request: not even getServices goes out.
+    expect(counts.services + counts.aggregate + counts.search).toBe(0);
     setHidden(false);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(counts.aggregate).toBe(2);
@@ -365,11 +368,13 @@ describe("worker sessions (default client)", () => {
     expect(w.types()).toEqual(["init", "pause", "resume"]);
   });
 
-  it("hidden while the worker loads: init is followed by pause", async () => {
+  it("hidden while the worker loads: the init itself starts the worker paused", async () => {
     hidden = true;
     acquire({ baseUrl: "/" });
     await flush();
-    expect(FakeWorker.instances[0]!.types()).toEqual(["init", "pause"]);
+    const w = FakeWorker.instances[0]!;
+    expect(w.types()).toEqual(["init"]);
+    expect(w.posted[0]).toMatchObject({ type: "init", paused: true });
   });
 
   it("released before the worker loaded: the worker is terminated on arrival", async () => {

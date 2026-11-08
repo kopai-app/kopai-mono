@@ -210,6 +210,21 @@ describe("stop, pause, resume, restart", () => {
     engine.stop();
   });
 
+  it("pause() right after start(): not even the first request leaves", async () => {
+    const { engine, clock, mock } = setup({
+      seed: seedAB,
+      backward: abPages(5),
+    });
+    engine.start();
+    engine.pause();
+    await clock.advance(5 * 60_000);
+    expect(mock.calls).toHaveLength(0);
+    engine.resume();
+    await clock.runUntil(() => mock.calls.length > 0);
+    expect(mock.calls[0]?.method).toBe("getServices");
+    engine.stop();
+  });
+
   it("resume() after a pause longer than M restarts the session from the seed", async () => {
     const { engine, clock, mock } = setup({
       seed: seedAB,
