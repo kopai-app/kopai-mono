@@ -4,9 +4,12 @@
  *
  * The Service Map UI builds its graph in the browser by paging through recent
  * spans. Its scan is budgeted so it cannot starve ingest on the SQLite backend:
- * one request at a time, at least 100 ms between requests, at most 1000 spans
- * per page and at most 200 requests per scan (2 seed aggregates + up to 198
- * DESC pages). This file measures what that pattern costs the collector path.
+ * one request at a time, at least 100 ms between requests and at most 1000
+ * spans per page. The shipped engine allows `SCAN_MAX_REQUESTS = 50` requests
+ * per scan (a seed of getServices + 2 aggregates, DESC pages, and a
+ * `PROBE_RESERVE` of 15 for probes). This file deliberately measures the Q11
+ * upper bound instead, 200 requests (2 seed aggregates + up to 198 DESC
+ * pages), as a worst case for what that pattern costs the collector path.
  *
  * It opens a temporary FILE database exactly the way the app does
  * (`initializeDatabase(path)` + `createOptimizedDatasource`), because the real
@@ -52,6 +55,8 @@ const BASELINE_MS = 30_000;
 
 const PAGE_LIMIT = 1000;
 const MIN_GAP_MS = 100;
+// Q11 upper bound, measured on purpose as the worst case; the shipped engine's
+// budget is SCAN_MAX_REQUESTS = 50 (packages/ui ServiceMap/engine/config.ts).
 const REQUEST_BUDGET = 200;
 const SEED_REQUESTS = 2;
 const MAX_PAGES = REQUEST_BUDGET - SEED_REQUESTS; // 198

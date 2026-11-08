@@ -23,11 +23,14 @@ import { detectColorMode, findBoxWidth } from "./ServiceMapCanvas.js";
  */
 class ControlledResizeObserver {
   static all = new Set<ControlledResizeObserver>();
+  /** Every element passed to observe(), in order. */
+  static observed: Element[] = [];
   private targets: Element[] = [];
   constructor(private readonly cb: ResizeObserverCallback) {
     ControlledResizeObserver.all.add(this);
   }
   observe(target: Element) {
+    ControlledResizeObserver.observed.push(target);
     this.targets.push(target);
     this.fire();
   }
@@ -160,7 +163,7 @@ describe("Find box width", () => {
 });
 
 describe("colour mode", () => {
-  it("follows a .dark / .light ancestor, else the OS preference", () => {
+  it("follows a .dark / .light ancestor, else dark (the package's default tokens)", () => {
     const outer = document.createElement("div");
     const inner = document.createElement("span");
     outer.appendChild(inner);
@@ -169,8 +172,22 @@ describe("colour mode", () => {
     outer.className = "light";
     expect(detectColorMode(inner)).toBe("light");
     outer.className = "";
-    // jsdom: no matchMedia → light.
-    expect(detectColorMode(inner)).toBe("light");
+    expect(detectColorMode(inner)).toBe("dark");
+  });
+
+  it("follows a later theme change on the root", async () => {
+    document.documentElement.className = "light";
+    const { container } = render(
+      <ServiceMapView snapshot={shopFrame1()} height={300} />
+    );
+    await act(async () => {});
+    const flow = container.querySelector(".react-flow")!;
+    expect(flow.classList.contains("light")).toBe(true);
+    await act(async () => {
+      document.documentElement.className = "dark";
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(flow.classList.contains("dark")).toBe(true);
   });
 
   it("renders the canvas light inside a light host and dark inside the dark app", async () => {
@@ -227,5 +244,84 @@ describe('height="fill"', () => {
     } finally {
       proto.getBoundingClientRect = prev;
     }
+  });
+});
+
+describe("service nodes", () => {
+  it("are not re-measured (hidden until measured) when the snapshot changes", async () => {
+    const snapshot = shopFrame1();
+    const { container, rerender } = render(
+      <ServiceMapView snapshot={snapshot} height={300} />
+    );
+    await act(async () => new Promise((r) => setTimeout(r, 50)));
+    const edgeCount = () =>
+      container.querySelectorAll(".react-flow__edge").length;
+    const before = edgeCount();
+    expect(before).toBeGreaterThan(0);
+    const nodeObserves = () =>
+      ControlledResizeObserver.observed.filter((el) =>
+        el.classList.contains("react-flow__node")
+      ).length;
+    const observes = nodeObserves();
+    // A new snapshot object with the same graph: every node object is rebuilt.
+    for (let k = 1; k <= 3; k++) {
+      rerender(
+        <ServiceMapView
+          snapshot={{ ...snapshot, seq: snapshot.seq + k }}
+          height={300}
+        />
+      );
+      await act(async () => {});
+    }
+    // React Flow re-observes a node only after it lost its size (and hid it).
+    expect(nodeObserves()).toBe(observes);
+    const hidden = [
+      ...container.querySelectorAll<HTMLElement>(".react-flow__node"),
+    ].filter((n) => n.style.visibility === "hidden");
+    expect(hidden).toHaveLength(0);
+    expect(edgeCount()).toBe(before);
+  });
+
+  it("are buttons when clickable: Enter or Space opens the service, and Find comes first in tab order", async () => {
+    const clicked: string[] = [];
+    const { container, getByTestId } = render(
+      <ServiceMapView
+        snapshot={shopFrame1()}
+        height={300}
+        onServiceClick={(s) => clicked.push(s)}
+      />
+    );
+    await act(async () => new Promise((r) => setTimeout(r, 50)));
+    const node = getByTestId("sm-node-api-gateway");
+    expect(node.getAttribute("role")).toBe("button");
+    expect(node.tabIndex).toBe(0);
+    fireEvent.keyDown(node, { key: "Enter" });
+    fireEvent.keyDown(node, { key: " " });
+    expect(clicked).toEqual(["api-gateway", "api-gateway"]);
+    // React Flow's own node wrappers are not tab stops.
+    for (const w of container.querySelectorAll(".react-flow__node")) {
+      expect(w.getAttribute("tabindex")).toBeNull();
+    }
+    const tabbable = [
+      ...container.querySelectorAll<HTMLElement>(
+        "input, button, [tabindex='0']"
+      ),
+    ];
+    const find = container.querySelector(".sm-find input")!;
+    expect(tabbable.indexOf(find as HTMLElement)).toBe(0);
+    expect(tabbable.indexOf(node)).toBeGreaterThan(
+      tabbable.findIndex((el) => el.textContent === "Fit")
+    );
+  });
+
+  it("are not focusable when not clickable (dashboards)", async () => {
+    const { container, getByTestId } = render(
+      <ServiceMapView snapshot={shopFrame1()} height={300} />
+    );
+    await act(async () => new Promise((r) => setTimeout(r, 50)));
+    const node = getByTestId("sm-node-api-gateway");
+    expect(node.getAttribute("role")).toBeNull();
+    expect(node.getAttribute("tabindex")).toBeNull();
+    expect(container.querySelectorAll("[tabindex='0']")).toHaveLength(0);
   });
 });

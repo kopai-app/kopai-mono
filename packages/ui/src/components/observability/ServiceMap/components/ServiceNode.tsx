@@ -10,8 +10,11 @@
  *
  * The node box is exactly the shape; the label hangs below it absolutely, so
  * React Flow measures the shape only and edges attach to it.
+ *
+ * A clickable node is a keyboard button: it takes focus, and Enter or Space
+ * opens its traces like a click does (through `ServiceClickContext`).
  */
-import { memo } from "react";
+import { createContext, memo, useContext, type KeyboardEvent } from "react";
 import {
   Handle,
   Position,
@@ -47,6 +50,11 @@ export interface ServiceNodeData extends Record<string, unknown> {
 }
 
 export type ServiceFlowNode = Node<ServiceNodeData, "service">;
+
+/** The canvas's service click handler, for keyboard activation of nodes. */
+export const ServiceClickContext = createContext<
+  ((service: string) => void) | undefined
+>(undefined);
 
 const selectLabelsVisible = (s: ReactFlowState) =>
   labelsVisible(s.transform[2]);
@@ -111,8 +119,16 @@ function Shape({
   );
 }
 
-function ServiceNodeImpl({ data }: NodeProps<ServiceFlowNode>) {
+function ServiceNodeImpl({ id, data }: NodeProps<ServiceFlowNode>) {
   const zoomLabels = useStore(selectLabelsVisible);
+  const onServiceClick = useContext(ServiceClickContext);
+  const clickable = !!data.clickable && !!onServiceClick;
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    // A service node's id is the service name.
+    onServiceClick?.(id);
+  };
   const size = nodeSize(data.kind, data.spans);
   const isService = data.kind === "service";
   // A service keeps the colour it has in the traces and logs views: filled
@@ -127,7 +143,7 @@ function ServiceNodeImpl({ data }: NodeProps<ServiceFlowNode>) {
     data.hub ? "sm-hub" : "",
     data.found ? "sm-found" : "",
     data.active ? "" : "sm-dim",
-    data.clickable ? "cursor-pointer" : "",
+    clickable ? "nokey cursor-pointer" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -142,6 +158,14 @@ function ServiceNodeImpl({ data }: NodeProps<ServiceFlowNode>) {
       }}
       data-testid={`sm-node-${data.label}`}
       data-active={data.active ? "true" : "false"}
+      {...(clickable
+        ? {
+            role: "button",
+            tabIndex: 0,
+            "aria-label": `${data.label}: view traces`,
+            onKeyDown,
+          }
+        : {})}
     >
       {data.hub && (
         <span

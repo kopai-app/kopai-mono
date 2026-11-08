@@ -220,7 +220,6 @@ export function ServiceMapHeader({
     <header className={HEADER}>
       <p
         className={`${ROW} text-muted-foreground tabular-nums`}
-        aria-live="polite"
         title={summary}
       >
         <LiveDot live={live} />
@@ -238,6 +237,16 @@ export function ServiceMapHeader({
               {` · ${status.now}`}
             </span>
           )}
+        </span>
+        {/* Only the scan state and stop reason are announced: the visible row
+            also holds span counts and coverage, which change on every
+            snapshot. */}
+        <span
+          className="sr-only"
+          aria-live="polite"
+          data-testid="sm-live-status"
+        >
+          {joinParts([status.now, status.stop])}
         </span>
       </p>
       {second}

@@ -31,7 +31,9 @@ import {
  * in the worker and the session, so switching to another tab and back shows
  * the map at once and the scan continues where it was. A session nobody
  * comes back to within M is stopped (resuming it would rebuild from scratch
- * anyway). While the document is hidden every session is paused; the engine
+ * anyway). A worker session that is unused and superseded by another one for
+ * the same base URL (a rotated token, changed headers) is stopped at once
+ * instead, so idle workers do not pile up. While the document is hidden every session is paused; the engine
  * restarts itself on resume when the gap was longer than M (A8).
  */
 
@@ -134,6 +136,11 @@ class Session {
 
   private get paused(): boolean {
     return this.hidden || this.idle;
+  }
+
+  /** Unused past its grace period (paused until acquired again). */
+  isIdle(): boolean {
+    return this.idle;
   }
 
   constructor(
@@ -307,6 +314,33 @@ function lookup(opts: AcquireOptions): Session | undefined {
   return s && live.has(s) ? s : undefined;
 }
 
+/** The absolute base URL of a worker session; null for a custom client. */
+function baseOf(s: Session): string | null {
+  return s.opts.init?.baseUrl ?? null;
+}
+
+/**
+ * True when an unused worker session has a newer sibling for the same base
+ * URL (different auth) that a view uses: nobody will come back to it.
+ */
+function superseded(s: Session): boolean {
+  const base = baseOf(s);
+  if (base === null) return false;
+  for (const o of workerSessions.values()) {
+    if (o !== s && o.refs > 0 && live.has(o) && baseOf(o) === base) return true;
+  }
+  return false;
+}
+
+/** Stops every unused, idle worker session for `base` other than `keep`. */
+function dropIdleSiblings(keep: Session, base: string): void {
+  for (const o of [...workerSessions.values()]) {
+    if (o !== keep && o.refs === 0 && o.isIdle() && baseOf(o) === base) {
+      destroy(o);
+    }
+  }
+}
+
 function destroy(s: Session): void {
   s.dispose();
   live.delete(s);
@@ -331,6 +365,8 @@ export function acquire(opts: AcquireOptions): ServiceMapSessionHandle {
       };
       s = new Session(workerKey(opts), { init });
       workerSessions.set(s.key, s);
+      // A new auth for this server: unused sessions with the old auth go.
+      dropIdleSiblings(s, init.baseUrl);
     }
     live.add(s);
     hookVisibility();
@@ -361,6 +397,12 @@ export function acquire(opts: AcquireOptions): ServiceMapSessionHandle {
       session.graceTimer = setTimeout(() => {
         session.graceTimer = null;
         if (session.refs > 0) return;
+        // Replaced by a session with other auth for the same server (a
+        // rotated token): nobody comes back to this one.
+        if (superseded(session)) {
+          destroy(session);
+          return;
+        }
         // Unused: pause and keep the graph; stop only if nobody returns.
         session.setIdle(true);
         session.idleTimer = setTimeout(() => {

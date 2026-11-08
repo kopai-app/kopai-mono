@@ -358,6 +358,52 @@ describe("worker sessions (default client)", () => {
     expect(w.types().at(-1)).toBe("stop");
   });
 
+  it("a rotated token stops the old worker after the grace period, not after M", async () => {
+    const old = acquire({ baseUrl: "/", token: "t1" });
+    await flush();
+    const w1 = FakeWorker.instances[0]!;
+    // The host refreshes its token: the view releases the old session and
+    // takes one with the new token.
+    old.release();
+    const next = acquire({ baseUrl: "/", token: "t2" });
+    await flush();
+    expect(FakeWorker.instances).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(RELEASE_GRACE_MS);
+    expect(w1.terminated).toBe(true);
+    expect(w1.types().at(-1)).toBe("stop");
+    const w2 = FakeWorker.instances[1]!;
+    expect(w2.terminated).toBe(false);
+    next.release();
+  });
+
+  it("a new token stops idle workers of the same server at once, and leaves other servers alone", async () => {
+    const a = acquire({ baseUrl: "/", token: "t1" });
+    const other = acquire({ baseUrl: "https://other.example", token: "x" });
+    await flush();
+    const [w1, wOther] = FakeWorker.instances;
+    a.release();
+    other.release();
+    await vi.advanceTimersByTimeAsync(RELEASE_GRACE_MS);
+    // Both idle (paused), kept for M.
+    expect(w1!.terminated).toBe(false);
+    expect(w1!.types().at(-1)).toBe("pause");
+    acquire({ baseUrl: "/", token: "t2" });
+    await flush();
+    expect(w1!.terminated).toBe(true);
+    expect(wOther!.terminated).toBe(false);
+  });
+
+  it("two views with different auth for one server keep both workers while used", async () => {
+    acquire({ baseUrl: "/", token: "a" });
+    acquire({ baseUrl: "/", token: "b" });
+    await flush();
+    await vi.advanceTimersByTimeAsync(5 * RELEASE_GRACE_MS);
+    expect(FakeWorker.instances.map((w) => w.terminated)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
   it("document hidden sends pause; visible again sends resume", async () => {
     acquire({ baseUrl: "/" });
     await flush();

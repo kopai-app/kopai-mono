@@ -88,6 +88,41 @@ describe("ServiceMapHeader", () => {
     expect(details.className).not.toContain("shrink-0");
   });
 
+  it("announces only the scan state and stop reason, not the changing counts", () => {
+    const { container, rerender } = render(
+      <ServiceMapHeader
+        snapshot={snap({
+          coveredMin: 6,
+          scan: { state: "live", stopReason: "budget" },
+        })}
+      />
+    );
+    const live = container.querySelectorAll("[aria-live]");
+    expect(live).toHaveLength(1);
+    const region = screen.getByTestId("sm-live-status");
+    expect(live[0]).toBe(region);
+    expect(region.textContent).toBe(
+      "Live · 30 s delay · stopped: request budget reached"
+    );
+    expect(region.textContent).not.toContain("spans");
+    // More spans and coverage: the announced text does not change.
+    rerender(
+      <ServiceMapHeader
+        snapshot={{
+          ...snap({
+            coveredMin: 9,
+            scan: { state: "live", stopReason: "budget" },
+          }),
+          spansInWindow: 50_000,
+        }}
+      />
+    );
+    expect(summary()).toContain("covers 9 of 60 min");
+    expect(screen.getByTestId("sm-live-status").textContent).toBe(
+      "Live · 30 s delay · stopped: request budget reached"
+    );
+  });
+
   it("shows 'Live · 30 s delay' after full coverage, and 'behind by N s' when the poll lags", () => {
     const { rerender } = render(<ServiceMapHeader snapshot={snap()} />);
     expect(summary()).toBe(

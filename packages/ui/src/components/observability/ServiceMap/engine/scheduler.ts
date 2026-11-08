@@ -21,6 +21,12 @@ const BACKOFF_MAX_MS = 30_000;
 /** Probe requests per service: one page + at most 2 traces (PD-1). */
 const PROBE_COST = 3;
 const PROBE_TRACES = 2;
+/**
+ * Tries per seed (getServices or one aggregate) before giving up on it. A
+ * failing seed must not hold the scan: the seed phase falls through to the
+ * backward scan, and in live the forward poll keeps running.
+ */
+const SEED_MAX_FAILURES = 3;
 
 export type Phase = Exclude<ScanPhase, "paused" | "error">;
 
@@ -302,24 +308,34 @@ export class ScanRun {
 
   /**
    * A1 seed: getServices (every known service becomes a node up front), then
-   * 2 aggregates. False when the shared budget ran out first.
+   * 2 aggregates. False when the budget left above the probe reserve ran out
+   * or a call failed `SEED_MAX_FAILURES` times in a row; the last good seed
+   * is kept either way.
    */
   private async seed(): Promise<boolean> {
     const builtAt = this.clock.now();
     const q = buildSeedQueries(builtAt, this.cfg.windowMs);
-    const canSpend = () => this.remaining() > 0;
-    const known = await this.attempt(canSpend, (signal) =>
-      this.client.getServices({ signal })
+    // Before live the seed never eats into the probe reserve (PD-8).
+    const canSpend = () => this.remaining() > this.cfg.probeReserve;
+    const max = SEED_MAX_FAILURES;
+    const known = await this.attempt(
+      canSpend,
+      (signal) => this.client.getServices({ signal }),
+      max
     );
     if (!known) return false;
     this.graph.addServices(known.services);
     this.onChange();
-    const nodes = await this.attempt(canSpend, (signal) =>
-      this.client.queryTracesAggregate(q.nodes, { signal })
+    const nodes = await this.attempt(
+      canSpend,
+      (signal) => this.client.queryTracesAggregate(q.nodes, { signal }),
+      max
     );
     if (!nodes) return false;
-    const edges = await this.attempt(canSpend, (signal) =>
-      this.client.queryTracesAggregate(q.edges, { signal })
+    const edges = await this.attempt(
+      canSpend,
+      (signal) => this.client.queryTracesAggregate(q.edges, { signal }),
+      max
     );
     if (!edges) return false;
     const parsed = parseSeed(nodes.data, edges.data, {
@@ -527,10 +543,19 @@ export class ScanRun {
 
   // ------------------------------------------------------------------ live
 
-  /** R2-4: forward poll every 10 s; PD-2: seed refresh every 5 min. Not counted. */
+  /**
+   * R2-4: forward poll every 10 s; PD-2: seed refresh every 5 min. Not counted.
+   * The forward tick runs first, and a failing seed refresh gives up after a
+   * few tries (keeping the last good seed) and is tried again 30 s later, so
+   * an aggregate outage never stops the forward poll.
+   */
   private async livePhase(): Promise<void> {
     this.setPhase("live");
-    this.nextSeedMs = this.lastSeedMs + this.cfg.seedRefreshMs;
+    // A seed that never succeeded is retried right away (after the first
+    // forward tick that is due), not 5 min after the epoch.
+    this.nextSeedMs = this.seeded
+      ? this.lastSeedMs + this.cfg.seedRefreshMs
+      : this.clock.now();
     const always = () => true;
     for (;;) {
       const due = Math.min(this.nextFwdMs, this.nextSeedMs);
@@ -539,11 +564,12 @@ export class ScanRun {
         await this.waitWake(wait);
         continue;
       }
-      if (this.clock.now() >= this.nextSeedMs) {
-        this.nextSeedMs = this.clock.now() + this.cfg.seedRefreshMs;
-        await this.seed();
-      }
       if (this.clock.now() >= this.nextFwdMs) await this.forwardTick(always);
+      if (this.clock.now() >= this.nextSeedMs) {
+        const ok = await this.seed();
+        this.nextSeedMs =
+          this.clock.now() + (ok ? this.cfg.seedRefreshMs : BACKOFF_MAX_MS);
+      }
       // R2-2: if no backward page ever arrived (e.g. the scan failed until the
       // budget ran out), choose the hub from live data. A no-op once chosen.
       this.graph.selectHub();
@@ -685,12 +711,15 @@ export class ScanRun {
   /**
    * Runs one request until it succeeds (backoff 1 s → 30 s between failures,
    * skipped by `retry()`). Returns null when `canSpend` says the budget is
-   * used up, before or between attempts. The last good graph is kept.
+   * used up, before or between attempts, or after `maxFailures` failures in
+   * this call (if given). The last good graph is kept.
    */
   private async attempt<T>(
     canSpend: () => boolean,
-    fn: (signal: AbortSignal) => Promise<T>
+    fn: (signal: AbortSignal) => Promise<T>,
+    maxFailures = Number.POSITIVE_INFINITY
   ): Promise<T | null> {
+    let localFailures = 0;
     for (;;) {
       if (this.counted() && !canSpend()) return null;
       try {
@@ -719,7 +748,15 @@ export class ScanRun {
           this.graph.selectHub();
         }
         this.onChange();
-        await this.waitWake(backoffMs(this.failures));
+        localFailures++;
+        if (localFailures >= maxFailures) return null;
+        // A capped call backs off on its own count, so earlier failures of
+        // other steps cannot stretch its few tries to 30 s each.
+        await this.waitWake(
+          backoffMs(
+            Number.isFinite(maxFailures) ? localFailures : this.failures
+          )
+        );
       }
     }
   }

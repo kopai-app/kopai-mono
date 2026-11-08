@@ -671,3 +671,68 @@ describe("snapshots while paused", () => {
     run.abort();
   });
 });
+
+describe("failing seed (never blocks the scan or the forward poll)", () => {
+  const isAgg = (c: { method: string }) => c.method === "queryTracesAggregate";
+
+  it("gives up on a failing seed after a few tries and keeps the probe reserve", async () => {
+    const { engine, mock, clock, untilPhase } = setup({
+      fail: (call) => {
+        if (isAgg(call)) throw new Error("aggregate down");
+      },
+      backward: abPages(500),
+    });
+    engine.start();
+    await clock.runUntil(() => mock.calls.some(isBackward), 6 * M_MS);
+    // At most 3 tries of the nodes aggregate, then the backward scan runs.
+    expect(mock.calls.filter(isAgg)).toHaveLength(3);
+    await untilPhase("live", 6 * M_MS);
+    await clock.advance(1000); // let the throttled snapshot catch up
+    expect(engine.getSnapshot()?.scan.stopReason).toBe("budget");
+    // The failed seed did not eat into the probe reserve.
+    expect(engine.stats().scanRequests).toBe(SCAN_MAX_REQUESTS - PROBE_RESERVE);
+    engine.stop();
+  });
+
+  it("keeps polling forward in live while the aggregate always fails", async () => {
+    const { engine, mock, untilPhase, clock } = setup({
+      fail: (call) => {
+        if (isAgg(call)) throw new Error("aggregate down");
+      },
+      backward: abPages(2),
+    });
+    engine.start();
+    await untilPhase("live", 6 * M_MS);
+    const liveAt = clock.now();
+    await clock.advance(10 * 60_000);
+    const fwd = mock.calls.filter((c) => isForward(c) && c.startMs >= liveAt);
+    // Close to one tick every 10 s despite the seed retries in between.
+    expect(fwd.length).toBeGreaterThanOrEqual(50);
+    // The seed is still retried, a few tries at a time.
+    const aggLive = mock.calls.filter((c) => isAgg(c) && c.startMs >= liveAt);
+    expect(aggLive.length).toBeGreaterThan(3);
+    engine.stop();
+  });
+
+  it("an aggregate outage at a 5-minute refresh keeps the map live", async () => {
+    let down = false;
+    const { engine, mock, untilPhase, clock } = setup({
+      seed: (w) => (w === "nodes" ? seedNodeRows({ a: 10, b: 5 }) : []),
+      fail: (call) => {
+        if (down && isAgg(call)) throw new Error("aggregate down");
+      },
+      backward: abPages(2),
+    });
+    engine.start();
+    await untilPhase("live", 6 * M_MS);
+    down = true;
+    const downAt = clock.now();
+    await clock.advance(15 * 60_000);
+    const fwd = mock.calls.filter((c) => isForward(c) && c.startMs >= downAt);
+    expect(fwd.length).toBeGreaterThanOrEqual(80);
+    // The last good seed is kept: both seeded services are still nodes.
+    const ids = engine.getSnapshot()?.nodes.map((n) => n.id) ?? [];
+    expect(ids).toEqual(expect.arrayContaining(["a", "b"]));
+    engine.stop();
+  });
+});

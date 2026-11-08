@@ -33,6 +33,7 @@
     "build": "tsdown",
     "lint": "eslint src build tsdown.config.ts",
     "type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.build.json",
+    "test": "vitest run --root ../.. --dir .",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },

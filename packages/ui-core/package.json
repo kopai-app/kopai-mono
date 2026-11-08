@@ -36,7 +36,8 @@
   "scripts": {
     "build": "tsdown",
     "lint": "eslint src",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run --root ../.. --dir ."
   },
   "dependencies": {
     "@kopai/core": "workspace:*",

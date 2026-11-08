@@ -14,6 +14,11 @@
  * - A Q19 block shift moves already-placed nodes; that change is tweened over
  *   300 ms with requestAnimationFrame, and applied at once under
  *   `prefers-reduced-motion`.
+ * - Service nodes carry their size and handles, so React Flow never has to
+ *   measure them again when the node objects are rebuilt (every snapshot and
+ *   tween frame): they stay visible and their edges stay drawn.
+ * - The Find box and the zoom buttons come before the nodes in tab order.
+ *   Nodes take focus only when clickable (Enter or Space opens their traces).
  */
 import {
   memo,
@@ -29,7 +34,7 @@ import {
   Background,
   BackgroundVariant,
   MarkerType,
-  Panel,
+  Position,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
@@ -40,9 +45,15 @@ import type { ServiceMapSnapshot } from "../engine/types.js";
 import { FIT_PAD_X, FIT_PAD_Y, MIN_ZOOM_FLOOR } from "../layout/constants.js";
 import type { Bounds, LayoutResult, Point } from "../layout/layout-d.js";
 import { initialViewport, type Size } from "../layout/viewport.js";
-import { EDGE_COLOR, EDGE_COLOR_HIGHLIGHT, edgeVisual } from "./edge-style.js";
+import {
+  EDGE_COLOR,
+  EDGE_COLOR_HIGHLIGHT,
+  edgeVisual,
+  nodeSize,
+} from "./edge-style.js";
 import { FindBox, type FindItem } from "./FindBox.js";
 import {
+  ServiceClickContext,
   ServiceNode,
   type ServiceFlowNode,
   type ServiceNodeData,
@@ -195,23 +206,13 @@ export type MapColorMode = "dark" | "light";
 
 /**
  * The theme the map sits in: a `.dark` / `.light` class on an ancestor (the
- * shadcn convention the Kopai app uses) wins, else the OS preference.
+ * shadcn convention the Kopai app uses), else dark, to match the package's
+ * dark-only default tokens (`bg-background` is near-black without a theme).
  */
 export function detectColorMode(el: Element | null): MapColorMode {
   const themed = el?.closest(".dark, .light");
   if (themed) return themed.classList.contains("dark") ? "dark" : "light";
-  try {
-    if (
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches
-    ) {
-      return "dark";
-    }
-  } catch {
-    // no media queries: light
-  }
-  return "light";
+  return "dark";
 }
 
 /** Background dot colour per theme (a faint grid on the canvas). */
@@ -238,10 +239,22 @@ function CanvasInner({
   // (default "1"); a unique one keeps several maps on a page apart.
   const flowId = `sm-${useId().replace(/[^\w-]/g, "")}`;
   const boxRef = useRef<HTMLDivElement>(null);
-  // Dark until measured (the Kopai app is dark), then the host's theme.
+  // Dark until measured (the Kopai app is dark), then the host's theme,
+  // followed when the themed ancestor's (or the root's) class changes.
   const [colorMode, setColorMode] = useState<MapColorMode>("dark");
   useLayoutEffect(() => {
-    setColorMode(detectColorMode(boxRef.current));
+    const el = boxRef.current;
+    const update = () => setColorMode(detectColorMode(el));
+    update();
+    if (!el || typeof MutationObserver !== "function") return;
+    const mo = new MutationObserver(update);
+    const watched = new Set<Element>([document.documentElement]);
+    const themed = el.closest(".dark, .light");
+    if (themed) watched.add(themed);
+    for (const t of watched) {
+      mo.observe(t, { attributes: true, attributeFilter: ["class"] });
+    }
+    return () => mo.disconnect();
   }, []);
   const [ready, setReady] = useState(false);
   const [minZoom, setMinZoom] = useState(MIN_ZOOM_FLOOR);
@@ -320,6 +333,8 @@ function CanvasInner({
         },
         width: band.width,
         height: band.height,
+        // No handles, said up front: React Flow keeps it initialized.
+        handles: [],
         zIndex: -1,
         draggable: false,
         selectable: false,
@@ -329,6 +344,7 @@ function CanvasInner({
     for (const n of snapshot.nodes) {
       const p = shown.get(n.id) ?? target.get(n.id);
       if (!p) continue;
+      const d = nodeSize(n.kind, n.spans);
       const data: ServiceNodeData = {
         label: n.label,
         kind: n.kind,
@@ -345,10 +361,34 @@ function CanvasInner({
         type: "service",
         position: p,
         data,
+        // Fixed size and handles: React Flow keeps the node initialized
+        // when this object is rebuilt, instead of hiding it until measured.
+        width: d,
+        height: d,
+        handles: [
+          {
+            type: "target",
+            position: Position.Left,
+            x: 0,
+            y: d / 2 - 0.5,
+            width: 1,
+            height: 1,
+          },
+          {
+            type: "source",
+            position: Position.Right,
+            x: d - 1,
+            y: d / 2 - 0.5,
+            width: 1,
+            height: 1,
+          },
+        ],
         draggable: false,
         selectable: false,
         connectable: false,
-        ariaLabel: n.label,
+        // A clickable node is its own button (ServiceNode); others are images.
+        focusable: false,
+        ...(data.clickable ? {} : { ariaRole: "img", ariaLabel: n.label }),
       });
     }
     return out;
@@ -458,79 +498,86 @@ function CanvasInner({
       className="sm-canvas relative w-full overflow-hidden rounded-lg border border-border bg-background"
       style={{ height }}
     >
-      <ReactFlow<FlowNode, Edge>
-        id={flowId}
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        nodeOrigin={[0.5, 0.5]}
-        onInit={() => setReady(true)}
-        onlyRenderVisibleElements
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        edgesFocusable={false}
-        minZoom={minZoom}
-        maxZoom={MAX_ZOOM}
-        colorMode={colorMode}
-        zoomOnDoubleClick={false}
-        onNodeClick={onNodeClick}
-        onNodeMouseEnter={onNodeMouseEnter}
-        onNodeMouseLeave={onNodeMouseLeave}
-        onMoveStart={(event) => {
-          // A pan or zoom by the user (programmatic moves have no event).
-          if (event) autoViewRef.current = null;
-        }}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={24}
-          size={1}
-          color={DOT_COLOR[colorMode]}
+      {/* The controls sit before the canvas in the DOM, so they come first
+        in tab order; placed like React Flow panels. */}
+      <div className="sm-panel absolute left-0 top-0 z-10 m-[15px]">
+        <FindBox
+          width={findBoxWidth((size ?? measure(boxRef.current)).width)}
+          items={findItems}
+          onFind={onFind}
+          onClear={() => setFoundId(null)}
         />
-        <Panel position="top-left">
-          <FindBox
-            width={findBoxWidth((size ?? measure(boxRef.current)).width)}
-            items={findItems}
-            onFind={onFind}
-            onClear={() => setFoundId(null)}
+      </div>
+      <div className="sm-panel absolute right-0 top-0 z-10 m-[15px]">
+        <div className="flex gap-1">
+          <button
+            type="button"
+            aria-label="Zoom in"
+            onClick={() => {
+              autoViewRef.current = null;
+              void rf.zoomIn({ duration: duration() });
+            }}
+            className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground hover:bg-muted"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom out"
+            onClick={() => {
+              autoViewRef.current = null;
+              void rf.zoomOut({ duration: duration() });
+            }}
+            className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground hover:bg-muted"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            onClick={onFit}
+            className="rounded-md border border-border bg-background px-2.5 py-1 text-sm text-foreground hover:bg-muted"
+          >
+            Fit
+          </button>
+        </div>
+      </div>
+      <ServiceClickContext.Provider value={onServiceClick}>
+        <ReactFlow<FlowNode, Edge>
+          id={flowId}
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          nodeOrigin={[0.5, 0.5]}
+          onInit={() => setReady(true)}
+          onlyRenderVisibleElements
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          edgesFocusable={false}
+          nodesFocusable={false}
+          // Nothing is selectable or movable: no "press Enter to select" hint.
+          disableKeyboardA11y
+          minZoom={minZoom}
+          maxZoom={MAX_ZOOM}
+          colorMode={colorMode}
+          zoomOnDoubleClick={false}
+          onNodeClick={onNodeClick}
+          onNodeMouseEnter={onNodeMouseEnter}
+          onNodeMouseLeave={onNodeMouseLeave}
+          onMoveStart={(event) => {
+            // A pan or zoom by the user (programmatic moves have no event).
+            if (event) autoViewRef.current = null;
+          }}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={24}
+            size={1}
+            color={DOT_COLOR[colorMode]}
           />
-        </Panel>
-        <Panel position="top-right">
-          <div className="flex gap-1">
-            <button
-              type="button"
-              aria-label="Zoom in"
-              onClick={() => {
-                autoViewRef.current = null;
-                void rf.zoomIn({ duration: duration() });
-              }}
-              className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground hover:bg-muted"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              aria-label="Zoom out"
-              onClick={() => {
-                autoViewRef.current = null;
-                void rf.zoomOut({ duration: duration() });
-              }}
-              className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground hover:bg-muted"
-            >
-              −
-            </button>
-            <button
-              type="button"
-              onClick={onFit}
-              className="rounded-md border border-border bg-background px-2.5 py-1 text-sm text-foreground hover:bg-muted"
-            >
-              Fit
-            </button>
-          </div>
-        </Panel>
-      </ReactFlow>
+        </ReactFlow>
+      </ServiceClickContext.Provider>
     </div>
   );
 }
