@@ -19,6 +19,12 @@ import type { KopaiClientOptions } from "./types.js";
 export interface KopaiConfig {
   url?: string;
   token?: string;
+  /**
+   * Where an instrumented app sends its telemetry, written by `kopai setup`.
+   * `endpoint` is the OTLP/HTTP base URL and `token` goes in an
+   * `Authorization: Bearer <token>` header. The query client ignores it.
+   */
+  otlp?: { endpoint: string; token: string };
 }
 
 export const CONFIG_FILENAME = ".kopairc";

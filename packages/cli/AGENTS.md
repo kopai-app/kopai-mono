@@ -27,6 +27,78 @@ To persist configuration, create `.kopairc` in current or home directory:
 
 Or use flags: `--url <url> --token <token>`
 
+`kopai setup` also writes an `otlp` block: where an instrumented app sends telemetry. Query
+commands ignore it.
+
+```json
+{
+  "url": "https://api.kopai.app/v2",
+  "token": "kpi_…",
+  "otlp": { "endpoint": "https://otlp-http.kopai.app", "token": "kpi_…" }
+}
+```
+
+## Setup
+
+`kopai setup` connects the current project to a Kopai workspace in one step. Copy the
+command, with its one-time code, from the Kopai dashboard. Run it from the project root.
+
+```bash
+npx @kopai/cli setup --code kps_…
+kopai setup --code kps_… --api http://localhost:3000    # local Kopai stack
+kopai setup --code kps_… --dry-run                      # print the plan only
+```
+
+What it does, in order:
+
+1. Exchanges the code at `POST <api>/v1/setup/exchange`. The code is single-use and
+   expires after 15 minutes.
+2. Writes `./.kopairc` (mode 0600): `url` and `token` for the CLI, and the `otlp` block.
+   Existing keys in the file are kept. Inside a git repository, adds `.kopairc` to
+   `./.gitignore` when no `.gitignore` up to the repository root lists it.
+3. Installs the skills `otel-instrumentation`, `root-cause-analysis`, and `create-dashboard`
+   into the project:
+   `npx -y skills add <source> --skill otel-instrumentation root-cause-analysis create-dashboard -y`.
+4. Registers the Kopai MCP connector, named `kopai`, in each coding agent found:
+   - Claude Code: `claude mcp add --transport http kopai <mcpUrl>`
+   - Codex: `codex mcp add kopai --url <mcpUrl>`
+   - Cursor: sets `mcpServers.kopai.url` in `./.cursor/mcp.json`, keeping other servers.
+
+   A connector that is already registered counts as done. When the workspace has no MCP
+   URL, this step is skipped with a note.
+
+5. Prints the first prompt to give your coding agent. With `--launch`, starts Claude Code
+   with it.
+
+Progress goes to stderr; the final next-step lines go to stdout. A failed skills or
+connector step prints the command to run yourself, the remaining steps still run, and the
+exit code is 1.
+
+| Flag                    | Description                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `--code <code>`         | One-time setup code from the dashboard (required)                                |
+| `--api <url>`           | API origin (default `https://api.kopai.app`)                                     |
+| `--skills-source <src>` | Source for `npx skills add` (default `kopai-app/kopai-mono`; a local path works) |
+| `--agent <names>`       | Agents to register, comma-separated: `claude,codex,cursor` (default: all found)  |
+| `--no-skills`           | Skip installing the skills                                                       |
+| `--no-mcp`              | Skip registering the MCP connector                                               |
+| `--dry-run`             | Print the plan; do not exchange the code, run commands, or write files           |
+| `--yes`                 | Do not ask before editing `.gitignore` or launching Claude Code                  |
+| `--launch`              | Start Claude Code with the first prompt when setup is done                       |
+
+An agent counts as found when its binary (`claude`, `codex`) is on PATH. Cursor counts when
+`./.cursor` exists or `cursor` or `cursor-agent` is on PATH.
+
+Questions are asked only when stdin is a terminal. Without one, `.gitignore` is updated
+without asking, and `--launch` needs `--yes`.
+
+| Exit code | Meaning in `setup`                                                                                       |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| 0         | Done (also for `--dry-run`)                                                                              |
+| 1         | The exchange failed (invalid or expired code, network, rate limit), or a skills or connector step failed |
+| 2         | Invalid arguments: missing `--code`, bad `--api`, unknown `--agent`                                      |
+| 3         | `./.kopairc` cannot be written                                                                           |
+
 ## Commands
 
 ### Traces

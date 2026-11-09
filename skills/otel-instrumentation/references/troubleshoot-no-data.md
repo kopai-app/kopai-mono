@@ -7,6 +7,12 @@
 Nothing arrived at all. Work down this list in order — each step rules out one layer, so
 skipping ahead wastes time on the wrong layer.
 
+**Kopai Cloud** (`./.kopairc` has an `otlp` block): the endpoint in steps 2 and 3 is
+`otlp.endpoint` from `.kopairc`, not localhost, and every request needs the token. A 401
+means the `Authorization` header is missing or the token is wrong — check
+`OTEL_EXPORTER_OTLP_HEADERS` in the shell that launched the app (`setup-environment.md`).
+Run the CLI in step 8 from the directory that holds `.kopairc`.
+
 ## 1. Did anything actually run?
 
 The most common cause of "no data" is no traffic. Confirm you drove the app in this run —
@@ -21,10 +27,14 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 
 Not 2xx → Kopai isn't running. `npx @kopai/app start` (`setup-backend.md`).
 
+Kopai Cloud: run the Cloud check in `setup-backend.md` instead. It sends the same POST to
+`otlp.endpoint` with the `Authorization` header. 401 → the token is wrong.
+
 ## 3. Is the app pointed at the right port?
 
 ```bash
 echo "$OTEL_EXPORTER_OTLP_ENDPOINT"     # must be http://localhost:4318, not 8000
+                                        # Kopai Cloud: must equal otlp.endpoint in .kopairc
 ```
 
 Port 8000 is the query API and does not accept OTLP — `troubleshoot-wrong-port.md`.

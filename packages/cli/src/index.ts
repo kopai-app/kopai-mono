@@ -8,6 +8,7 @@ import { createDashboardsCommand } from "./commands/dashboards.js";
 import { createLoginCommand } from "./commands/login.js";
 import { createLogoutCommand } from "./commands/logout.js";
 import { createWhoamiCommand } from "./commands/whoami.js";
+import { createSetupCommand } from "./commands/setup.js";
 import { checkForUpdates } from "./update-check.js";
 import pkg from "../package.json" with { type: "json" };
 
@@ -24,6 +25,7 @@ program
   .addCommand(createLoginCommand())
   .addCommand(createLogoutCommand())
   .addCommand(createWhoamiCommand())
+  .addCommand(createSetupCommand())
   .addHelpText(
     "after",
     `
@@ -31,6 +33,7 @@ Examples:
   $ kopai traces search                                          # http://localhost:8000 (default, for @kopai/app running locally)
   $ kopai traces search --url https://api.kopai.app/v2          # hosted instance (run "kopai login" first)
   $ kopai login                                                  # save token for https://api.kopai.app/v2
+  $ kopai setup --code kps_…                                     # connect this project: tokens, skills, MCP connector
   $ kopai logs search --url https://example.com --token kpi_…    # custom instance with auth`
   );
 

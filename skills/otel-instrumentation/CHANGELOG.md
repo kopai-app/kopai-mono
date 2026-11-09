@@ -1,5 +1,11 @@
 # kopai/otel-instrumentation
 
+## 2.2.0
+
+### Minor Changes
+
+- Add Kopai Cloud mode. When `./.kopairc` has an `otlp` block, written by `kopai setup`, the skill uses Kopai Cloud and never starts a local backend. It exports `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` from that block, and the step 1 check becomes the same `curl` POST to `<otlp.endpoint>/v1/traces` with an `Authorization` header. `setup-backend.md` gains a "Kopai Cloud" section. `setup-environment.md` documents `OTEL_EXPORTER_OTLP_HEADERS`, with the space after `Bearer` written as `%20`, and that run-tag validation with `npx @kopai/cli` must run from the directory holding `.kopairc`. `troubleshoot-no-data.md` and `troubleshoot-wrong-port.md` gain Cloud notes: the endpoint comes from `.kopairc`, and a 401 means the header or token is wrong. `drive-traffic.md` no longer overrides the Cloud endpoint with localhost.
+
 ## 2.1.0
 
 ### Minor Changes

@@ -4,7 +4,7 @@ description: Instrument applications with the OpenTelemetry SDK and prove the te
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # OpenTelemetry Instrumentation with Kopai
@@ -12,29 +12,36 @@ metadata:
 Emit **wide events**, then prove they are good.
 
 A span is a wide event: one flat record carrying the full context of a unit of work.
-Kopai runs on localhost, so you never ship instrumentation on faith — you drive traffic
-through the app yourself and assert on what arrived. The loop is **green** when every
-assertion in [validate-traces](references/validate-traces.md) passes. Nothing here is
-finished while an assertion is red.
+Kopai runs on localhost, or in Kopai Cloud once `kopai setup` has connected the project.
+Either way you never ship instrumentation on faith — you drive traffic through the app
+yourself and assert on what arrived. The loop is **green** when every assertion in
+[validate-traces](references/validate-traces.md) passes. Nothing here is finished while an
+assertion is red.
 
 ## Branches
 
-| You are…                                    | Start at                                                                                                    |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Setting up a service that has no telemetry  | Workflow step 1 below                                                                                       |
-| Retrofitting OTel into an existing codebase | [context-propagation](references/context-propagation.md) first — it is ~60% of the work — then the workflow |
-| Chasing data that isn't arriving            | [troubleshoot-no-data](references/troubleshoot-no-data.md), then step 4 of the workflow                     |
+| You are…                                            | Start at                                                                                                    |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Setting up a service that has no telemetry          | Workflow step 1 below                                                                                       |
+| In a project whose `./.kopairc` has an `otlp` block | Kopai Cloud: workflow step 1 below, Cloud mode. Do not start a local backend                                |
+| Retrofitting OTel into an existing codebase         | [context-propagation](references/context-propagation.md) first — it is ~60% of the work — then the workflow |
+| Chasing data that isn't arriving                    | [troubleshoot-no-data](references/troubleshoot-no-data.md), then step 4 of the workflow                     |
 
 ## Workflow
 
-| #   | Step                                                                                                                                                                                                                       | Done when                                                                                                                                                  |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Start** the backend — `npx @kopai/app start`                                                                                                                                                                             | `curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4318/v1/traces -H 'Content-Type: application/json' -d '{"resourceSpans":[]}'` returns 2xx |
-| 2   | **Configure** the environment — [setup-environment](references/setup-environment.md)                                                                                                                                       | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, and a `validation.run_id` run tag are all exported in the shell that launches the app                  |
-| 3   | **Instrument** — the matching `lang-<language>` rule under **Language SDKs** below, then the judgment rules                                                                                                                | The app boots with the SDK loaded and prints no OTel export errors                                                                                         |
-| 4   | **Drive** traffic yourself — [drive-traffic](references/drive-traffic.md)                                                                                                                                                  | Every discovered entry point hit at least once **and** at least one deliberate failure driven                                                              |
-| 5   | **Assert** — [validate-traces](references/validate-traces.md), then [validate-logs](references/validate-logs.md), [validate-metrics](references/validate-metrics.md), [validate-shutdown](references/validate-shutdown.md) | Every assertion passes. The loop is **green**                                                                                                              |
-| 6   | **Fix** — the matching `troubleshoot-*` rule under **Fix it** below                                                                                                                                                        | Return to step 4 and re-drive. Never stop on a red assertion                                                                                               |
+Check for Kopai Cloud before step 1: `jq -e .otlp .kopairc` in the project root. If
+`./.kopairc` has an `otlp` block, `kopai setup` already connected this project to Kopai
+Cloud. Use it, and never start a local backend. The endpoint and token come from that
+block.
+
+| #   | Step                                                                                                                                                                                                                       | Done when                                                                                                                                                                                                                                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Start** the backend — `npx @kopai/app start`. **Kopai Cloud:** start nothing; read the endpoint and token from `./.kopairc` — [setup-backend](references/setup-backend.md#kopai-cloud)                                   | `curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4318/v1/traces -H 'Content-Type: application/json' -d '{"resourceSpans":[]}'` returns 2xx. Kopai Cloud: the same POST to `<otlp.endpoint>/v1/traces` with `-H "Authorization: Bearer <otlp.token>"` returns 2xx |
+| 2   | **Configure** the environment — [setup-environment](references/setup-environment.md)                                                                                                                                       | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, and a `validation.run_id` run tag are all exported in the shell that launches the app. Kopai Cloud: `OTEL_EXPORTER_OTLP_HEADERS` too                                                                                         |
+| 3   | **Instrument** — the matching `lang-<language>` rule under **Language SDKs** below, then the judgment rules                                                                                                                | The app boots with the SDK loaded and prints no OTel export errors                                                                                                                                                                                                               |
+| 4   | **Drive** traffic yourself — [drive-traffic](references/drive-traffic.md)                                                                                                                                                  | Every discovered entry point hit at least once **and** at least one deliberate failure driven                                                                                                                                                                                    |
+| 5   | **Assert** — [validate-traces](references/validate-traces.md), then [validate-logs](references/validate-logs.md), [validate-metrics](references/validate-metrics.md), [validate-shutdown](references/validate-shutdown.md) | Every assertion passes. The loop is **green**                                                                                                                                                                                                                                    |
+| 6   | **Fix** — the matching `troubleshoot-*` rule under **Fix it** below                                                                                                                                                        | Return to step 4 and re-drive. Never stop on a red assertion                                                                                                                                                                                                                     |
 
 Steps 4–6 are a loop, not a sequence. Report the instrumentation complete only when
 step 5 is green against traffic you drove in step 4 of the _same_ run.

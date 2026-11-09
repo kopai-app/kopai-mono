@@ -1,13 +1,12 @@
 import { Command } from "commander";
 import { createInterface } from "node:readline";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import {
   saveConfig,
   resolveConfigPath,
   TOKEN_PREFIX_LENGTH,
   type Config,
 } from "../config.js";
+import { kopaircGitignoreStatus } from "../project-files.js";
 
 const LOGIN_DEFAULT_URL = "https://api.kopai.app/v2";
 
@@ -46,23 +45,10 @@ export function createLoginCommand(): Command {
       saveConfig(updates, targetPath);
 
       // Warn if in a git repo and .kopairc is not gitignored
-      if (!opts.global) {
-        const gitDir = join(process.cwd(), ".git");
-        if (existsSync(gitDir)) {
-          const gitignorePath = join(process.cwd(), ".gitignore");
-          let isIgnored = false;
-          if (existsSync(gitignorePath)) {
-            const content = readFileSync(gitignorePath, "utf-8");
-            isIgnored = content
-              .split("\n")
-              .some((line) => line.trim() === ".kopairc");
-          }
-          if (!isIgnored) {
-            console.error(
-              "Warning: .kopairc is not in .gitignore. Add it to avoid committing secrets."
-            );
-          }
-        }
+      if (!opts.global && kopaircGitignoreStatus(process.cwd()) === "missing") {
+        console.error(
+          "Warning: .kopairc is not in .gitignore. Add it to avoid committing secrets."
+        );
       }
 
       console.log(

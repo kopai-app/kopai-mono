@@ -16,6 +16,7 @@ Before launching the app, stamp every signal it emits with a unique run tag:
 RUN_ID=$(uuidgen)
 export OTEL_RESOURCE_ATTRIBUTES="validation.run_id=$RUN_ID"
 export OTEL_SERVICE_NAME=my-service
+# Kopai Cloud: skip the next line. Keep the endpoint and headers from setup-environment.md
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_BSP_SCHEDULE_DELAY=500   # flush every 500ms so short runs don't lose spans
 ```
