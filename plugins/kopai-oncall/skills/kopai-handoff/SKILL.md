@@ -28,6 +28,14 @@ Fan out across every capability in `STACK.md` for the shift window
 
 - `pager` — every page and incident: state, severity, resolution
 - `alert-channels` — what fired, what people said, what never got a thread
+- Kopai alerts, if the alert tools are present — `alerts_list` with
+  `changed_since` at the shift start (`state` `all`, `limit` 200; say so
+  if `truncated`): each
+  rule's FIRINGs, how long each lasted, and any whose `delivery_status` is
+  not `sent` (a page that may never have reached the channel).
+  `alert_rules_list` shows rules that are `stale` (failing to evaluate)
+  or still FIRING at handoff time; both are open items. Quote
+  `observed.text` and `threshold.text` as the tools give them.
 - `code` — merges/PRs touching on-call-relevant paths; reverts; deploys
 - `metrics` / `traces` in Kopai — week-over-week trend of the health
   signals in `ONCALL.md`. For each service with a paging criterion, query
