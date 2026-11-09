@@ -13,8 +13,8 @@ description: >
 <!-- Modified for Kopai, 2026: renamed from weather; health signals are
      service error rate, latency and volume from Kopai instead of CI
      pipeline signals; CI-specific discounts and gates replaced with
-     service-health equivalents; the report page can be a live page. See
-     NOTICE. -->
+     service-health equivalents; the report page is a canvas or a repo
+     file, never a live page. See NOTICE. -->
 
 # Kopai weather
 
@@ -41,10 +41,10 @@ Two outputs, two policies:
 
 - **The report page** (a channel canvas or a file in the on-call repo —
   bind it once in `ONCALL.md`) is rewritten **every full cycle,
-  unconditionally**. A team that wants charts that stay current between
-  cycles can also have a live page built with the create-live-page skill
-  (it queries Kopai through each viewer's own connection); the canvas or
-  file stays the record this skill writes.
+  unconditionally**. It is never a live page: from a Slack channel it is
+  undocumented which Kopai connection a page would query with, and the
+  channel's `agent` token must not hand live workspace data to every
+  viewer. A chart in the report is a snapshot of the cycle's numbers.
   It is the always-current picture; anyone can look anytime.
 - **The channel** gets a message **only when an event gate fires** (below).
   Silence means "nothing you care about changed," and the routine's value
@@ -240,7 +240,7 @@ prose). When an input feed is written for machines or other agents, mine
 it for FACTS, never PHRASING.
 
 Link discipline: storm posts link the frozen report; sunny posts link the
-live report page instead — sunny reports are noise, and linking them
+current report page instead — sunny reports are noise, and linking them
 trains people to ignore the link.
 
 ## Posting — robust send
