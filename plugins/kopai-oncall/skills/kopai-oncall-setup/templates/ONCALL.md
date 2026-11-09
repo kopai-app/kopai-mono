@@ -170,13 +170,19 @@ exists so the team decides this before an outage, not during one.}}
 
 ## Alert-rule proposals
 
-Format: proposals are paste-ready {{monitor JSON / Terraform / PromQL /
-UI steps}} for {{alerting tool}} — never prose.
-Install mode: {{**human installs** (default — Claude drafts, a human
-pastes; the plugin stays fully read-only) / **alert-editor extension** (opt-in:
-Claude may CREATE new rules after per-rule approval in the channel;
-additive only — never modify, delete, or silence an existing rule; every
-write logged to lessons.md; credential noted in STACK.md)}}.
+Format: {{for Kopai rules: the editor link
+(`…/alerts/rules/new?draft=…`) plus the rule JSON and its backtest, per
+the kopai-triage skill's `references/rule-proposal.md` / for another
+alerting tool: paste-ready monitor JSON, Terraform, PromQL or UI steps}}
+— never prose.
+Install mode: {{**a person installs** (default — Claude proposes, an owner
+or admin saves it from the link; the plugin stays read-only) / **Claude
+creates** (opt-in: a Kopai owner gave the channel's `agent` token the grant
+"may create alert rules"; Claude creates a NEW rule only after an explicit
+yes in the thread for that rule; additive only — never modify, delete,
+pause, or silence an existing rule; every creation logged to lessons.md
+with its approval link; Kopai caps Claude's creations per workspace per
+day)}}.
 
 ## Read-only guarantee
 

@@ -35,6 +35,9 @@ All bindings are read-only, always. The plugin does not support write
 credentials to monitored systems; the only outbound action a binding may
 carry is sending a page via the `pager` capability. The `flags` binding is
 read-only like all others — ramp proposals are plans a human executes. Sole permitted
-exception: if `ONCALL.md` records the opt-in alert-editor extension, the
-`metrics`/alerting binding may carry an **additive-only** rule-creation
-credential ({{not opted in / opted in on {{date}}, credential: {{name}}}}).
+exception: if `ONCALL.md` records the opt-in rule creation, the Kopai
+connection's `agent` token may hold the grant "may create alert rules",
+which allows creating new rules and nothing else ({{not opted in / opted
+in on {{date}}: grant on token {{token name}}, set by {{Kopai owner}}}}).
+Kopai connection: {{`agent` token (expected) / a dedicated non-admin
+Kopai user / a person's own login — switch to an `agent` token}}.

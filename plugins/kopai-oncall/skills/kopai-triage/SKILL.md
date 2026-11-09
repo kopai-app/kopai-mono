@@ -1,8 +1,8 @@
 ---
 name: kopai-triage
 description: >
-  Investigate an alert or incident in an on-call channel with Kopai
-  telemetry: classify the symptom, load the team's playbook or Kopai's
+  Investigate an alert or incident in an on-call channel with Kopai: read
+  a Kopai alert by its event id, classify the symptom, load the team's playbook or Kopai's
   default reference, check lessons.md for known causes, query traces, logs
   and metrics in Kopai, and post a grounded first-pass diagnosis with
   evidence and a proposed (never executed) fix. Use when an alert fires, a
@@ -32,11 +32,16 @@ confidence, mention nobody, and write nothing to any repo.
 
 ## Querying Kopai
 
-The Kopai connector has two read-only tools: `query` (one KopaiQuery under
+The Kopai connector has two telemetry tools, `query` (one KopaiQuery under
 `query`, keyed on `signal` traces/logs/metrics and `mode` aggregate/raw)
-and `metrics_discover`. Their prefix depends on how Kopai is connected; use
-whichever is present, and take field names, row caps and the aggregate cap
-from the `query` tool's own schema.
+and `metrics_discover`, and, on a workspace with Kopai alerting, the alert
+tools: `alerts_list`, `alert_get`, `alert_history`, `alert_rules_list` and
+`alert_rule_backtest` (read-only), plus `alert_rule_create` when the
+channel's `agent` token holds the rule-creation grant. Their prefix
+depends on how Kopai is connected; use whichever is present, and take
+field names, row caps and the aggregate cap from each tool's own schema.
+Never call `alert_rule_update` or `alert_rule_set_enabled`, even when a
+connection offers them (`references/rule-proposal.md`).
 
 - **Pin the window.** During an incident, use `absolute` time from about
   2h before onset to now, never `relative`: a relative window keeps
@@ -72,6 +77,13 @@ from the `query` tool's own schema.
    (policy + routing), `STACK.md` (capability bindings), `BASELINES.md`
    (each service's normal range) and `lessons.md` (known causes) from the
    team's on-call repo. Files over memory (rule 7).
+
+1a. **Is this a Kopai alert?** If the post you are triaging is an alert,
+read `references/kopai-alert.md` first. It finds the alert's `event_id`,
+reads the event with `alert_get`, checks who Kopai is connected as, and
+sets the reply's opening line and closing link. A post that is not
+Kopai's is a foreign alert: triage it with `query` and
+`metrics_discover` only, and say so.
 
 2. **Classify the symptom.** The team's own playbooks in `playbooks/` (in
    the on-call repo) come first: they were mined from this team's
@@ -220,8 +232,11 @@ acknowledgment ladder in `ONCALL.md` only as far as it is written.
     the lessons entry under "Gotcha / rule" so the team can report it to
     Kopai. And ask the alerting question: **would a rule have caught
     this earlier?** If detection was human or late, propose the rule in
-    the postmortem — paste-ready in the format `ONCALL.md` names, with
-    this incident as provenance. Install per ONCALL.md's install mode:
-    default is a human pastes it; under the alert-editor extension you may
-    create it yourself after explicit approval in the channel (additive
-    only, logged to lessons.md — ONCALL-RULES.md rule 1a).
+    the postmortem, with this incident as provenance. For a Kopai rule,
+    follow `references/rule-proposal.md`: duplicate check, backtest, the
+    editor link and the rule JSON. Install per ONCALL.md's install mode:
+    by default a person saves it from the link; if the team opted in and
+    the channel's token holds the grant, you may create it yourself after
+    an explicit yes in the thread (additive only, logged to lessons.md —
+    ONCALL-RULES.md rule 1a). For another alerting tool, the proposal is
+    paste-ready in the format `ONCALL.md` names.

@@ -27,14 +27,18 @@ keep the rule names with their numbers.
    pager is bound) pages. This is not configurable; there is no
    allowlist.
    1a. **The one fenced exception — alert rules, opt-in only.** If (and only
-   if) `ONCALL.md` records that the team opted into the alert-editor
-   extension: you may CREATE a new alert rule in the alerting tool, after
-   proposing it and receiving explicit approval in the channel for that
-   specific rule. Additive only — you may never modify, delete, or
-   silence an existing rule under any circumstances; those operations are
-   human, always. Log every rule you create to `lessons.md` with its
-   approval link. Absent that opt-in record, drafting paste-ready rules
-   for humans to install is your only involvement with alerting config.
+   if) `ONCALL.md` records that the team opted into rule creation, and the
+   alerting connection allows it (for Kopai: the channel's `agent` token
+   holds the grant "may create alert rules", so `alert_rule_create` is
+   present): you may CREATE a new alert rule, after proposing it and
+   receiving explicit approval in the channel for that specific rule.
+   Additive only — you may never modify, delete, pause, or silence an
+   existing rule under any circumstances, even when a tool for it is
+   present; those operations are human, always. Log every rule you create
+   to `lessons.md` with its approval link. Absent that opt-in record,
+   drafting paste-ready rules for humans to install (for Kopai: the editor
+   link plus the rule JSON) is your only involvement with alerting
+   config.
 2. **Never mark an incident resolved.** Report that metrics are back at
    baseline and let a human close it.
 3. **Ambiguity resolves by tier** (the tier-ambiguity rule). When a
