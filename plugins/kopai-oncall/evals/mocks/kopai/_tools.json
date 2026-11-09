@@ -1,0 +1,245 @@
+{
+  "tools": [
+    {
+      "name": "metrics_discover",
+      "description": "List the metrics present in this workspace, with each metric's type, unit, description and the attribute keys and values seen on it. Takes no arguments. A listing above 150,000 characters is returned without its attribute values, or without its attributes, and the response names what was omitted.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "alerts_list",
+      "description": "Kopai alert events (FIRING and RESOLVED), newest first. Each row has event_id, rule_id, rule_name, transition, at, observed and threshold ({value, unit, text}; quote `text`), incident_url and delivery_status (did the Slack message go out). `truncated` is true when more events matched than `limit`. Use alert_get with an event_id for the full event and the query that fired.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "changed_since": {
+            "description": "Only events written at or after this time, ordered by when they were written. When polling, pass the previous poll's time minus 2 minutes and skip event_ids already handled.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "How many to return, at most 200.",
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "state": {
+            "default": "all",
+            "description": "Which transitions to list: FIRING events, RESOLVED events, or both. Not whether an alert is still open.",
+            "enum": [
+              "firing",
+              "resolved",
+              "all"
+            ],
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "alert_get",
+      "description": "One alert event in full, by event_id: the event, the event it pairs with (the RESOLVED that closed a FIRING, or the FIRING a RESOLVED closed), the rule as it is now, the query that produced the value (run it with the `query` tool, widened and bucketed, to see the series), and the Slack delivery. Adds observed, threshold and incident_url.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id"
+        ],
+        "properties": {
+          "event_id": {
+            "description": "The event's id, from alerts_list or the incident link (.../incidents/<event_id>).",
+            "pattern": "^[0-9]{1,19}$",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "alert_history",
+      "description": "One rule's alert events, newest first, in the alerts_list row shape: has this happened before? `since` keeps events at or after a time.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rule_id"
+        ],
+        "properties": {
+          "limit": {
+            "default": 50,
+            "description": "How many to return, at most 200.",
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "rule_id": {
+            "description": "The rule's id, from alert_rules_list or an alert.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "since": {
+            "description": "Only events at or after this time.",
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "alert_rules_list",
+      "description": "The workspace's alert rules, by name, each with its live state (OK, PENDING or FIRING, and since when), lastEvaluatedAt, lastError and editor_url. `metric_name` keeps the rules on one metric; check it before alert_rule_create to avoid a duplicate. Read a rule here before alert_rule_update. `unreadable` lists rules this version cannot read.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "limit": {
+            "default": 50,
+            "description": "How many to return, at most 200.",
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "metric_name": {
+            "description": "Only the rules on this metric: the exact check for a duplicate before alert_rule_create.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "alert_rule_backtest",
+      "description": "An estimate of how often a draft rule would have fired over the last 24h or 7d, with each firing's start and end; not a replay of real evaluations. Takes the rule's measurement and firing fields (no name). The range is shortened to what one query can cover and to the workspace's retention: `from` and `to` are the range covered, `range` the one asked for.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rule",
+          "range"
+        ],
+        "properties": {
+          "range": {
+            "enum": [
+              "24h",
+              "7d"
+            ],
+            "type": "string"
+          },
+          "rule": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "metricName",
+              "threshold"
+            ],
+            "properties": {
+              "aggregation": {
+                "default": "AVG",
+                "enum": [
+                  "AVG",
+                  "MIN",
+                  "MAX",
+                  "INCREASE",
+                  "RATE",
+                  "QUANTILE"
+                ],
+                "type": "string"
+              },
+              "comparison": {
+                "default": "gt",
+                "enum": [
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte"
+                ],
+                "type": "string"
+              },
+              "filters": {
+                "default": [],
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "scope",
+                    "key",
+                    "value"
+                  ],
+                  "properties": {
+                    "key": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "enum": [
+                        "datapoint",
+                        "resource"
+                      ],
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "forSeconds": {
+                "default": 300,
+                "maximum": 86400,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "keepFiringForSeconds": {
+                "default": 300,
+                "maximum": 86400,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "metricName": {
+                "type": "string"
+              },
+              "metricType": {
+                "default": "Gauge",
+                "enum": [
+                  "Gauge",
+                  "Sum",
+                  "Histogram",
+                  "Summary"
+                ],
+                "type": "string"
+              },
+              "quantile": {
+                "anyOf": [
+                  {
+                    "exclusiveMaximum": 1,
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "threshold": {
+                "type": "number"
+              },
+              "windowSeconds": {
+                "default": 300,
+                "maximum": 21600,
+                "minimum": 60,
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
