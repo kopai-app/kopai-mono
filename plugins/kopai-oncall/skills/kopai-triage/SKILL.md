@@ -8,8 +8,10 @@ description: >
   evidence and a proposed (never executed) fix. Use when an alert fires, a
   routine detects a new anomaly, or someone reports something broken
   ("checkout is throwing 500s", "payments is slow", "error rate alert
-  fired", "is the API down?"), especially where ONCALL.md exists. For an
-  ad-hoc investigation outside on-call, root-cause-analysis is enough.
+  fired", "is the API down?"), especially where ONCALL.md exists. Also use
+  it to propose a Kopai alert rule ("would a rule have caught this?",
+  "propose an alert for this"). For an ad-hoc investigation outside
+  on-call, root-cause-analysis is enough.
 ---
 
 <!-- Copyright 2026 Anthropic PBC -->

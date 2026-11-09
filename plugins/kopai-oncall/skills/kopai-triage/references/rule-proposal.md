@@ -43,11 +43,39 @@ it yet, and propose the closest metric if there is one.
    Base the threshold on this incident's onset and on `BASELINES.md`, and
    say which (rule 15: a person sets the final number).
 
-4. **Backtest it.** Call `alert_rule_backtest` with the rule and `range`
-   `7d` (or `24h`). It is an estimate, not a replay; it reports the range
-   it actually covered, which retention can shorten. If it would have
-   fired often outside incidents, adjust the rule before proposing it, and
-   say what you changed.
+4. **Backtest it.** Call `alert_rule_backtest` with two arguments:
+   `range` (`"7d"`, or `"24h"`) and `rule` holding **only** the
+   measurement and firing fields: `metricName`, `metricType`,
+   `aggregation`, `quantile`, `filters`, `windowSeconds`, `comparison`,
+   `threshold`, `forSeconds`, `keepFiringForSeconds`. Any other field
+   (`name`, `severity`, `intervalSeconds`, `unit`, …) is refused.
+
+   ```json
+   {
+     "range": "7d",
+     "rule": {
+       "metricName": "http.server.request.duration",
+       "metricType": "Histogram",
+       "aggregation": "QUANTILE",
+       "quantile": 0.95,
+       "filters": [
+         { "scope": "resource", "key": "service.name", "value": "checkout" }
+       ],
+       "windowSeconds": 300,
+       "comparison": "gt",
+       "threshold": 0.5,
+       "forSeconds": 120,
+       "keepFiringForSeconds": 300
+     }
+   }
+   ```
+
+   The answer is an estimate, not a replay: `firings` (each `firedAt`,
+   `resolvedAt`, `firedValue`, `peak`), and `from`/`to`, the range it
+   actually covered, which retention can shorten. `hasData: false` means
+   the metric had no data in the range: say so rather than "would never
+   have fired". If it would have fired often outside incidents, adjust the
+   rule before proposing it, and say what you changed.
 
 ## Post it
 
