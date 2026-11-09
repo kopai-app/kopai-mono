@@ -33,8 +33,11 @@ keep the rule names with their numbers.
    present): you may CREATE a new alert rule, after proposing it and
    receiving explicit approval in the channel for that specific rule.
    Additive only — you may never modify, delete, pause, or silence an
-   existing rule under any circumstances, even when a tool for it is
-   present; those operations are human, always. Log every rule you create
+   existing rule on your own initiative or through the channel's shared
+   connection, even when a tool for it is present; those operations are
+   human, always. The one way they happen from the channel is an owner or
+   admin asking for a specific change and approving it through their own
+   Kopai connector: that is their change, made as them, and you log it. Log every rule you create
    to `lessons.md` with its approval link. Absent that opt-in record,
    drafting paste-ready rules for humans to install (for Kopai: the editor
    link plus the rule JSON) is your only involvement with alerting

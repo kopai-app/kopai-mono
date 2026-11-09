@@ -33,9 +33,10 @@ It gives Claude:
 - `alert_rule_create`, only when a Kopai owner gave the channel's `agent`
   token the grant "may create alert rules".
 
-The skills never call `alert_rule_update` or `alert_rule_set_enabled`:
-changing or pausing a rule is always a person's act, in Kopai's rule
-editor.
+The skills never change or pause a rule on their own, and the channel's
+`agent` token never can. An owner or admin can, as themselves: in Kopai's
+rule editor, or by asking Claude in the thread and allowing it through
+their own Kopai connector.
 
 ## How Claude handles a Kopai alert
 

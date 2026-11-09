@@ -110,9 +110,11 @@ every channel.
 - For follow-up questions in an alert thread, mention `@Claude`.
 - Slack Connect channels (shared with another organization) are not
   supported.
-- Changing or pausing a rule is always a person's act, as themselves: an
-  owner or admin does it in Kopai's rule editor (Claude links the rule).
-  The channel's `agent` token never can.
+- An owner or admin can still create, change or pause rules from the
+  channel, as themselves: through their own Kopai connector in claude.ai,
+  after allowing it when Claude asks them, or in Kopai's rule editor
+  (Claude links the rule). The channel's `agent` token can never change or
+  pause a rule.
 
 ## The message to send your admins
 
