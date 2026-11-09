@@ -17,6 +17,7 @@ Adapted files keep their original copyright and SPDX headers and carry a
 - skills/kopai-oncall-setup/templates/ONCALL-RULES.md
                               from the standing rules in CLAUDE.md
 - skills/kopai-verify-fix     new; expands step 9 of skills/triage
+- skills/kopai-evidence-page  new; a snapshot page, only on request
 - skills/kopai-triage/references/
                               new content for Kopai, in the structure of
                               the kit's triage references
@@ -25,8 +26,8 @@ Main changes: skills are renamed with a kopai- prefix; telemetry
 capabilities (metrics, logs, traces) bind to the Kopai MCP connector;
 team-specific playbooks live in the team's own repository instead of the
 plugin; and the standing rules ship as ONCALL-RULES.md, which setup copies
-into the team's repository.
+into the team's repository. Kopai is also the alerting tool: triage reads
+Kopai alerts by event id, and rule proposals use Kopai's rule editor link.
 
-The skills root-cause-analysis, create-live-page, otel-instrumentation and
-create-dashboard are Kopai's own and are copied from the repository's
+The skills root-cause-analysis and create-live-page are Kopai's own and are copied from the repository's
 top-level skills/ directory by scripts/sync-plugin-skills.mjs.

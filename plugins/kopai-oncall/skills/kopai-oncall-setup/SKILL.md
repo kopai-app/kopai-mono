@@ -22,7 +22,7 @@ description: >
 You are setting up a Claude-assisted on-call for this team, with Kopai as
 the source of traces, logs and metrics. Everything this skill writes goes
 into **the team's on-call repo**: a repository the channel can read and
-write (granted on the channel's Access bundle in Claude Tag, or the
+write (granted in the bundle that applies to the channel in Claude Tag, or the
 current working directory in a local Claude Code session). In Claude Tag
 the sandbox is wiped between turns, so a file only exists once it is
 committed and pushed there. Never treat a file in the sandbox as saved.
@@ -42,13 +42,19 @@ acting. On the first phase, copy `ONCALL-RULES.md`, `ONBOARD.md` and
 the rules from there. Rules 13–15 (gates, provenance, thresholds) govern
 everything below.
 
-**Kopai tools.** The Kopai connector exposes two read-only tools, `query`
+**Kopai tools.** The Kopai connector exposes two telemetry tools, `query`
 (one KopaiQuery object: `signal` traces/logs/metrics × `mode`
-aggregate/raw) and `metrics_discover`. Their names carry a prefix that
+aggregate/raw) and `metrics_discover`, and on a workspace with Kopai
+alerting the read-only alert tools (`alerts_list`, `alert_get`,
+`alert_history`, `alert_rules_list`, `alert_rule_backtest`), plus
+`alert_rule_create` when the channel's `agent` token holds the
+rule-creation grant. Their names carry a prefix that
 depends on how Kopai is connected (for example `mcp__kopai__query` from
 this plugin, `mcp__claude_ai_Kopai__query` from a claude.ai connector).
 Use whichever is present and follow the `query` tool's own schema for
-field names, row caps and the aggregate cap.
+field names, row caps and the aggregate cap. Setup never creates, changes
+or pauses an alert rule; rule proposals follow the kopai-triage skill's
+`references/rule-proposal.md`.
 
 Determine which phase you're in by what exists on disk:
 
@@ -85,8 +91,9 @@ plugin's telemetry source; every other tool is named only in `STACK.md`.
    in `STACK.md`. Phases 0–3 work from either; **Phase 4 requires the
    channel**. If you're local, tell the user now what Phase 4 will need so
    it isn't a surprise: `@Claude` invited to the on-call channel (and each
-   alert channel to watch), and an Owner adding this repo to the channel's
-   access bundle. Point them at `references/tag-setup.md` — it separates what they can
+   alert channel to watch), and a Claude admin adding this repo, the
+   kopai-oncall plugin and the Kopai `agent` token to the bundle that
+   applies to the channel. Point them at `references/tag-setup.md` — it separates what they can
    do themselves from what needs their Claude org Owner, and contains a
    paste-ready request message with the blanks to fill from this repo's
    context. Offer to fill those blanks for them now. Record "channel
@@ -95,10 +102,11 @@ plugin's telemetry source; every other tool is named only in `STACK.md`.
 1. Enumerate every tool/connection available in this session (in a channel:
    also ask yourself "what can I access from this channel?" and list the MCP
    tools present). If no Kopai `query` tool is present, stop here and say
-   so: in Claude Tag the channel's Access bundle needs a Kopai connection
-   (a service-account key, with `api.kopai.app` as its allowed website)
-   and this plugin attached; locally, Claude Code needs the plugin enabled
-   or a Kopai MCP server added.
+   so: in Claude Tag the bundle that applies to the channel needs this
+   plugin plus a custom connector of type **Bearer** holding a Kopai
+   `agent` token, with `api.kopai.app` as its allowed website
+   (`references/tag-setup.md`); locally, Claude Code needs the plugin
+   enabled or a Kopai MCP server added.
 2. For each, probe **read-only**: list one dashboard, run one trivial log
    query, list the last 5 pages/incidents, read the repo's CODEOWNERS. Record
    what worked, what 403'd, what doesn't exist. For Kopai, run these probes:
@@ -113,6 +121,17 @@ plugin's telemetry source; every other tool is named only in `STACK.md`.
      that note.
      An empty result on a workspace that should be busy means a wrong column
      or value, not a quiet system: recheck before recording "no data".
+   - If the alert tools are present, `alert_rules_list`: the workspace's
+     Kopai alert rules, their state and their metrics. Record the count and
+     the rules under `metrics` in `STACK.md`; Phase 1's alert-coverage
+     report starts from them. No alert tools means the workspace is not on
+     Kopai alerting: record it as a Gap, not an error.
+   - From that result's `caller`, how Kopai is connected: `agent` is
+     expected. A `person` who is an owner or admin means everyone in the
+     channel acts as that person: record it as a Gap to fix before Phase 4
+     (switch to an `agent` token, `references/tag-setup.md`). Record
+     whether `alert_rule_create` is present (the token holds the
+     rule-creation grant).
 3. Classify each connection into the plugin's capability slots:
    - `traces` — spans: error rate, throughput, latency, call chains. Kopai.
    - `metrics` — time-series metrics and dashboards. Kopai, plus any other
@@ -232,7 +251,11 @@ INC-nnn)` or `(seen 1×, unverified)`. Rows kept from a plugin default
      tightened threshold/window, with the onset evidence.
    - **Noise** — rules that fired repeatedly with no incident: propose
      retirement or a raised threshold.
-     Write the report to `alert-coverage.md` at the repo root (it lives
+     For Kopai rules, build each proposal per the kopai-triage skill's
+     `references/rule-proposal.md` (duplicate check against
+     `alert_rules_list`, backtest, editor link, rule JSON); grade noise
+     from `alert_history` per rule. Write the report to `alert-coverage.md`
+     at the repo root (it lives
      there permanently — later post-incident proposals and decisions append
      to it, so declined proposals aren't re-proposed). Proposals are drafts
      for humans to review at the gate; none is installed in this phase.
@@ -302,25 +325,31 @@ block at a time, offering mined suggestions where you have them:
      never invent a fallback mid-incident.
 
 6. **Alert-rule proposals: format and install mode.** Two decisions:
-   - _Format:_ which alerting tool should proposals target, and in what
-     paste-ready native form (monitor JSON, Terraform, PromQL, UI steps)?
-     Prose proposals are not acceptable output — a proposal is something a
+   - _Format:_ which alerting tool should proposals target? For Kopai
+     the format is fixed: an editor link that opens the rule pre-filled,
+     plus the rule JSON and its backtest (the kopai-triage skill's
+     `references/rule-proposal.md`). For another tool, which paste-ready
+     native form (monitor JSON, Terraform, PromQL, UI steps)? Prose
+     proposals are not acceptable output — a proposal is something a
      human can install in under a minute.
-   - _Install mode:_ **default — Claude drafts, a human installs** (the
-     paste is the permission; keeps the plugin fully read-only). Or the
-     **alert-editor extension**, opt-in only: a separate write credential
-     to the alerting tool, additive-only — Claude may CREATE a new rule
-     after explicit per-rule approval in the channel, may never modify,
-     delete, or silence an existing rule, and logs every write to
-     `lessons.md`. If they opt in, record it in `ONCALL.md` and
-     `STACK.md`'s access posture. Present the trade honestly: the
-     extension saves a paste; the default keeps "no write credentials to
-     monitored systems" true without asterisks.
+   - _Install mode:_ **default — Claude proposes, a person installs** (an
+     owner or admin opens the link and saves; keeps the plugin
+     read-only). Or **Claude creates**, opt-in only: a Kopai owner ticks
+     "may create alert rules" on the channel's `agent` token in Kopai's
+     Tokens page. Claude may then CREATE a new rule after an explicit yes
+     in the thread for that rule, may never modify, delete, pause, or
+     silence an existing rule, and logs every creation to `lessons.md`
+     with the approval link. Kopai caps Claude's creations per workspace
+     per day. If they opt in, record it in `ONCALL.md` and `STACK.md`'s
+     access posture. Present the trade honestly: the grant saves a click;
+     the default keeps "no write credentials to monitored systems" true
+     without asterisks.
 
 7. **Confirm the read-only guarantee.** Not a question — a statement to
    make once, so the team knows the contract: this agent never changes the
    state of any monitored system; its only outputs are messages, log
-   entries, proposed PRs, and pages. There is no allowlist to configure.
+   entries, proposed PRs, and pages, plus new alert rules if the team
+   opted into rule creation in block 6. There is no allowlist to configure.
    Teams that want automated mitigation are outside this plugin's scope and
    should design that separately, on an accountable human identity.
 
@@ -393,11 +422,13 @@ Goal: turn it on, narrowest first.
 0. **Verify channel connectivity before anything else.** This phase only
    works from the Slack channel. The checklist, done by the human:
    `/invite @Claude` to the on-call channel and each alert channel to be
-   watched; an Owner adds this repo to the channel's access bundle,
-   alongside the Kopai connection and the kopai-oncall plugin. Then
-   the proof: **from the channel**, ask `@Claude what can you access from
-this channel?`, have it read `ONCALL.md` back, and have it run one Kopai
-   trace summary for the last hour. If it can't read the repo or reach
+   watched; a Claude admin adds this repo to the bundle that applies to
+   the channel, alongside the Kopai `agent` token connector and the
+   kopai-oncall plugin (`references/tag-setup.md`). Then the proof:
+   **from the channel**, ask `@Claude what can you access from this
+channel?`, have it read `ONCALL.md` back, run one Kopai trace summary
+   for the last hour, and call `alert_rules_list` to confirm the
+   connection's `caller` is `agent`. If it can't read the repo or reach
    Kopai, stop — pasting routines against a repo the channel can't reach
    fails silently. Clear the "channel connectivity: unverified" gap in
    `STACK.md` once this passes.

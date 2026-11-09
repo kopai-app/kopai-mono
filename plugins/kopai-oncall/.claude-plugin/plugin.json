@@ -1,8 +1,8 @@
 {
   "name": "kopai-oncall",
   "displayName": "Kopai On-Call",
-  "version": "0.1.1",
-  "description": "Put Claude on call with Kopai: triage alerts from your OpenTelemetry traces, logs and metrics, verify fixes against baseline, and write sitreps, handoffs and status reports. Read-only by design.",
+  "version": "0.2.0",
+  "description": "Put Claude on call with Kopai: triage Kopai alerts and other alerts with your OpenTelemetry traces, logs and metrics, propose alert rules, verify fixes against baseline, and write handoffs and status reports. Read-only by design, unless you opt into rule creation.",
   "author": {
     "name": "Kopai",
     "url": "https://kopai.app"
@@ -17,5 +17,6 @@
     "opentelemetry",
     "sre",
     "claude-tag"
-  ]
+  ],
+  "privacyPolicyUrl": "https://kopai.app/privacy/"
 }

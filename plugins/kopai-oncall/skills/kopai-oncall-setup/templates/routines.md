@@ -43,9 +43,11 @@ Convert at your model's current pricing.
 
 ## How detection is wired (read before pasting)
 
-Your existing deterministic alerting stays the source of truth: PagerDuty
-(or equivalent) fires alerts into your alert channels, and page-worthy
-alerts page humans directly, exactly as before. **Claude is never in the
+Your existing deterministic alerting stays the source of truth: Kopai's
+alert rules (or PagerDuty, or equivalent) fire alerts into your alert
+channels, and page-worthy alerts page humans directly, exactly as before.
+Kopai's alert posts never mention `@Claude`, so the watch routine below
+is what brings Claude to them. **Claude is never in the
 detection path** — its standing role is to watch the alert channels and
 triage what fires (routine 2). Its role in detection itself is
 propose-and-tune only: starter rules for new services (below), coverage
@@ -61,6 +63,11 @@ for the past week and post the result here.
 
 ## 2 · Watch alert channels → triage (posts diagnoses)
 
+The alert channel must be private, and Claude must be invited to it
+(`/invite @Claude`). Keep it low-volume: Claude Tag may stop reading a
+channel where many top-level posts pass without a Claude post or a
+mention, until someone mentions `@Claude` there.
+
 <!-- During the shadow period, change "post ... in its thread" to
      "post ... in {{#review-channel}}" and grade daily per eval/replay.md. -->
 
@@ -73,6 +80,21 @@ batch per the skill: one diagnosis naming every alert it accounts for,
 never one post per alert. Propose fixes only — never execute anything.
 ```
 
+### 2b · Polling fallback (only if the watch proves unreliable)
+
+If the watch misses Kopai alerts or reacts too late, replace it for
+Kopai's alerts with a poll. Ten minutes is the shortest interval a
+routine allows.
+
+```
+@Claude every 10 minutes: call Kopai's alerts_list with changed_since set
+to 15 minutes ago (the interval plus overlap), skip each event whose
+Kopai alert post already has your diagnosis in its thread, and run the kopai-triage skill on each new FIRING, posting the
+diagnosis in the thread of its Kopai alert post in {{#alerts-channel}}.
+If the result says truncated, say how many arrived and link Kopai's alert
+history. Post nothing when there is nothing new.
+```
+
 ## 3 · New service? Starter alerts, not a bridge
 
 There is no standing routine for new services — detection is always
@@ -81,8 +103,9 @@ deterministic. Before (or at) launch, ask in the channel:
 ```
 @Claude {{service}} launches soon and has no alerts. Propose conservative
 starter rules — borrow thresholds from our closest existing service's
-mined values plus standard defaults — paste-ready for {{alerting tool}},
-for a human to install before launch.
+mined values plus standard defaults — paste-ready for {{alerting tool}}
+(for Kopai: editor links plus rule JSON), for a human to install before
+launch.
 ```
 
 A human installs them; the post-incident loop (triage's "would a rule
