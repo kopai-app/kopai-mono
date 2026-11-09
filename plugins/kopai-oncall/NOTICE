@@ -1,0 +1,32 @@
+Kopai On-Call
+Copyright 2026 Kopai
+
+This plugin includes material adapted from the On-Call Kit
+(https://github.com/anthropics/oncall-kit), Copyright 2026 Anthropic PBC,
+licensed under the Apache License, Version 2.0.
+
+Adapted files keep their original copyright and SPDX headers and carry a
+"Modified for Kopai" note describing what changed. The adaptations:
+
+- skills/kopai-oncall-setup   from skills/oncall-setup, plus templates/,
+                              eval/replay.md, ONBOARD.md and TAG-SETUP.md
+- skills/kopai-triage         from skills/triage (failure-class references
+                              rewritten for service telemetry in Kopai)
+- skills/kopai-handoff        from skills/handoff
+- skills/kopai-weather        from skills/weather
+- skills/kopai-oncall-setup/templates/ONCALL-RULES.md
+                              from the standing rules in CLAUDE.md
+- skills/kopai-verify-fix     new; expands step 9 of skills/triage
+- skills/kopai-triage/references/
+                              new content for Kopai, in the structure of
+                              the kit's triage references
+
+Main changes: skills are renamed with a kopai- prefix; telemetry
+capabilities (metrics, logs, traces) bind to the Kopai MCP connector;
+team-specific playbooks live in the team's own repository instead of the
+plugin; and the standing rules ship as ONCALL-RULES.md, which setup copies
+into the team's repository.
+
+The skills root-cause-analysis, create-live-page, otel-instrumentation and
+create-dashboard are Kopai's own and are copied from the repository's
+top-level skills/ directory by scripts/sync-plugin-skills.mjs.

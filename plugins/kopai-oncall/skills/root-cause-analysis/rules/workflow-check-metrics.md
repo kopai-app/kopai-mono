@@ -1,0 +1,154 @@
+| title                 | impact   | tags                     |
+| --------------------- | -------- | ------------------------ |
+| Step 4: Check Metrics | CRITICAL | workflow, metrics, step4 |
+
+## Step 4: Quantify Impact & Pinpoint Onset
+
+**Impact:** CRITICAL
+
+This is the upgrade the CLI cannot do: bucket measures over time to see **when** the
+regression started and **how wide** the blast radius is. `.timeSeries(granularity)`
+turns a flat "it's broken" into a precise onset and a per-service spread.
+
+### (a) Trace-derived impact over time (lead here)
+
+Traces already carry error rate and latency — no metric discovery needed. Bucket over a
+window wide enough to bracket the onset (`3h`), at a granularity fine enough to spot the
+inflection (`5m`). `errorRate` counts errors server-side; result rows still report
+`Duration` in **nanoseconds**, so `avg`/`max` come back in ns.
+
+```ts
+import { kq, KopaiError, KopaiQueryBuildError } from "@kopai/sdk";
+// const client = clientFromConfig();
+
+try {
+  const q = kq.traces
+    .aggregate()
+    .measure((m) => m.errorRate("error_rate"))
+    .measure((m) => m.avg("Duration", "avg_ns"))
+    .measure((m) => m.max("Duration", "max_ns"))
+    .dimension("service.name")
+    .timeRelative("3h")
+    .timeSeries("5m")
+    .orderByMeasure("error_rate", "desc")
+    .build();
+  const { data } = await client.query(q);
+  console.log(JSON.stringify(data, null, 2)); // each row: bucket + service + measures
+} catch (e) {
+  if (e instanceof KopaiQueryBuildError) console.error(e.issues);
+  else throw e;
+}
+```
+
+Read the buckets: the first one where `error_rate` (or `avg_ns`/`max_ns`) jumps is the
+**onset**; the set of `service.name` values that move together is the **blast radius**.
+
+**ClickHouse upgrade** — add `p95`/`p99` for tail latency. Percentiles are ClickHouse-only
+and **hard-fail at query time on SQLite**, so isolate them in their own try/catch and keep
+`avg`/`max` as the portable baseline:
+
+```ts
+try {
+  const q = kq.traces
+    .aggregate()
+    .measure((m) => m.p95("Duration", "p95_ns"))
+    .measure((m) => m.p99("Duration", "p99_ns"))
+    .dimension("service.name")
+    .timeRelative("3h")
+    .timeSeries("5m")
+    .build();
+  const { data } = await client.query(q);
+  console.log(JSON.stringify(data, null, 2));
+} catch (e) {
+  console.error("percentiles need ClickHouse; fall back to avg/max:", e);
+}
+```
+
+### (b) Discover available metrics
+
+When the symptom is a system resource (CPU, memory, queue depth) rather than request
+errors, switch to the metrics pipeline — but **discover first** to get the exact `name`
+and `type`:
+
+```ts
+const { metrics } = await client.discoverMetrics();
+// each entry: { name, type, unit, description, attributes, resourceAttributes }
+console.log(metrics.map((m) => `${m.name} (${m.type}, ${m.unit})`));
+```
+
+### (c) Metric aggregate over time
+
+The MetricType is a **builder argument**: `kq.metrics("<Type>")` auto-pins it, where the
+type is one of `"Gauge"`/`"Sum"`/`"Histogram"`/`"ExponentialHistogram"`/`"Summary"`. Value
+columns are typed per type: `"Value"` for `Gauge`/`Sum`; `Count`/`Sum`/`Min`/`Max` for
+`Histogram`/`ExponentialHistogram`; `Count`/`Sum` for `Summary`. Bucket with
+`.timeSeries()` to align the metric's onset against the trace onset from (a). Read a counter
+with `rate`/`increase` (ClickHouse-only; the `IsMonotonic` filter is required), not `avg`.
+On SQLite `rate` is refused with a 400, and the fallback depends on the counter's
+temporality; filter on `AggregationTemporality` to split them:
+
+- **Delta (`1`):** each `Value` is the increase since the previous point, so
+  `sum("Value")` per bucket is the growth, and it adds up across series.
+- **Cumulative (`2`):** each `Value` is a running total, and SQLite cannot give the total
+  growth across series. Work per series only: `.dimension()` by the attributes that
+  identify one series (e.g. `service.instance.id`), take `max("Value")` per bucket, and
+  compare neighbouring buckets within each series; a drop means a restart. Never compare
+  maxima across series.
+
+```ts
+const NAME = "http.server.errors"; // from discoverMetrics()
+try {
+  const q = kq
+    .metrics("Sum")
+    .aggregate()
+    .measure((m) => m.rate("Value", "per_s"))
+    .where((f) => f.eq("MetricName", NAME))
+    .where((f) => f.eq("IsMonotonic", true))
+    .timeRelative("1h")
+    .timeSeries("1m")
+    .build();
+  const { data } = await client.query(q);
+  console.log(JSON.stringify(data, null, 2));
+} catch (e) {
+  if (e instanceof KopaiQueryBuildError) console.error(e.issues);
+  else if (
+    e instanceof KopaiError &&
+    e.status === 400 &&
+    e.message.includes("ClickHouse backend only")
+  )
+    console.error("rate needs ClickHouse; use the SQLite fallback above");
+  else throw e;
+}
+```
+
+### Which signal to read
+
+- **Error rate / counts** → trace `errorRate` measure (a), or a `Sum` metric like
+  `http.server.errors` (c). Use `kq.metrics("Sum")` with `rate("Value", …)`.
+- **Latency** → trace `avg`/`max` of `Duration` (portable); `p95`/`p99` only on
+  ClickHouse. For a metric-side view use `kq.metrics("Histogram")` with
+  `histogramQuantile(0.95, …)` (report only the value, e.g. "p95 ≈ 430 ms", or "p95 > 430 ms" when `_high` is null) and
+  `rate("Count", …)` for request rate.
+- **Resource saturation** (CPU, memory, connections) → point-in-time `Gauge`. Use
+  `kq.metrics("Gauge")`, aggregate `Value` (`avg`/`max`), `.dimension("host.name")` for
+  per-host spread.
+
+Whatever the signal, `.timeSeries(granularity)` is what reveals **onset** — a `.summary()`
+only confirms the issue exists.
+
+### Reference
+
+See references/metric-filters.md (MetricType builder arg, value columns, aggregations) and
+references/trace-filters.md (Duration units, measure ops).
+
+## CLI fallback (quick one-offs)
+
+The CLI has no aggregation or time-series bucketing — use it only to discover a metric or
+eyeball one type. Aggregate (`--aggregate`) is `Gauge`/`Sum`-only.
+
+```bash
+npx @kopai/cli metrics discover --json
+npx @kopai/cli metrics search --type Sum --name http.server.errors --json
+npx @kopai/cli metrics search --type Histogram --name http.server.duration --json
+npx @kopai/cli metrics search --type Gauge --service payment-api --json
+```

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "kopai": {
+      "type": "http",
+      "url": "https://api.kopai.app/v2/mcp"
+    }
+  }
+}

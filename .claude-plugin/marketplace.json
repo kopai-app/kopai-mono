@@ -1,0 +1,16 @@
+{
+  "name": "kopai",
+  "description": "Kopai plugins for Claude: on-call triage over OpenTelemetry data.",
+  "owner": {
+    "name": "Kopai",
+    "url": "https://kopai.app"
+  },
+  "plugins": [
+    {
+      "name": "kopai-oncall",
+      "source": "./plugins/kopai-oncall",
+      "description": "Put Claude on call with Kopai: triage alerts from your OpenTelemetry traces, logs and metrics, verify fixes against baseline, and write sitreps, handoffs and status reports. Read-only by design.",
+      "category": "devops"
+    }
+  ]
+}
