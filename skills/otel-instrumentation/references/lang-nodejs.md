@@ -29,6 +29,11 @@ detected per the package-picking rule in SKILL.md.
 Create a separate instrumentation file that loads before your application:
 
 ```javascript
+// Only in a "type": "module" app: route ES-module imports through OTel's loader hook
+// so `import http from "node:http"` and native-ESM dependencies get patched too.
+import { register } from "node:module";
+register("@opentelemetry/instrumentation/hook.mjs", import.meta.url);
+
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 
@@ -66,14 +71,18 @@ Or in package.json:
 }
 ```
 
-In a `"type": "module"` app this patches CommonJS dependencies (they still load through
-the `require` hook). A dependency published as **native ESM** bypasses that hook and
-additionally needs OTel's experimental loader hook:
+The instrumentations patch modules as they are loaded through Node's `require` hook.
+In a `"type": "module"` app, only CommonJS dependencies still come through that hook.
+Everything the app itself imports with `import` — `node:http`, `node:https`, and any
+dependency published as native ESM — bypasses it, so an ESM app with the plain file
+above starts, exports its runtime metrics, and never produces a single span. The two
+`register(...)` lines at the top of the file fix that without extra flags; the
+equivalent flag is `--experimental-loader=@opentelemetry/instrumentation/hook.mjs`,
+which prints an experimental warning on every start. CommonJS apps (`require`) need
+neither.
 
-```bash
-node --experimental-loader=@opentelemetry/instrumentation/hook.mjs \
-  --import ./instrumentation.mjs server.mjs
-```
+Check for it in the validation step: a service that shows metrics but no spans has
+almost always skipped the hook.
 
 ## What Gets Instrumented
 

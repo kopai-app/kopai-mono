@@ -1,5 +1,11 @@
 # kopai/otel-instrumentation
 
+## 2.2.1
+
+### Patch Changes
+
+- A `"type": "module"` app instrumented from `lang-nodejs.md` started, exported its runtime metrics and produced no spans: the HTTP instrumentation patches modules in Node's `require` hook, which the app's own `import http from "node:http"` never passes through. The reference said only native-ESM dependencies needed the loader hook. The `instrumentation.mjs` template now registers `@opentelemetry/instrumentation/hook.mjs` through `node:module`'s `register()` for ESM apps, the prose and `troubleshoot-missing-spans.md` name the app's own imports as the common case, and the validation step says to treat "metrics but no spans" as this failure first.
+
 ## 2.2.0
 
 ### Minor Changes

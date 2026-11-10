@@ -4,7 +4,7 @@ description: Instrument applications with the OpenTelemetry SDK and prove the te
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "2.2.0"
+  version: "2.2.1"
 ---
 
 # OpenTelemetry Instrumentation with Kopai
@@ -133,8 +133,9 @@ A deprecation message usually names its replacement — use it, never the deprec
 package; when none is named, follow the package's own migration guidance instead of
 guessing. When a framework team ships its own plugin (Fastify → `@fastify/otel`), prefer
 it over the contrib package: it registers through the framework's plugin system instead
-of intercepting `require`/`import` — interception that native-ESM imports bypass unless
-an experimental loader hook is added.
+of intercepting `require`/`import` — interception that ES-module imports, the app's own
+`import http from "node:http"` included, bypass unless OTel's loader hook is registered
+(`lang-nodejs.md`).
 
 ## Rules
 

@@ -4,7 +4,7 @@ description: Build Kopai observability dashboards from OpenTelemetry metrics, lo
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.5.0"
+  version: "1.5.1"
 ---
 
 # Create Dashboard with Kopai
@@ -59,7 +59,7 @@ unit }`, etc.
 
 - **Every tile query needs a time window** — `.timeRelative("1h")` / `.timeAbsolute(startISO, endISO)`.
 - **Choose the `MetricType` up front via `kq.metrics("Gauge")`** — it's auto-pinned, no manual `.where("MetricType", …)` needed. Use the type from `discoverMetrics()`. Types: `Gauge | Sum | Histogram | ExponentialHistogram | Summary`.
-- The SDK field is **`uiTreeVersion`** (the CLI flag is `--tree-version`). Current tree version: **`0.14.0`**.
+- The SDK field is **`uiTreeVersion`** (the CLI flag is `--tree-version`). Take the version from the `dashboards schema` output loaded above (`0.15.0` at the time of writing; the examples below say `0.14.0` and are older than the backend).
 
 ## Workflow
 
@@ -82,7 +82,13 @@ unit }`, etc.
    ```
    On a `KopaiValidationError`/`KopaiError`, re-run `discoverMetrics()` to recheck names
    and types, fix the tree, and retry.
-5. **View** — open `<baseUrl>/?tab=metrics&dashboardId=<dash.id>`.
+5. **View** — hand the user a link into the **web app**, never the API URL from
+   `.kopairc`. Kopai Cloud (`.kopairc` url is `https://api.kopai.app/v2`):
+   `https://app.kopai.app/observability?tab=metrics&dashboardId=<dash.id>`.
+   Local `@kopai/app` (one process serves API and UI):
+   `<baseUrl>/?tab=metrics&dashboardId=<dash.id>`. Any other API URL belongs to a
+   Cloud deployment whose web app address you do not know: give the id and say where
+   to open it (Metrics tab, dashboard picker) instead of guessing a host.
 
 ## Quick Example
 

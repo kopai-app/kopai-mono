@@ -72,13 +72,15 @@ imported. In Node.js this means `--import`/`--require`, not a `require()` at the
 
 Two more causes with the identical symptom — patching that no-ops without an error:
 
-- **Native-ESM dependencies.** `"type": "module"` doesn't disable patching wholesale:
-  CommonJS dependencies still load through the `require` hook and patch fine. A
-  dependency published as native ESM bypasses that hook and needs OTel's loader hook
-  registered before the app loads:
-  `--experimental-loader=@opentelemetry/instrumentation/hook.mjs`. Diagnose per
-  dependency, by its packaging — and if the framework ships a native plugin, prefer it
-  over loader mechanics entirely (Fastify → `lang-fastify.md`).
+- **ES-module imports.** Patching happens in Node's `require` hook. In a
+  `"type": "module"` app only CommonJS dependencies still pass through it; the app's own
+  `import http from "node:http"` and any dependency published as native ESM bypass it,
+  so the SDK starts, runtime metrics flow, and no span is ever created. Register OTel's
+  loader hook before the app loads — `register("@opentelemetry/instrumentation/hook.mjs",
+import.meta.url)` from `node:module` at the top of `instrumentation.mjs`
+  (`lang-nodejs.md`), or `--experimental-loader=@opentelemetry/instrumentation/hook.mjs`.
+  If the framework ships a native plugin, prefer it over loader mechanics entirely
+  (Fastify → `lang-fastify.md`).
 - **A deprecated instrumentation package.** Deprecation doesn't disable the code — it
   means unmaintained and superseded, so it silently falls behind the framework versions
   and loader semantics it once patched. Check the version actually installed —
