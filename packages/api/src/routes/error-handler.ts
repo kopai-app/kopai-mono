@@ -24,6 +24,20 @@ export function errorHandler(
     } satisfies ApiErrorResponse);
   }
 
+  // A query the datasource stopped at a resource limit. 422 rather than 500:
+  // the caller can get past it by asking for less, and the detail says how.
+  // Logged at warn, since which queries cannot be afforded is worth seeing
+  // but is not a server fault.
+  if (isResourceLimitError(error)) {
+    request.log.warn({ err: error }, "query stopped at a resource limit");
+    return reply.status(422).send({
+      type: "https://docs.kopai.app/errors/signals-api-query-too-expensive",
+      status: 422,
+      title: "Query too expensive",
+      detail: RESOURCE_LIMIT_DETAIL,
+    } satisfies ApiErrorResponse);
+  }
+
   if (isClientError(error)) {
     return reply.status(400).send({
       // https://datatracker.ietf.org/doc/html/rfc9457
@@ -76,6 +90,41 @@ export function errorHandler(
     status: 500,
     title: "Internal server error",
   } satisfies ApiErrorResponse);
+}
+
+/**
+ * ClickHouse error codes for a query stopped at a resource limit: 158
+ * TOO_MANY_ROWS, 159 TIMEOUT_EXCEEDED, 160 TOO_SLOW, 241
+ * MEMORY_LIMIT_EXCEEDED, 307 TOO_MANY_BYTES, 396 TOO_MANY_ROWS_OR_BYTES.
+ *
+ * Mirrors `isResourceLimitError` and `RESOURCE_LIMIT_REMEDIES` in `@kopai/mcp`
+ * (`limits.ts`), which has the reasoning, including why the client's own
+ * "Timeout error." and a server-wide 241 stay 500s. Neither package depends on
+ * the other, so each keeps its own copy.
+ */
+const RESOURCE_LIMIT_CODES: ReadonlySet<string> = new Set([
+  "158",
+  "159",
+  "160",
+  "241",
+  "307",
+  "396",
+]);
+
+const RESOURCE_LIMIT_DETAIL = [
+  "The query was stopped at this deployment's limit on query time, memory or rows read.",
+  "Narrow the time window.",
+  "Add filters so fewer rows are read: `service.name` or another attribute, and for metrics a single `MetricName`.",
+  "For metrics, INCREASE, RATE and HISTOGRAM_QUANTILE read every data point in the window. When an exact increase or quantile is not needed, SUM, COUNT or MAX cost far less: on `Value` for Gauge and Sum metrics, on `Count` or `Sum` for Histogram metrics.",
+].join(" ");
+
+function isResourceLimitError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code } = error as { code?: unknown };
+  if (typeof code !== "string" || !RESOURCE_LIMIT_CODES.has(code)) {
+    return false;
+  }
+  return !(code === "241" && error.message.includes("(total)"));
 }
 
 function isFastifyError(error: unknown): error is FastifyError {

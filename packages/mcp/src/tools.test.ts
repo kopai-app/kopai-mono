@@ -499,6 +499,125 @@ describe("runQueryTool — upstream errors", () => {
   });
 });
 
+/** The shape `@clickhouse/client` throws for a server-side error. */
+function clickHouseError(
+  code: string,
+  type: string,
+  message = "Timeout exceeded: elapsed 30.1 seconds, maximum: 30."
+) {
+  return Object.assign(new Error(`${message} (${type})`), { code, type });
+}
+
+describe("runQueryTool — resource limits", () => {
+  it.each([
+    ["158", "TOO_MANY_ROWS"],
+    ["159", "TIMEOUT_EXCEEDED"],
+    ["160", "TOO_SLOW"],
+    ["241", "MEMORY_LIMIT_EXCEEDED"],
+    ["307", "TOO_MANY_BYTES"],
+    ["396", "TOO_MANY_ROWS_OR_BYTES"],
+  ])(
+    "maps ClickHouse code %s (%s) to query_too_expensive",
+    async (code, type) => {
+      const { ds } = fakeDatasource(() => {
+        throw clickHouseError(code, type);
+      });
+      const run = await runQueryTool(rawQuery(), {
+        readTelemetryDatasource: ds,
+      });
+      expect(run.outcome).toBe("query_too_expensive");
+      expect(payloadOf(run.result).error).toBe("query_too_expensive");
+    }
+  );
+
+  it("maps a per-query memory limit to query_too_expensive", async () => {
+    const { ds } = fakeDatasource(() => {
+      throw clickHouseError(
+        "241",
+        "MEMORY_LIMIT_EXCEEDED",
+        "Memory limit (for query) exceeded: would use 9.31 GiB, maximum: 9.31 GiB."
+      );
+    });
+    const run = await runQueryTool(rawQuery(), {
+      readTelemetryDatasource: ds,
+    });
+    expect(run.outcome).toBe("query_too_expensive");
+  });
+
+  it("names the cheaper measure's column for each metric type", async () => {
+    const { ds } = fakeDatasource(() => {
+      throw clickHouseError("159", "TIMEOUT_EXCEEDED");
+    });
+    const run = await runQueryTool(rawQuery(), {
+      readTelemetryDatasource: ds,
+    });
+    // A Histogram has no `Value`; advice naming only it sends a timed-out
+    // HISTOGRAM_QUANTILE to a column it does not have.
+    const metricsRemedy = (payloadOf(run.result).remedies as string[]).find(
+      (r) => r.includes("HISTOGRAM_QUANTILE")
+    );
+    expect(metricsRemedy).toMatch(/`Value`.*Gauge|Gauge.*`Value`/);
+    expect(metricsRemedy).toMatch(/`Count`.*Histogram|Histogram.*`Count`/);
+  });
+
+  it("gives remedies the caller can act on, and leaks nothing of the cause", async () => {
+    const { ds } = fakeDatasource(() => {
+      throw clickHouseError("159", "TIMEOUT_EXCEEDED");
+    });
+    const run = await runQueryTool(rawQuery(), {
+      readTelemetryDatasource: ds,
+    });
+    const payload = payloadOf(run.result);
+    expect(payload.message).toEqual(expect.any(String));
+    expect(payload.remedies).toEqual(
+      expect.arrayContaining([expect.stringMatching(/time window/)])
+    );
+    expect(run.result.content[0]?.text).not.toMatch(/elapsed|TIMEOUT_EXCEEDED/);
+  });
+
+  it("still logs it, so whoever runs the server sees the expensive queries", async () => {
+    const logged: unknown[] = [];
+    const boom = clickHouseError("241", "MEMORY_LIMIT_EXCEEDED");
+    const { ds } = fakeDatasource(() => {
+      throw boom;
+    });
+    await runQueryTool(rawQuery(), {
+      readTelemetryDatasource: ds,
+      logger: { error: (payload) => logged.push(payload) },
+    });
+    expect(logged).toEqual([boom]);
+  });
+
+  it.each([
+    [
+      "a ClickHouse error with another code",
+      clickHouseError("60", "UNKNOWN_TABLE"),
+    ],
+    ["a numeric code", Object.assign(new Error("x"), { code: 159 })],
+    // The client's socket timeout fires for a hung server as well as a heavy
+    // query; a heavy one is expected to meet `max_execution_time` first.
+    ["the client's own request timeout", new Error("Timeout error.")],
+    // The server as a whole is out of memory; asking for less will not help.
+    [
+      "a server-wide memory limit",
+      clickHouseError(
+        "241",
+        "MEMORY_LIMIT_EXCEEDED",
+        "Memory limit (total) exceeded: would use 28.10 GiB, maximum: 28.00 GiB."
+      ),
+    ],
+    ["a non-error throw", "Timeout error."],
+  ])("leaves %s as upstream_error", async (_, thrown) => {
+    const { ds } = fakeDatasource(() => {
+      throw thrown;
+    });
+    const run = await runQueryTool(rawQuery(), {
+      readTelemetryDatasource: ds,
+    });
+    expect(run.outcome).toBe("upstream_error");
+  });
+});
+
 describe("the result carries the payload in both channels", () => {
   it("does so on success", async () => {
     const { ds } = fakeDatasource(() => ({ data: rows(2), nextCursor: null }));
@@ -614,6 +733,21 @@ describe("runMetricsDiscoverTool", () => {
     );
     const run = await runMetricsDiscoverTool({ readTelemetryDatasource: ds });
     expect(run.outcome).toBe("upstream_error");
+  });
+
+  it("maps a resource-limit failure to query_too_expensive, with remedies it can take", async () => {
+    const { ds } = fakeDatasource(
+      () => ({ data: [] }),
+      () => {
+        throw clickHouseError("159", "TIMEOUT_EXCEEDED");
+      }
+    );
+    const run = await runMetricsDiscoverTool({ readTelemetryDatasource: ds });
+    expect(run.outcome).toBe("query_too_expensive");
+    // It takes no arguments, so nothing about windows or filters applies.
+    expect(JSON.stringify(payloadOf(run.result).remedies)).not.toMatch(
+      /time window|MetricName/
+    );
   });
 
   /**

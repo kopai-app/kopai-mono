@@ -211,6 +211,7 @@ describe("hostTools — calls are observed by the package", () => {
         "host_not_found",
         "host_forbidden",
         "host_throws",
+        "host_times_out",
         "host_uncoded",
       ],
       register: (server) => {
@@ -223,6 +224,9 @@ describe("hostTools — calls are observed by the package", () => {
         );
         tool(server, "host_throws", () => {
           throw new Error("connect ECONNREFUSED");
+        });
+        tool(server, "host_times_out", () => {
+          throw Object.assign(new Error("Timeout exceeded"), { code: "159" });
         });
         tool(server, "host_uncoded", () => ({
           content: [{ type: "text", text: "nope" }],
@@ -279,6 +283,16 @@ describe("hostTools — calls are observed by the package", () => {
     expect(h.events.map((e) => e.outcome)).toEqual(["upstream_error"]);
     expect(h.logged).toHaveLength(1);
     expect((h.logged[0] as Error).message).toContain("ECONNREFUSED");
+  });
+
+  it("classifies a resource-limit throw as a built-in's would", async () => {
+    const res = await call(h.url, "host_times_out");
+    expect(res.json.result.structuredContent).toMatchObject({
+      error: "query_too_expensive",
+      remedies: expect.any(Array),
+    });
+    expect(h.events.map((e) => e.outcome)).toEqual(["query_too_expensive"]);
+    expect(h.logged).toHaveLength(1);
   });
 
   it("counts an error result without a known code as upstream_error, and logs it", async () => {

@@ -193,6 +193,54 @@ describe("apiRoutes", () => {
       });
     });
 
+    it("returns 422 with remedies for a ClickHouse resource limit", async () => {
+      getTracesSpy.mockRejectedValue(
+        Object.assign(new Error("Timeout exceeded: elapsed 30.1 seconds"), {
+          code: "159",
+          type: "TIMEOUT_EXCEEDED",
+        })
+      );
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(422);
+      const body = response.json();
+      expect(body).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-query-too-expensive",
+        status: 422,
+        title: "Query too expensive",
+      });
+      expect(body.detail).toMatch(/time window/);
+      expect(body.detail).toMatch(/`Count`/);
+      expect(body.detail).not.toMatch(/elapsed|TIMEOUT_EXCEEDED/);
+    });
+
+    it.each([
+      // Fires for a hung server as well as a heavy query.
+      ["the client's request timeout", new Error("Timeout error.")],
+      [
+        "a server-wide memory limit",
+        Object.assign(
+          new Error("Memory limit (total) exceeded: would use 28.10 GiB"),
+          { code: "241", type: "MEMORY_LIMIT_EXCEEDED" }
+        ),
+      ],
+    ])("keeps %s a 500", async (_, thrown) => {
+      getTracesSpy.mockRejectedValue(thrown);
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
     it("returns null nextCursor when no more pages", async () => {
       getTracesSpy.mockResolvedValue({ data: [mockTrace], nextCursor: null });
 
