@@ -535,7 +535,7 @@ describe("runQueryTool — resource limits", () => {
       throw clickHouseError(
         "241",
         "MEMORY_LIMIT_EXCEEDED",
-        "Memory limit (for query) exceeded: would use 9.31 GiB, maximum: 9.31 GiB."
+        "Query memory limit exceeded: would use 24.50 MiB (attempt to allocate chunk of 16.00 MiB bytes), maximum: 19.07 MiB."
       );
     });
     const run = await runQueryTool(rawQuery(), {
@@ -603,7 +603,7 @@ describe("runQueryTool — resource limits", () => {
       clickHouseError(
         "241",
         "MEMORY_LIMIT_EXCEEDED",
-        "Memory limit (total) exceeded: would use 28.10 GiB, maximum: 28.00 GiB."
+        "(total) memory limit exceeded: would use 570.40 MiB (attempt to allocate chunk of 256.00 MiB bytes), current RSS: 552.55 MiB, maximum: 667.57 MiB."
       ),
     ],
     ["a non-error throw", "Timeout error."],

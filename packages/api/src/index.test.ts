@@ -266,7 +266,9 @@ describe("apiRoutes", () => {
       [
         "a server-wide memory limit",
         Object.assign(
-          new Error("Memory limit (total) exceeded: would use 28.10 GiB"),
+          new Error(
+            "(total) memory limit exceeded: would use 570.40 MiB (attempt to allocate chunk of 256.00 MiB bytes), current RSS: 552.55 MiB, maximum: 667.57 MiB."
+          ),
           { code: "241", type: "MEMORY_LIMIT_EXCEEDED" }
         ),
       ],
@@ -280,6 +282,27 @@ describe("apiRoutes", () => {
       });
 
       expect(response.statusCode).toBe(500);
+    });
+
+    // The memory messages are ClickHouse 25.6's own, as a real server
+    // returned them; only "(total)" tells the two 241s apart.
+    it("returns 422 for a per-query memory limit", async () => {
+      getTracesSpy.mockRejectedValue(
+        Object.assign(
+          new Error(
+            "Query memory limit exceeded: would use 24.50 MiB (attempt to allocate chunk of 16.00 MiB bytes), maximum: 19.07 MiB."
+          ),
+          { code: "241", type: "MEMORY_LIMIT_EXCEEDED" }
+        )
+      );
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(422);
     });
 
     it("returns null nextCursor when no more pages", async () => {

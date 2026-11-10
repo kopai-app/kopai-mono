@@ -13,8 +13,8 @@ that throws one is classified the same way. The error is still logged.
 
 Two failures stay `upstream_error`, because asking for less does not help:
 `@clickhouse/client`'s own "Timeout error.", which also fires for a server
-that stopped answering, and a 241 for the server as a whole ("Memory limit
-(total) exceeded"). For a heavy query to be classified, the host should set
+that stopped answering, and a 241 for the server as a whole ("(total) memory
+limit exceeded"). For a heavy query to be classified, the host should set
 ClickHouse's `max_execution_time` below the client's `request_timeout`.
 
 `ToolCallOutcome` and `TOOL_CALL_OUTCOMES` gain the value, so a host counting

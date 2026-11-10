@@ -94,7 +94,7 @@ const RESOURCE_LIMIT_CODES: ReadonlySet<string> = new Set([
  * Whether a throw is a query stopped at a resource limit, which the caller
  * can get past by asking for less. Anything else stays an upstream error.
  *
- * A 241 for the server as a whole ("Memory limit (total) exceeded") is
+ * A 241 for the server as a whole ("(total) memory limit exceeded") is
  * excluded: other queries or ingest used the memory, so asking for less does
  * not help.
  */
