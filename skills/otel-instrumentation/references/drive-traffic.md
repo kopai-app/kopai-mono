@@ -16,7 +16,7 @@ Before launching the app, stamp every signal it emits with a unique run tag:
 RUN_ID=$(uuidgen)
 export OTEL_RESOURCE_ATTRIBUTES="validation.run_id=$RUN_ID"
 export OTEL_SERVICE_NAME=my-service
-# Kopai Cloud: skip the next line. Keep the endpoint and headers from setup-environment.md
+# Kopai Cloud: skip the next line; launch through `npx @kopai/cli run --` instead
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_BSP_SCHEDULE_DELAY=500   # flush every 500ms so short runs don't lose spans
 ```
@@ -46,6 +46,7 @@ Real code paths, real data shapes, zero new code:
 
 ```bash
 npm test          # or: go test ./... | pytest | bundle exec rspec | dotnet test
+npx @kopai/cli run -- npm test     # Kopai Cloud: the same, with the exporter settings
 ```
 
 Unit tests with everything mocked are usually worthless here — they never reach the I/O

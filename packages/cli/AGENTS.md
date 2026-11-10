@@ -56,9 +56,9 @@ What it does, in order:
 2. Writes `./.kopairc` (mode 0600): `url` and `token` for the CLI, and the `otlp` block.
    Existing keys in the file are kept. Inside a git repository, adds `.kopairc` to
    `./.gitignore` when no `.gitignore` up to the repository root lists it.
-3. Installs the skills `otel-instrumentation`, `root-cause-analysis`, and `create-dashboard`
-   into the project:
-   `npx -y skills add <source> --skill otel-instrumentation root-cause-analysis create-dashboard -y`.
+3. Installs the skills `kopai-get-started`, `otel-instrumentation`, `root-cause-analysis`,
+   and `create-dashboard` into the project:
+   `npx -y skills add <source> --skill kopai-get-started otel-instrumentation root-cause-analysis create-dashboard -y`.
 4. Registers the Kopai MCP connector, named `kopai`, in each coding agent found:
    - Claude Code: `claude mcp add --transport http kopai <mcpUrl>`
    - Codex: `codex mcp add kopai --url <mcpUrl>`
@@ -98,6 +98,40 @@ without asking, and `--launch` needs `--yes`.
 | 1         | The exchange failed (invalid or expired code, network, rate limit), or a skills or connector step failed |
 | 2         | Invalid arguments: missing `--code`, bad `--api`, unknown `--agent`                                      |
 | 3         | `./.kopairc` cannot be written                                                                           |
+
+## Run
+
+`kopai run` starts a command with the exporter settings from the `otlp` block in `./.kopairc`
+in its environment. An agent launches an instrumented app this way without reading the
+token. Run it from the directory that holds `.kopairc`; options after the command belong to
+the command.
+
+```bash
+npx @kopai/cli run -- node server.js
+OTEL_SERVICE_NAME=shop-api npx @kopai/cli run -- npm start
+npx @kopai/cli run -- go run ./cmd/api --port 8080
+```
+
+It sets these three, replacing any existing values, and passes everything else through:
+
+| Variable                      | Value                                 |
+| ----------------------------- | ------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `otlp.endpoint`                       |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | `Authorization=Bearer%20<otlp.token>` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf`                       |
+
+One line goes to stderr before the command starts: the endpoint and a prefix of the token.
+The exit code is the command's own; 127 when it could not be started; 3 when `.kopairc`
+has no `otlp` block.
+
+## Whoami
+
+`kopai whoami` prints a prefix of the CLI token and its URL, then checks the token with a
+one-row trace search (`Token is valid.`). When `.kopairc` has an `otlp` block it also prints
+the OTLP endpoint and a prefix of the backend token, then checks that token with an empty
+`POST <otlp.endpoint>/v1/traces` (`Backend token is valid.`, `Backend token is invalid or
+revoked.`, or `Could not reach the OTLP endpoint …`). Any failed check sets the exit code
+to 1. Tokens are never printed in full.
 
 ## Commands
 

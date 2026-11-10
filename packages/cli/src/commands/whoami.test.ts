@@ -105,6 +105,97 @@ describe("whoami command", () => {
     expect(output).toContain("Could not reach server to validate token.");
   });
 
+  describe("backend token", () => {
+    const OTLP = {
+      endpoint: "https://otlp.example.com/",
+      token: "kpi_backend_1234567890",
+    };
+
+    function stubFetch(response: Response | Error) {
+      const fetchMock = vi.fn(async () => {
+        if (response instanceof Error) throw response;
+        return response;
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("sends an empty OTLP request with the token and reports it valid", async () => {
+      vi.mocked(loadConfig).mockReturnValue({
+        token: "kpi_test_token_12345678901234567890123456",
+        otlp: OTLP,
+      });
+      mockSearchTracesPage.mockResolvedValue({ data: [] });
+      const fetchMock = stubFetch(new Response(null, { status: 200 }));
+
+      process.exitCode = 0;
+      const output = await runCommand([]);
+
+      expect(output).toContain("OTLP endpoint: https://otlp.example.com/");
+      expect(output).toContain("Backend token: kpi_backen...");
+      expect(output).not.toContain(OTLP.token);
+      expect(output).toContain("Backend token is valid.");
+      expect(process.exitCode).toBe(0);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://otlp.example.com/v1/traces",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            authorization: `Bearer ${OTLP.token}`,
+          }),
+          body: '{"resourceSpans":[]}',
+        })
+      );
+    });
+
+    it("reports a rejected backend token and exits 1", async () => {
+      vi.mocked(loadConfig).mockReturnValue({
+        token: "kpi_test_token_12345678901234567890123456",
+        otlp: OTLP,
+      });
+      mockSearchTracesPage.mockResolvedValue({ data: [] });
+      stubFetch(new Response(null, { status: 401 }));
+
+      process.exitCode = 0;
+      const output = await runCommand([]);
+
+      expect(output).toContain("Token is valid.");
+      expect(output).toContain("Backend token is invalid or revoked.");
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("reports an unreachable OTLP endpoint and exits 1", async () => {
+      vi.mocked(loadConfig).mockReturnValue({ otlp: OTLP });
+      stubFetch(new TypeError("fetch failed"));
+
+      process.exitCode = 0;
+      const output = await runCommand([]);
+
+      expect(output).toContain("Not logged in.");
+      expect(output).toContain(
+        "Could not reach the OTLP endpoint to validate the backend token."
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("says nothing about the backend token when .kopairc has no otlp block", async () => {
+      vi.mocked(loadConfig).mockReturnValue({
+        token: "kpi_test_token_12345678901234567890123456",
+      });
+      mockSearchTracesPage.mockResolvedValue({ data: [] });
+      const fetchMock = stubFetch(new Response(null, { status: 200 }));
+
+      const output = await runCommand([]);
+
+      expect(output).not.toContain("OTLP endpoint");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("sets non-zero exit code on validation failure", async () => {
     vi.mocked(loadConfig).mockReturnValue({
       token: "kpi_test_token_12345678901234567890123456",

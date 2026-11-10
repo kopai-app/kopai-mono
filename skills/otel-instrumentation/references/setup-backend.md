@@ -37,41 +37,33 @@ later assertion depends on it — do not proceed past a non-2xx here.
 that file means Cloud mode:
 
 ```bash
-jq -e .otlp .kopairc     # prints the block and exits 0 in Cloud mode
+jq -e .otlp.endpoint .kopairc     # prints the endpoint and exits 0 in Cloud mode
 ```
 
-```json
-{
-  "url": "https://api.kopai.app/v2",
-  "token": "kpi_…",
-  "otlp": { "endpoint": "https://otlp-http.kopai.app", "token": "kpi_…" }
-}
-```
+The block also holds the app's token. Do not print it: `kopai run` and `kopai whoami` read
+it for you.
 
-In Cloud mode, never run `npx @kopai/app start`. Read the endpoint and token from the file
-and export them in the shell that launches the app:
+In Cloud mode, never run `npx @kopai/app start`. Launch the app through the CLI, which puts
+the endpoint and token in its environment:
 
 ```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=$(jq -r .otlp.endpoint .kopairc)
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20$(jq -r .otlp.token .kopairc)"
+npx @kopai/cli run -- <the command that starts the app>
 ```
-
-The `%20` is the space after `Bearer`, percent-encoded. See `setup-environment.md`.
 
 ### Confirm it accepts your token
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' -X POST "$(jq -r .otlp.endpoint .kopairc)/v1/traces" \
-  -H "Authorization: Bearer $(jq -r .otlp.token .kopairc)" \
-  -H 'Content-Type: application/json' -d '{"resourceSpans":[]}'
+npx @kopai/cli whoami
 ```
 
-A 2xx means Kopai Cloud accepts OTLP with this token. This is step 1 of the workflow in
-Cloud mode. A 401 means the token is wrong or revoked: run `kopai setup` again with a new
-code from the dashboard. Do not proceed past a non-2xx here.
+`Backend token is valid.` means Kopai Cloud accepts OTLP with this token: the CLI sent the
+same empty POST to `<otlp.endpoint>/v1/traces` that an app's first export makes. This is
+step 1 of the workflow in Cloud mode. `Backend token is invalid or revoked.` means the
+token no longer works: ask the user to run `kopai setup` again with a fresh command from
+the dashboard. Do not proceed past anything but `valid` here.
 
-Keep the token out of sight. Never echo it, paste it into code, or commit `.kopairc` —
-`kopai setup` adds it to `.gitignore`.
+Keep the token out of sight. Never read it out of `.kopairc`, paste it into code, or commit
+the file — `kopai setup` adds it to `.gitignore`.
 
 The CLI reads the `url` and `token` from the same file, so the validation steps work
 unchanged. Run them from the directory that holds `.kopairc`.

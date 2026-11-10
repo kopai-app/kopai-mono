@@ -9,6 +9,7 @@ import { createLoginCommand } from "./commands/login.js";
 import { createLogoutCommand } from "./commands/logout.js";
 import { createWhoamiCommand } from "./commands/whoami.js";
 import { createSetupCommand } from "./commands/setup.js";
+import { createRunCommand } from "./commands/run.js";
 import { checkForUpdates } from "./update-check.js";
 import pkg from "../package.json" with { type: "json" };
 
@@ -16,6 +17,9 @@ const program = new Command();
 
 program
   .name("@kopai/cli")
+  // Program options stay before the subcommand name, so that `run` can hand
+  // everything after the started command to that command untouched.
+  .enablePositionalOptions()
   .description("|--k> kopai - Query OpenTelemetry data")
   .version(pkg.version)
   .addCommand(createTracesCommand())
@@ -26,6 +30,7 @@ program
   .addCommand(createLogoutCommand())
   .addCommand(createWhoamiCommand())
   .addCommand(createSetupCommand())
+  .addCommand(createRunCommand())
   .addHelpText(
     "after",
     `
@@ -34,6 +39,7 @@ Examples:
   $ kopai traces search --url https://api.kopai.app/v2          # hosted instance (run "kopai login" first)
   $ kopai login                                                  # save token for https://api.kopai.app/v2
   $ kopai setup --code kps_…                                     # connect this project: tokens, skills, MCP connector
+  $ kopai run -- node server.js                                  # start the app with the exporter settings from .kopairc
   $ kopai logs search --url https://example.com --token kpi_…    # custom instance with auth`
   );
 

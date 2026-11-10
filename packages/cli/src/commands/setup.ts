@@ -23,6 +23,7 @@ import {
 const DEFAULT_API = "https://api.kopai.app";
 const DEFAULT_SKILLS_SOURCE = "kopai-app/kopai-mono";
 const SKILLS = [
+  "kopai-get-started",
   "otel-instrumentation",
   "root-cause-analysis",
   "create-dashboard",

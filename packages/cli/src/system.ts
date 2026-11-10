@@ -43,11 +43,13 @@ export function runCaptured(
 /**
  * Runs `command` attached to this terminal and resolves with its exit code.
  * While it runs, Ctrl-C belongs to the child: this process ignores SIGINT so
- * it does not exit and leave the child holding the terminal.
+ * it does not exit and leave the child holding the terminal. `env` replaces
+ * the child's environment; by default it inherits this process's.
  */
 export function runInteractive(
   command: string,
-  args: string[]
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env
 ): Promise<number> {
   return new Promise((resolve) => {
     const ignoreInterrupt = () => {};
@@ -57,7 +59,7 @@ export function runInteractive(
       resolve(code);
     };
 
-    const child = spawn(command, args, { stdio: "inherit" });
+    const child = spawn(command, args, { stdio: "inherit", env });
     child.on("error", () => done(127));
     child.on("close", (code) => done(code ?? 1));
   });

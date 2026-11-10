@@ -1,5 +1,11 @@
 # kopai/otel-instrumentation
 
+## 2.3.0
+
+### Minor Changes
+
+- Kopai Cloud mode no longer reads the backend token. The app is launched through `npx @kopai/cli run -- <command>`, which sets `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_EXPORTER_OTLP_PROTOCOL` from `.kopairc` itself, and the step 1 check is `npx @kopai/cli whoami` printing `Backend token is valid.` instead of a `curl` with the token on the command line. The Cloud check is `jq -e .otlp.endpoint .kopairc`, which prints the endpoint only. `setup-backend.md`, `setup-environment.md`, `drive-traffic.md`, `troubleshoot-no-data.md` and `troubleshoot-wrong-port.md` follow: a 401 from the exporter now reads as "the app was started without `kopai run`".
+
 ## 2.2.1
 
 ### Patch Changes

@@ -195,6 +195,18 @@ kopai metrics discover --json
 
 **Fields:** name, type, unit, description, attributes, resourceAttributes
 
+### run
+
+Start a command with the exporter settings from `.kopairc` in its environment, so an app
+instrumented with OpenTelemetry sends its telemetry to Kopai Cloud. `kopai setup` writes
+those settings; `run` sets `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` and
+`OTEL_EXPORTER_OTLP_PROTOCOL` and passes everything else through.
+
+```bash
+kopai run -- node server.js
+OTEL_SERVICE_NAME=shop-api kopai run -- npm start
+```
+
 ## Output Options
 
 | Option                 | Description            |

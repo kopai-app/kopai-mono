@@ -41,12 +41,12 @@ afterwards never reaches the running process — restart it.
 ## Kopai Cloud
 
 In Cloud mode (`./.kopairc` has an `otlp` block) there are no local ports to mix up. The
-endpoint comes from `.kopairc`: copy it from `otlp.endpoint`, never type it. The CLI reads
-its query URL from the same file.
+endpoint comes from `.kopairc`: `kopai run` sets it from `otlp.endpoint`, so never type it.
+The CLI reads its query URL from the same file.
 
 ```bash
 echo "$OTEL_EXPORTER_OTLP_ENDPOINT"; jq -r .otlp.endpoint .kopairc   # must match
 ```
 
-A 401 from the endpoint means the URL is right but the `Authorization` header is missing or
-the token is wrong — `setup-environment.md` covers `OTEL_EXPORTER_OTLP_HEADERS`.
+A 401 from the endpoint means the URL is right but the `Authorization` header is missing:
+the app was started without `kopai run` — `setup-environment.md`.

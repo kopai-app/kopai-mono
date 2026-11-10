@@ -6,7 +6,7 @@
 
 Export these in the shell that launches the app — not in the shell you run the CLI from.
 The SDK reads them at startup. In Kopai Cloud mode (`./.kopairc` has an `otlp` block),
-replace the first line with the two exports under [Kopai Cloud](#kopai-cloud).
+drop the first line and launch the app through `kopai run` — see [Kopai Cloud](#kopai-cloud).
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
@@ -21,32 +21,37 @@ export OTEL_BSP_SCHEDULE_DELAY=500
 export OTEL_METRIC_EXPORT_INTERVAL=1000
 ```
 
-| Variable                      | Value                                 | Purpose                                 |
-| ----------------------------- | ------------------------------------- | --------------------------------------- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318`               | Kopai collector                         |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | `Authorization=Bearer%20<otlp.token>` | Kopai Cloud only: authenticates the app |
-| `OTEL_SERVICE_NAME`           | your service                          | Identifies the service in telemetry     |
-| `OTEL_RESOURCE_ATTRIBUTES`    | `validation.run_id=<uuid>`            | Makes the validation loop deterministic |
-| `OTEL_BSP_SCHEDULE_DELAY`     | `500`                                 | Span flush interval, ms                 |
-| `OTEL_METRIC_EXPORT_INTERVAL` | `1000`                                | Metric export interval, ms              |
+| Variable                      | Value                      | Purpose                                 |
+| ----------------------------- | -------------------------- | --------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318`    | Kopai collector                         |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | set by `kopai run`         | Kopai Cloud only: authenticates the app |
+| `OTEL_SERVICE_NAME`           | your service               | Identifies the service in telemetry     |
+| `OTEL_RESOURCE_ATTRIBUTES`    | `validation.run_id=<uuid>` | Makes the validation loop deterministic |
+| `OTEL_BSP_SCHEDULE_DELAY`     | `500`                      | Span flush interval, ms                 |
+| `OTEL_METRIC_EXPORT_INTERVAL` | `1000`                     | Metric export interval, ms              |
 
 ## Kopai Cloud
 
-When `./.kopairc` has an `otlp` block, the endpoint and token come from it:
+When `./.kopairc` has an `otlp` block, launch the app through the CLI instead of exporting
+the endpoint and token yourself:
 
 ```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=$(jq -r .otlp.endpoint .kopairc)
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20$(jq -r .otlp.token .kopairc)"
+npx @kopai/cli run -- <the command that starts the app>
 ```
+
+`kopai run` sets `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`
+(`Authorization=Bearer%20<token>`: the W3C Baggage format allows no raw space, so the one
+after `Bearer` is `%20`, and every OTel SDK decodes it) and
+`OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` from that block. Every other variable passes
+through, so export `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` and the flush intervals
+in the shell as usual.
 
 Everything else on this page applies unchanged.
 
-- `OTEL_EXPORTER_OTLP_HEADERS` is a comma-separated list of `key=value` pairs in the W3C
-  Baggage format. A space is not allowed raw, so write the one after `Bearer` as `%20`.
-  Every OTel SDK decodes it before sending the header.
 - The SDK sends the header with every export. Without it, Kopai Cloud answers 401 and
-  nothing arrives.
-- Never echo the token, paste it into code, or commit `.kopairc`.
+  nothing arrives: the sign that the app was started without `kopai run`.
+- Never read, echo or copy the token out of `.kopairc`, and never commit the file. The CLI
+  is the only thing that needs to see it.
 
 **Run the CLI from the directory that holds `.kopairc`.** `npx @kopai/cli` reads
 `./.kopairc` from the current directory, then falls back to `~/.kopairc` and finally

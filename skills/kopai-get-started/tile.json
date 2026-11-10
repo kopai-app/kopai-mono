@@ -1,0 +1,11 @@
+{
+  "name": "kopai/kopai-get-started",
+  "version": "1.0.0",
+  "private": false,
+  "summary": "Get a project that `kopai setup` just connected to Kopai Cloud sending its first telemetry. Checks the connection, instruments the app through the otel-instrumentation skill, launches it with `kopai run` so the token stays out of sight, proves data arrived, and reports. Use when `./.kopairc` has an `otlp` block and the user says \"add observability\", \"confirm telemetry reaches Kopai\", \"get started with Kopai\", or pastes the prompt from the Kopai dashboard's Get started page. Do NOT use against a local `@kopai/app` backend (use otel-instrumentation), to investigate telemetry for a cause (use root-cause-analysis), or to build dashboards (use create-dashboard).",
+  "skills": {
+    "kopai-get-started": {
+      "path": "SKILL.md"
+    }
+  }
+}
