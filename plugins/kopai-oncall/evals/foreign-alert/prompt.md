@@ -14,4 +14,4 @@ A new message was just posted in #alerts by the Alertmanager app:
 > Started: 2026-11-09 14:03 UTC
 > Source: http://prometheus.internal:9090/graph?g0.expr=...
 
-It is now 2026-11-09 14:14 UTC. Triage it and write the reply you would post in its thread.
+It is now 2026-11-09 14:14 UTC. Triage it and write the reply you would post in its thread. Answer with only the message(s) you would post there, nothing addressed to me.

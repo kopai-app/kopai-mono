@@ -22,4 +22,4 @@ Its attachment:
 
 It is now 2026-11-09 14:14 UTC.
 
-Triage it and write everything you would post in its thread.
+Triage it and write everything you would post in its thread. Answer with only the message(s) you would post there, nothing addressed to me.
