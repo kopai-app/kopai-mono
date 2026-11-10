@@ -5,7 +5,7 @@
 
 # ONCALL.md — standing on-call policy
 
-<!-- Copy to your repo root. Every {{...}} is filled during kopai-oncall-setup
+<!-- Copy to your repo root. Every {{...}} is filled during kopai-oncall-playbooks
      Phase 2 (Interview). Mined suggestions may appear as comments; a human
      sets every policy value. This file is policy: changes go by PR. -->
 

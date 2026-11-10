@@ -7,7 +7,7 @@
 
 > A Kopai default reference, and the structure every team playbook copies:
 > symptoms, first checks, a correlation table, known causes, escalation.
-> The team's own `playbooks/` (drafted by kopai-oncall-setup from its
+> The team's own `playbooks/` (drafted by kopai-oncall-playbooks from its
 > incident history) take precedence over this file. Rows here are marked
 > `(Kopai default)`: they come from how services commonly fail, not from
 > this team's history, so treat them as hypotheses to check.

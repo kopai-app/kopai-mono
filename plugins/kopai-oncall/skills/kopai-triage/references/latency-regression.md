@@ -59,7 +59,10 @@ call them that in the diagnosis, never "p95".
    a database call (`db.system.name`), an outbound call (`SpanKind`
    `Client`, `server.address`), or the service's own work.
 5. **Timeline.** Deploys, flags and config changes in the hour before
-   onset, and changes on the slow dependency's side.
+   onset, and changes on the slow dependency's side. In Kopai, split the
+   affected service by `service.version` over the window (as in
+   `deploy-regression.md`): a version that first appears at onset, slow
+   while the old one is not, is a release, even with no `deploys` binding.
 
 ## Correlation table
 

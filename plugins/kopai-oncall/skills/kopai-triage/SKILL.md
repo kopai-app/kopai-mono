@@ -8,7 +8,9 @@ description: >
   evidence and a proposed (never executed) fix. Use when an alert fires, a
   routine detects a new anomaly, or someone reports something broken
   ("checkout is throwing 500s", "payments is slow", "error rate alert
-  fired", "is the API down?"), especially where ONCALL.md exists. Also use
+  fired", "is the API down?"), especially where ONCALL.md exists. Also for
+  Kopai's test message ("TEST · Kopai alert target check"), which gets a
+  health check, not a triage. Also use
   it to propose a Kopai alert rule ("would a rule have caught this?",
   "propose an alert for this"). For an ad-hoc investigation outside
   on-call, root-cause-analysis is enough.
@@ -28,11 +30,15 @@ Standing rules in `ONCALL-RULES.md` apply — especially: propose, don't act (ru
 `lessons.md` without asking (rule 8).
 
 **If the team's on-call repo has no `ONCALL-RULES.md`,** setup hasn't run.
-Say so in one line, offer the kopai-oncall-setup skill, and still help:
+Say so in one line, offer the kopai-oncall-playbooks skill, and still help:
 investigate read-only, back every claim with evidence, state your
 confidence, mention nobody, and write nothing to any repo.
 
 ## Querying Kopai
+
+Kopai's credential is added outside this session. Never ask for, accept
+or print a token; if someone pastes one, don't repeat it, and ask them to
+delete the message and have a Kopai owner revoke the token.
 
 The Kopai connector has two telemetry tools, `query` (one KopaiQuery under
 `query`, keyed on `signal` traces/logs/metrics and `mode` aggregate/raw)
@@ -183,7 +189,11 @@ cause, confirm the symptom appears in the most recent **complete**
 time bucket or window. Presence always confirms red; absence confirms
 green only on a complete bucket.
 
-6. **Post the diagnosis** in this format, in-thread:
+6. **Post the diagnosis** in-thread. For an alert post, the first reply
+   is the short one in `references/kopai-alert.md` section 4: state,
+   observed against threshold, the likely cause, what to look at first,
+   the link. Post the full format below when someone asks for detail, in
+   updates (6a), or for a page-severity alert under `ONCALL.md`:
 
    > **What's happening:** one sentence, fresh-reader test applied.
    > **Root cause (confidence high/medium/low):** the mechanism, with each

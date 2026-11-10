@@ -8,16 +8,21 @@ licensed under the Apache License, Version 2.0.
 Adapted files keep their original copyright and SPDX headers and carry a
 "Modified for Kopai" note describing what changed. The adaptations:
 
-- skills/kopai-oncall-setup   from skills/oncall-setup, plus templates/,
-                              eval/replay.md, ONBOARD.md and TAG-SETUP.md
+- skills/kopai-oncall-playbooks
+                              from skills/oncall-setup, plus templates/,
+                              eval/replay.md and ONBOARD.md
+- skills/kopai-oncall-setup/references/tag-setup.md
+                              from TAG-SETUP.md
 - skills/kopai-triage         from skills/triage (failure-class references
                               rewritten for service telemetry in Kopai)
 - skills/kopai-handoff        from skills/handoff
 - skills/kopai-weather        from skills/weather
-- skills/kopai-oncall-setup/templates/ONCALL-RULES.md
+- skills/kopai-oncall-playbooks/templates/ONCALL-RULES.md
                               from the standing rules in CLAUDE.md
 - skills/kopai-verify-fix     new; expands step 9 of skills/triage
 - skills/kopai-evidence-page  new; a snapshot page, only on request
+- skills/kopai-oncall-setup   new; connects one alert channel and creates
+                              its watch routine
 - skills/kopai-triage/references/
                               new content for Kopai, in the structure of
                               the kit's triage references

@@ -5,7 +5,7 @@
 
 # lessons.md — the living incident log
 
-<!-- Seeded by kopai-oncall-setup Phase 1 from your incident history; appended by
+<!-- Seeded by kopai-oncall-playbooks Phase 1 from your incident history; appended by
      Claude after every incident without asking (ONCALL-RULES.md rule 8); pruned
      by humans whenever. Newest first, below the status banner. -->
 

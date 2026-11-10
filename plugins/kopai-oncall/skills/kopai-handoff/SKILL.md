@@ -106,7 +106,7 @@ week, flag:
   because a service was renamed or stopped reporting
 - `BASELINES.md` older than about a month, or services in Kopai's
   inventory that are missing from it: propose re-running the baseline
-  step of kopai-oncall-setup
+  step of kopai-oncall-playbooks
 - anything in the `deploys` feed or announcement channels suggesting the
   infrastructure changed under the playbooks — a migration completed, a
   tool replaced, a service renamed

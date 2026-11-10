@@ -2,11 +2,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Modified for Kopai, 2026: skill names and wording point at the kopai-oncall plugin. -->
 
-# routines.md — the paste-ready standing work
+# routines.md — the standing work
 
-<!-- Filled in by kopai-oncall-setup Phase 4 with your channel names, cadences,
-     and STACK.md bindings. A HUMAN pastes each into the channel — the plugin
-     never installs standing work the channel didn't see. Order matters:
+<!-- Filled in by kopai-oncall-playbooks Phase 4 with your channel names, cadences,
+     and STACK.md bindings. Claude posts each one's exact text and creates it
+     only after a person's yes — the plugin never installs standing work
+     the channel didn't see and approve. Order matters:
      read-only routines first; paging last, after the shadow period. -->
 
 Routines are thin on purpose: they decide _when and where_; the skills and
@@ -41,7 +42,7 @@ handoff ≈ 50–150k; a quiet week ≈ one handoff; weather ≈ 2–5k per full
 cycle and ~0.3k per early-exit — a quiet day is a handful of full cycles.
 Convert at your model's current pricing.
 
-## How detection is wired (read before pasting)
+## How detection is wired (read first)
 
 Your existing deterministic alerting stays the source of truth: Kopai's
 alert rules (or PagerDuty, or equivalent) fire alerts into your alert
@@ -61,39 +62,16 @@ into the real alerting tool, where they cannot die silently.
 for the past week and post the result here.
 ```
 
-## 2 · Watch alert channels → triage (posts diagnoses)
+## 2 · Watch the alert channel → triage (posts diagnoses)
 
-The alert channel must be private, and Claude must be invited to it
-(`/invite @Claude`). Keep it low-volume: Claude Tag may stop reading a
-channel where many top-level posts pass without a Claude post or a
-mention, until someone mentions `@Claude` there.
+The Kopai watch and its polling fallback are installed by the
+kopai-oncall-setup skill (`@Claude set up Kopai on-call here`), from its
+`references/watch-routine.md`. Don't add a second watch here; to watch
+another alert channel, run that skill in it.
 
-<!-- During the shadow period, change "post ... in its thread" to
-     "post ... in {{#review-channel}}" and grade daily per eval/replay.md. -->
-
-```
-@Claude watch {{#alerts-channel-1}} and {{#alerts-channel-2}}. When a new
-alert lands, run the kopai-triage skill and post the diagnosis in
-its thread — correlate across channels first, per the skill. If several
-alerts land together or relate to an open incident, triage them as one
-batch per the skill: one diagnosis naming every alert it accounts for,
-never one post per alert. Propose fixes only — never execute anything.
-```
-
-### 2b · Polling fallback (only if the watch proves unreliable)
-
-If the watch misses Kopai alerts or reacts too late, replace it for
-Kopai's alerts with a poll. Ten minutes is the shortest interval a
-routine allows.
-
-```
-@Claude every 10 minutes: call Kopai's alerts_list with changed_since set
-to 15 minutes ago (the interval plus overlap), skip each event whose
-Kopai alert post already has your diagnosis in its thread, and run the kopai-triage skill on each new FIRING, posting the
-diagnosis in the thread of its Kopai alert post in {{#alerts-channel}}.
-If the result says truncated, say how many arrived and link Kopai's alert
-history. Post nothing when there is nothing new.
-```
+<!-- During the shadow period, ask for the watch's triage to post in
+     {{#review-channel}} instead of the alert's thread, and grade daily per
+     eval/replay.md. -->
 
 ## 3 · New service? Starter alerts, not a bridge
 
@@ -112,7 +90,7 @@ A human installs them; the post-incident loop (triage's "would a rule
 have caught this earlier?" + the alert-coverage report) tunes them from
 the first real incident onward.
 
-## 4 · Routine registry (Claude curates; paste once)
+## 4 · Routine registry (Claude curates; created once)
 
 ```
 @Claude maintain the "Standing work in this channel" canvas (or pinned

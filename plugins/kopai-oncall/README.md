@@ -12,16 +12,17 @@ Kopai alert rules that a person approved in the thread.
 
 ## What's in it
 
-| Skill                 | What it does                                                                                                                                         |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kopai-oncall-setup`  | Five gated phases: connect, baseline every service from Kopai, mine past incidents into playbooks, set policy, validate, install routines            |
-| `kopai-triage`        | Investigates an alert or incident: reads a Kopai alert by its event id, queries Kopai, and posts a diagnosis with evidence and a proposed fix        |
-| `kopai-verify-fix`    | After a human ships a fix, re-runs the incident's queries at three checkpoints and reports whether the signal is back to baseline                    |
-| `kopai-handoff`       | The weekly on-call handoff, including each key service's week-over-week health from Kopai                                                            |
-| `kopai-weather`       | An optional status report that posts only when something changes                                                                                     |
-| `kopai-evidence-page` | On request, a snapshot page of the evidence for one incident, linked to Kopai's incident page                                                        |
-| `root-cause-analysis` | Kopai's query library for investigations, by connector or SDK                                                                                        |
-| `create-live-page`    | A Claude page that charts Kopai data live for each viewer, from their own claude.ai Kopai connector (not from Slack, where pages are snapshots only) |
+| Skill                    | What it does                                                                                                                                         |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kopai-oncall-setup`     | `@Claude set up Kopai on-call here`: checks Kopai is reachable and as whom, then creates the watch routine for the alert channel on your yes         |
+| `kopai-oncall-playbooks` | Optional, later: five gated phases that baseline every service, mine past incidents into playbooks in your on-call repo, set policy and validate     |
+| `kopai-triage`           | Investigates an alert or incident: reads a Kopai alert by its event id, queries Kopai, and posts a diagnosis with evidence and a proposed fix        |
+| `kopai-verify-fix`       | After a human ships a fix, re-runs the incident's queries at three checkpoints and reports whether the signal is back to baseline                    |
+| `kopai-handoff`          | The weekly on-call handoff, including each key service's week-over-week health from Kopai                                                            |
+| `kopai-weather`          | An optional status report that posts only when something changes                                                                                     |
+| `kopai-evidence-page`    | On request, a snapshot page of the evidence for one incident, linked to Kopai's incident page                                                        |
+| `root-cause-analysis`    | Kopai's query library for investigations, by connector or SDK                                                                                        |
+| `create-live-page`       | A Claude page that charts Kopai data live for each viewer, from their own claude.ai Kopai connector (not from Slack, where pages are snapshots only) |
 
 The plugin declares the Kopai MCP server (`https://api.kopai.app/v2/mcp`).
 It gives Claude:
@@ -45,11 +46,12 @@ their own Kopai connector.
 2. Claude takes the event id from the card's incident link and reads the
    alert with `alert_get`: what fired, the value against the threshold,
    and the query behind it.
-3. It investigates with Kopai queries and replies in the thread, starting
-   with the state, how long it has lasted and the observed value against
-   the threshold, and ending with "Full evidence in Kopai (workspace login
-   required)". The reply stands on its own for people without a Kopai
-   login.
+3. It investigates with Kopai queries and replies in the thread, briefly:
+   the state and how long it has lasted, the observed value against the
+   threshold, the likely cause, what to look at first, and "Full evidence
+   in Kopai (workspace login required)". The reply stands on its own for
+   people without a Kopai login; ask for details to get the full
+   diagnosis.
 4. Afterwards it asks whether a rule would have caught the incident
    earlier, and proposes one as a link to Kopai's rule editor with the
    rule pre-filled and its backtest.
@@ -59,8 +61,9 @@ Kopai's telemetry too, and Claude says they did not come from Kopai.
 
 ## Where your team's knowledge lives
 
-The plugin ships the method. Everything specific to your team lives in an
-**on-call repo** that you own, which setup fills in:
+The plugin ships the method, and triage works without anything else. A
+team that wants more can keep its knowledge in an **on-call repo** it
+owns, which the optional `kopai-oncall-playbooks` skill fills in:
 
 - `ONCALL-RULES.md`: the standing rules (copied from the plugin)
 - `ONCALL.md`: your policy: paging thresholds, severity, routing, and how
@@ -82,37 +85,28 @@ your personal login." If Kopai is connected with someone's own login,
 everyone in the channel acts as them, and Claude says so on its first
 alert.
 
-1. **Kopai (an owner or admin):** on the Tokens page, create an `agent`
-   token for Claude Tag. To let Claude create rules a person approved, an
-   owner ticks "may create alert rules" on it.
-2. **Claude (an Owner, or a Claude Tag Admin):** in Organization settings →
-   Claude Tag, create a bundle with:
-   - the `kopai-oncall` plugin (register `kopai-app/kopai-mono` as an
-     organization plugin source first);
-   - a custom connector, type **Bearer**, allowed website
-     `api.kopai.app`, holding the token. If the Kopai admin is someone
-     else, use **Copy setup link for another admin** so they paste it
-     directly; the token never goes into Slack;
-   - the on-call repo, writable;
-   - **Where it applies:** the alert channel and your incident channel
-     pattern (for example `inc-*`).
-3. **Remove** any Kopai sign-in (an MCP Connector) that applies in those
-   channels.
-4. Make the alert and incident channels private, `/invite @Claude`, and
-   mention `@Claude` for follow-ups. Slack Connect channels are not
-   supported.
+1. **Kopai › Alerting › Slack:** Add to Slack, choosing the alert channel.
+2. **Kopai › Tokens:** create an `agent` token. To let Claude create rules a
+   person approved, an owner switches on "may create alert rules".
+3. **Claude › Organization settings › Claude Tag › Bundles** (an Owner, or
+   a Claude Tag Admin): a bundle named `kopai` with
+   - a Custom connector → **Bearer**, Allowed websites `api.kopai.app`,
+     holding the token (**Copy setup link for another admin** lets the
+     Kopai admin paste it directly; the token never goes into Slack);
+   - the `kopai-oncall` plugin, from the Claude Directory listing;
+   - the Instructions text in the setup guide;
+   - **Where it applies:** the alert channel.
+4. **In the alert channel,** as a top-level message:
+   `@Claude set up Kopai on-call here`. Claude checks it can reach Kopai
+   and creates the watch routine when you say yes.
+5. **Kopai › Alerting › Slack › Send test message.** Claude answers it in
+   its thread with a health check; that reply means onboarding worked.
 
-Then, in the channel:
-
-```text
-@Claude what can you access from this channel?
-@Claude set up Kopai on-call
-```
-
-Setup runs one phase at a time and stops for your sign-off after each.
-New alert-watching routines start in a two-week shadow period, posting to
-a review channel, before they go live. The full guide, including the
-message to send your admins and the known limits, is
+Don't put the connector on the Connectors tab (it would apply in every
+channel), and remove any Kopai sign-in (an MCP Connector) in the channel.
+Slack Connect channels are not supported. The full guide, with the
+Instructions text, the message to send your admins, the fallbacks for
+getting the plugin and the known limits, is
 `skills/kopai-oncall-setup/references/tag-setup.md`.
 
 ## Use it in Claude Code
@@ -122,8 +116,8 @@ claude plugin marketplace add kopai-app/kopai-mono
 claude plugin install kopai-oncall@kopai
 ```
 
-Run Claude Code in your on-call repo and ask it to set up Kopai on-call.
-Claude Code connects to hosted Kopai through the plugin's MCP server and
+Ask Claude Code to triage an alert, or run it in your on-call repo and
+ask it to build your on-call playbooks. Claude Code connects to hosted Kopai through the plugin's MCP server and
 asks you to sign in the first time; there you act as yourself.
 
 ## Data and privacy

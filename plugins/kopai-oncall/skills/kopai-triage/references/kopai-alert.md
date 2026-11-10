@@ -8,6 +8,26 @@ Kopai, and this file says how to read it and how to reply.
 
 ## 1. Whose alert is it?
 
+**Kopai's test message first.** A post from Kopai's Slack app whose text
+starts with `TEST · Kopai alert target check` (the whole text is
+`TEST · Kopai alert target check · no action needed`) is not an alert:
+someone pressed **Send test message** in Kopai to check the connection.
+Reply in its thread with a health check, and nothing else:
+
+- the identity in use, from `caller` (section 3): "the channel's Kopai
+  agent token", or whose connector answered;
+- how many alert rules are visible (`alert_rules_list`), and how many are
+  FIRING now;
+- when the last alert fired (`alerts_list` with `state` `firing`,
+  `limit` 1), or "no alerts yet";
+- that the watch is running (this reply came from it), or, if a person
+  asked rather than the watch, that the watch is not installed yet (the
+  kopai-oncall-setup skill installs it).
+
+This reply is the customer's proof that onboarding worked; keep it to
+those four lines. Match only that prefix: the text is a contract with
+Kopai.
+
 Kopai's card looks like this in Slack: a header `🔴 FIRING` or
 `🟢 RESOLVED`, the rule name as a link, the rule's summary, then fields
 named _Observed value_, _Threshold_, _Metric_, _Aggregation_ and
@@ -59,7 +79,11 @@ happened around it, run the same query through `query` with an
 `absolute` window from about 2 hours before `event.occurredAt` to now, as a
 `timeSeries` at `1m` (keep window ÷ granularity under the aggregate cap).
 Then investigate as the triage procedure says, starting from the rule's
-metric and filters.
+metric and filters. Always check for a release at onset: group the
+affected service's spans by `service.version` over the same window. A new
+version that first appears at onset is the commonest cause, and it costs
+one query. Name it in the reply when it lines up; say "no release at
+onset" when it doesn't.
 
 **Has this happened before?** Call `alert_history` with the `rule_id` and
 `since` 30 days ago, next to the `lessons.md` search in triage step 3.
@@ -90,8 +114,12 @@ your first alert tool call in a channel session, check it:
   Kopai owner's or admin's login". Do not repeat the warning in the same
   session.
 
-- `kind` `person` with any other role, or `cli`: read-only either way; say
-  nothing.
+- `kind` `person` with any other role: read-only, so no warning about
+  rights. But a person's connector means this channel may have no Kopai
+  agent connection, and routines never use a person's connector: say once
+  that alerts here get triaged only when someone asks until a Claude admin
+  applies the `kopai` bundle to this channel.
+- `kind` `cli`: read-only; say nothing.
 
 Error results carry no `caller`; check it on the first successful one.
 
@@ -99,25 +127,49 @@ Error results carry no `caller`; check it on the first successful one.
 
 Some people in the channel have no Kopai login. For them the reply is the
 only evidence, so it must be enough to make the triage decision without
-opening Kopai. Use triage step 6's diagnosis format, opening with one line
-built from the event:
+opening Kopai. **The first reply is short: at most five lines before the
+link, one sentence each, under 90 words in all**, no sub-bullets and no
+extra sections (mechanism, blast radius, ruled out go in the follow-up).
+A person reads it in seconds. It opens with one line built from the
+event:
 
 > **FIRING since 14:02 UTC (12 min)** · observed **average 480 ms** vs
 > threshold **400 ms** · rule _checkout latency_
 
 - **State and duration:** from `event.firedAt` (and `pair.occurredAt` once
-  resolved),
-  in absolute time with the timezone.
+  resolved), in absolute time with the timezone.
 - **Observed against threshold:** quote `observed.text` and
   `threshold.text` exactly as the tool returns them. Never paraphrase or
   recompute: a `≈` stays `≈`, a `>` stays `>`, "n/a (no evaluation ran)"
   stays as it is.
-- **Findings:** one or two, each with the number it rests on and the
-  window of the query that produced it ("checkout→payments p95 went from
-  180 ms to 2.1 s between 13:58 and 14:02 UTC").
+- **The likely cause,** in one sentence, with one or two findings, each
+  with the number it rests on and the window of the query that produced it
+  ("search→orders p95 went from 40 ms to 1.1 s between 09:36 and
+  09:41 UTC"). Say when it is only a lead.
+- **What to look at first:** the one check or proposed fix a person should
+  start with. Never claim to have done it.
 - **The link, last:** "Full evidence in Kopai (workspace login required):
   {{incident_url}}". With no `incident_url`, give the stored query's JSON
   instead.
+
+For example (a different incident):
+
+> **FIRING since 09:41 UTC (8 min)** · observed **average 1.4 s** vs
+> threshold **800 ms** · rule _search latency_
+> **Likely cause:** the `orders` database. Search's `SELECT` spans to it
+> went from p95 ≈ 40 ms to ≈ 1.1 s at 09:38 UTC, at flat traffic and with
+> no new `service.version`.
+> **Look first at:** the database's connections and slow queries since
+> 09:38.
+> Full evidence in Kopai (workspace login required): {{incident_url}}
+
+Then stop: **nothing after the link**. The queries, confidence notes and
+anything else go in the follow-up; the incident page meets rule 4 for the
+first reply. The full diagnosis (triage step 6: root cause with confidence,
+blast radius, ruled out, what would change your mind) is for a follow-up:
+post it when someone asks ("@Claude details", "why?"), in long-running
+incident updates (step 6a), or when the alert is page-severity under
+`ONCALL.md`.
 
 Rule 4 ("every claim carries a link") is met by the incident page, plus
 the exact query JSON for any finding the page does not show.
@@ -127,7 +179,8 @@ the exact query JSON for any finding the page does not show.
 recovery. `no_data` means the metric stopped arriving, which may be the
 problem getting worse (load the `telemetry-gap.md` reference);
 `rule_changed`, `rule_disabled`, `rule_deleted` and `tenant_inactive` mean
-the rule stopped being evaluated. Neither is the signal recovering. Do not re-run the triage. If a fix was deployed, the
+the rule stopped being evaluated. Neither is the signal recovering. Do not
+re-run the triage. If a fix was deployed, the
 kopai-verify-fix skill decides whether the signal is back to baseline;
 never mark the incident resolved (rule 2).
 
