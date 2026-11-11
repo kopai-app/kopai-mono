@@ -193,6 +193,118 @@ describe("apiRoutes", () => {
       });
     });
 
+    it("returns 422 with remedies for a ClickHouse resource limit", async () => {
+      getTracesSpy.mockRejectedValue(
+        Object.assign(new Error("Timeout exceeded: elapsed 30.1 seconds"), {
+          code: "159",
+          type: "TIMEOUT_EXCEEDED",
+        })
+      );
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(422);
+      const body = response.json();
+      expect(body).toMatchObject({
+        type: "https://docs.kopai.app/errors/signals-api-query-too-expensive",
+        status: 422,
+        title: "Query too expensive",
+      });
+      expect(body.detail).toMatch(/time window/);
+      expect(body.detail).toMatch(/`Count`/);
+      expect(body.detail).not.toMatch(/elapsed|TIMEOUT_EXCEEDED/);
+    });
+
+    // Pins the code list. It is mirrored in @kopai/mcp (`limits.ts`, tested in
+    // its `tools.test.ts`); a code added to one copy and not the other would
+    // give REST and MCP callers different outcomes.
+    it.each([
+      ["158", "TOO_MANY_ROWS"],
+      ["159", "TIMEOUT_EXCEEDED"],
+      ["160", "TOO_SLOW"],
+      ["241", "MEMORY_LIMIT_EXCEEDED"],
+      ["307", "TOO_MANY_BYTES"],
+      ["396", "TOO_MANY_ROWS_OR_BYTES"],
+    ])("returns 422 for ClickHouse code %s (%s)", async (code, type) => {
+      getTracesSpy.mockRejectedValue(
+        Object.assign(new Error(`limit reached (${type})`), { code, type })
+      );
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(422);
+    });
+
+    it("keeps a ClickHouse error with another code a 500", async () => {
+      getTracesSpy.mockRejectedValue(
+        Object.assign(new Error("Table does not exist (UNKNOWN_TABLE)"), {
+          code: "60",
+          type: "UNKNOWN_TABLE",
+        })
+      );
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it.each([
+      // Fires for a hung server as well as a heavy query.
+      ["the client's request timeout", new Error("Timeout error.")],
+      [
+        "a server-wide memory limit",
+        Object.assign(
+          new Error(
+            "(total) memory limit exceeded: would use 570.40 MiB (attempt to allocate chunk of 256.00 MiB bytes), current RSS: 552.55 MiB, maximum: 667.57 MiB."
+          ),
+          { code: "241", type: "MEMORY_LIMIT_EXCEEDED" }
+        ),
+      ],
+    ])("keeps %s a 500", async (_, thrown) => {
+      getTracesSpy.mockRejectedValue(thrown);
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    // The memory messages are ClickHouse 25.6's own, as a real server
+    // returned them; only "(total)" tells the two 241s apart.
+    it("returns 422 for a per-query memory limit", async () => {
+      getTracesSpy.mockRejectedValue(
+        Object.assign(
+          new Error(
+            "Query memory limit exceeded: would use 24.50 MiB (attempt to allocate chunk of 16.00 MiB bytes), maximum: 19.07 MiB."
+          ),
+          { code: "241", type: "MEMORY_LIMIT_EXCEEDED" }
+        )
+      );
+
+      const response = await server.inject({
+        method: "POST",
+        url: "/signals/traces/search",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(422);
+    });
+
     it("returns null nextCursor when no more pages", async () => {
       getTracesSpy.mockResolvedValue({ data: [mockTrace], nextCursor: null });
 

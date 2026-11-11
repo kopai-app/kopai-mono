@@ -1,6 +1,11 @@
 import { fromJsonSchema, type McpServer } from "@modelcontextprotocol/server";
 
-import { LIMITS, MAX_RESULT_CHARACTERS } from "./limits.js";
+import {
+  isResourceLimitError,
+  LIMITS,
+  MAX_RESULT_CHARACTERS,
+  RESOURCE_LIMIT_REMEDIES,
+} from "./limits.js";
 import {
   METRICS_DISCOVER_TOOL_INPUT_SCHEMA,
   QUERY_TOOL_INPUT_SCHEMA,
@@ -10,6 +15,7 @@ import {
   fromThrown,
   runMetricsDiscoverTool,
   runQueryTool,
+  tooExpensive,
   type ToolContext,
 } from "./tools.js";
 import {
@@ -216,8 +222,12 @@ function hostOutcome(
 
 /**
  * A host tool's throw, converted as `fromThrown` converts a built-in's, with
- * two differences: the message names no query, since a host tool need not run
- * one, and the log line names the tool.
+ * two differences: the generic message names no query, since a host tool need
+ * not run one, and the log line names the tool.
+ *
+ * A resource limit is classified here too: a host tool that reads telemetry
+ * (a backtest, say) lets its query's throw through, and would otherwise
+ * report a limit the caller can get past as a generic failure.
  */
 function thrownByHostTool(
   tool: string,
@@ -225,6 +235,12 @@ function thrownByHostTool(
   logger: ToolLogger | undefined
 ): Run<ToolResult> {
   logger?.error(error, `MCP host tool "${tool}" failed`);
+  if (isResourceLimitError(error)) {
+    return tooExpensive(
+      "The query behind this tool call was stopped at this deployment's limit on query time, memory or rows read.",
+      RESOURCE_LIMIT_REMEDIES
+    );
+  }
   return {
     result: errorResult({
       error: "upstream_error",

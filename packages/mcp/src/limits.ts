@@ -64,6 +64,66 @@ export const DISCOVERY_SIZE_REMEDIES = [
   "Ask an operator to reduce what this deployment ingests: this workspace holds more metrics than one response can carry.",
 ] as const;
 
+/**
+ * ClickHouse error codes for a query stopped at a resource limit: 158
+ * TOO_MANY_ROWS, 159 TIMEOUT_EXCEEDED, 160 TOO_SLOW (the estimated time
+ * already exceeds `max_execution_time`), 241 MEMORY_LIMIT_EXCEEDED, 307
+ * TOO_MANY_BYTES, 396 TOO_MANY_ROWS_OR_BYTES.
+ *
+ * WHY ClickHouse codes in a package that knows no backend: the datasource
+ * rethrows `@clickhouse/client`'s error as it is, so its `code` is the only
+ * signal that reaches this layer. The SQLite datasource sets no such limits.
+ * Mirrored in `@kopai/api`'s error handler, which cannot import from here.
+ *
+ * WHY not `@clickhouse/client`'s own "Timeout error.": it is a socket timeout,
+ * and fires as readily for a server that stopped answering as for a heavy
+ * query. A heavy query is expected to meet the server's `max_execution_time`
+ * first, set by the host below the client's `request_timeout`, and fail with
+ * 159; a client timeout is then an outage, and stays one.
+ */
+const RESOURCE_LIMIT_CODES: ReadonlySet<string> = new Set([
+  "158",
+  "159",
+  "160",
+  "241",
+  "307",
+  "396",
+]);
+
+/**
+ * Whether a throw is a query stopped at a resource limit, which the caller
+ * can get past by asking for less. Anything else stays an upstream error.
+ *
+ * A 241 for the server as a whole ("(total) memory limit exceeded") is
+ * excluded: other queries or ingest used the memory, so asking for less does
+ * not help.
+ */
+export function isResourceLimitError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code } = error as { code?: unknown };
+  if (typeof code !== "string" || !RESOURCE_LIMIT_CODES.has(code)) {
+    return false;
+  }
+  return !(code === "241" && error.message.includes("(total)"));
+}
+
+/** Remedies for a query stopped at a resource limit. */
+export const RESOURCE_LIMIT_REMEDIES = [
+  "Narrow the time window.",
+  "Add filters so fewer rows are read: `service.name` or another attribute, and for metrics a single `MetricName`.",
+  "For metrics, INCREASE, RATE and HISTOGRAM_QUANTILE read every data point in the window. When an exact increase or quantile is not needed, SUM, COUNT or MAX cost far less: on `Value` for Gauge and Sum metrics, on `Count` or `Sum` for Histogram metrics.",
+] as const;
+
+/**
+ * Remedies for a discovery listing stopped at a resource limit. Its own list
+ * for the reason {@link DISCOVERY_SIZE_REMEDIES} is: the tool takes no
+ * arguments, so there is no window or filter to offer.
+ */
+export const DISCOVERY_RESOURCE_LIMIT_REMEDIES = [
+  "Query a metric by name with the `query` tool — discovery is not a prerequisite for it.",
+  "Try again shortly: the listing may have run while this deployment was busy.",
+] as const;
+
 /** Remedies offered when a result is too large once serialized. */
 export const SIZE_REMEDIES = [
   "Lower `limit`.",

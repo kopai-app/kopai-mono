@@ -9,11 +9,16 @@ import type { FastifyRequest } from "fastify";
  *
  * `not_found` and `forbidden` are produced only by host tools (see
  * {@link HostTools}); the built-in tools never return them.
+ *
+ * `query_too_expensive` is a query the datasource stopped at a time, memory,
+ * row or byte limit, recognised from the thrown error; see
+ * `isResourceLimitError`.
  */
 export const TOOL_CALL_OUTCOMES = [
   "ok",
   "invalid_input",
   "result_too_large",
+  "query_too_expensive",
   "upstream_error",
   "not_found",
   "forbidden",
@@ -59,7 +64,8 @@ export interface ToolCallEvent {
  * - Results are built with `okResult` and `errorResult`, so the
  *   error contract holds for every tool on the server.
  * - The package observes them as it observes the built-ins: a throw becomes
- *   a logged `upstream_error` ("The tool call could not be completed."), the
+ *   a logged `upstream_error` ("The tool call could not be completed."), or
+ *   `query_too_expensive` when it is a query stopped at a resource limit, the
  *   outcome is read from the result's `error` code, and `onToolCall` fires
  *   once per call (without `rowCount`).
  *   A host tool never calls `onToolCall` itself. An error result without a

@@ -1,10 +1,13 @@
 import { kopaiQuery, kopaiQueryCompiler, type datasource } from "@kopai/core";
 
 import {
+  DISCOVERY_RESOURCE_LIMIT_REMEDIES,
   DISCOVERY_SIZE_REMEDIES,
+  isResourceLimitError,
   LIMITS,
   MAX_RESULT_CHARACTERS,
   overflowRemedies,
+  RESOURCE_LIMIT_REMEDIES,
   SIZE_REMEDIES,
 } from "./limits.js";
 import {
@@ -56,9 +59,33 @@ function tooLarge(message: string, remedies: readonly string[]): ToolRun {
 }
 
 /**
+ * A query the datasource stopped at a resource limit. Exported for the host
+ * tools' throw handler in `register.ts`.
+ */
+export function tooExpensive(
+  message: string,
+  remedies: readonly string[]
+): ToolRun {
+  return {
+    result: errorResult({
+      error: "query_too_expensive",
+      message,
+      remedies: [...remedies],
+    }),
+    outcome: "query_too_expensive",
+  };
+}
+
+/**
  * Maps a thrown error onto an outcome, mirroring the REST error handler:
- * a recognised validation error surfaces its own message, and anything
- * unrecognised surfaces a generic string with the detail written to the log.
+ * a recognised validation error surfaces its own message, a resource limit
+ * surfaces what to ask for instead, and anything unrecognised surfaces a
+ * generic string with the detail written to the log.
+ *
+ * WHY a resource limit gets its own outcome: it is the failure a caller can
+ * get past, by asking for less, and a generic "could not be completed" gave
+ * it nothing to change. Directory review fails a connector whose errors carry
+ * no detail.
  *
  * WHY the log matters as much as the result: "The query could not be
  * completed." is the whole of what a model can act on, and it is also the
@@ -69,13 +96,28 @@ function tooLarge(message: string, remedies: readonly string[]): ToolRun {
  * same thing at the other entry point.
  *
  * A validation error is not logged: it is the caller's mistake, it is reported
- * back in full, and logging every malformed query would bury the outages.
+ * back in full, and logging every malformed query would bury the outages. A
+ * resource limit is logged: it is the caller's query, but which queries the
+ * datasource cannot afford is for whoever runs it to know.
+ *
+ * `limitRemedies` is for `metrics_discover`, which takes no arguments and so
+ * cannot narrow a window.
  */
-export function fromThrown(error: unknown, logger?: ToolLogger): ToolRun {
+export function fromThrown(
+  error: unknown,
+  logger?: ToolLogger,
+  limitRemedies: readonly string[] = RESOURCE_LIMIT_REMEDIES
+): ToolRun {
   if (error instanceof kopaiQueryCompiler.KopaiQueryValidationError) {
     return invalidInput(error.message);
   }
   logger?.error(error, "MCP tool call failed");
+  if (isResourceLimitError(error)) {
+    return tooExpensive(
+      "The query was stopped at this deployment's limit on query time, memory or rows read.",
+      limitRemedies
+    );
+  }
   return {
     result: errorResult({
       error: "upstream_error",
@@ -312,7 +354,7 @@ export async function runMetricsDiscoverTool(
       requestContext: ctx.requestContext,
     });
   } catch (error) {
-    return fromThrown(error, ctx.logger);
+    return fromThrown(error, ctx.logger, DISCOVERY_RESOURCE_LIMIT_REMEDIES);
   }
 
   // Serialization is outside the try: a payload this cannot stringify is not an
