@@ -1,5 +1,14 @@
 # @kopai/app
 
+## 0.15.4
+
+### Patch Changes
+
+- Updated dependencies [ab5ba4c]
+- Updated dependencies [ab5ba4c]
+  - @kopai/api@0.10.0
+  - @kopai/mcp@0.4.0
+
 ## 0.15.3
 
 ### Patch Changes
