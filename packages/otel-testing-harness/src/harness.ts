@@ -75,8 +75,10 @@ export async function createOtelTestingHarness(
   return {
     port: actualPort,
     datasource: ds,
-    getTraces: (filter) => ds.getTraces(filter),
-    getLogs: (filter) => ds.getLogs(filter),
+    // Fixtures often carry fixed, past timestamps, so a search with no start
+    // returns everything stored, not the API's last 24 hours (KOP-216).
+    getTraces: (filter) => ds.getTraces(withAllTime(filter)),
+    getLogs: (filter) => ds.getLogs(withAllTime(filter)),
     getMetrics: (filter) => ds.getMetrics(filter),
     discoverMetrics: (options) => ds.discoverMetrics(options),
     // Kept async for API consistency; body is synchronous (node:sqlite is sync)
@@ -88,4 +90,10 @@ export async function createOtelTestingHarness(
       database.close();
     },
   };
+}
+
+function withAllTime<T extends { timestampMin?: string }>(filter: T): T {
+  return filter.timestampMin == null
+    ? { ...filter, timestampMin: "0" }
+    : filter;
 }

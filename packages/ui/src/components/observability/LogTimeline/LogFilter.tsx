@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { dataFilterSchemas, denormalizedSignals } from "@kopai/core";
 import { useDebouncedValue } from "../utils/use-debounced-value.js";
+import { DEFAULT_LOOKBACK_MS } from "../default-lookback.js";
 
 type LogsDataFilter = dataFilterSchemas.LogsDataFilter;
 type OtelLogsRow = denormalizedSignals.OtelLogsRow;
@@ -25,6 +26,11 @@ const LOOKBACK_OPTIONS = [
   { label: "Last 12 Hours", ms: 12 * 60 * 60_000 },
   { label: "Last 24 Hours", ms: 24 * 60 * 60_000 },
 ] as const;
+
+/** No "All time": an unbounded search times out on a large workspace (KOP-216). */
+const DEFAULT_LOOKBACK_IDX = LOOKBACK_OPTIONS.findIndex(
+  (opt) => opt.ms === DEFAULT_LOOKBACK_MS
+);
 
 const DEBOUNCE_MS = 500;
 
@@ -220,8 +226,18 @@ export function LogFilter({
   onSelectedServicesChange,
 }: LogFilterProps) {
   const [open, setOpen] = useState(false);
-  const [timeMode, setTimeMode] = useState<TimeMode>("lookback");
-  const [lookbackIdx, setLookbackIdx] = useState(-1);
+  // A range from the URL is shown as it is; the lookback list cannot express it.
+  const [timeMode, setTimeMode] = useState<TimeMode>(() =>
+    value.timestampMin != null || value.timestampMax != null
+      ? "absolute"
+      : "lookback"
+  );
+  const [lookbackIdx, setLookbackIdx] = useState(DEFAULT_LOOKBACK_IDX);
+
+  // A search by trace ID with no range is not limited to the default hour
+  // (KOP-216), so the lookback must not claim it is.
+  const wholeTrace =
+    !!value.traceId && value.timestampMin == null && value.timestampMax == null;
 
   // -- Derive filterable options from rows (sticky — accumulates over time) --
   const svcRef = useRef(new Set<string>());
@@ -347,16 +363,11 @@ export function LogFilter({
   // -- Lookback handler -----------------------------------------------------
   const handleLookback = useCallback(
     (idx: number) => {
+      const opt = LOOKBACK_OPTIONS[idx];
+      if (!opt) return;
       setLookbackIdx(idx);
-      if (idx < 0) {
-        emitImmediate({ timestampMin: undefined, timestampMax: undefined });
-      } else {
-        const opt = LOOKBACK_OPTIONS[idx];
-        if (opt) {
-          const tsMin = msToNs(Date.now() - opt.ms);
-          emitImmediate({ timestampMin: tsMin, timestampMax: undefined });
-        }
-      }
+      const tsMin = msToNs(Date.now() - opt.ms);
+      emitImmediate({ timestampMin: tsMin, timestampMax: undefined });
     },
     [emitImmediate]
   );
@@ -389,11 +400,20 @@ export function LogFilter({
   // -- Time mode switch -----------------------------------------------------
   const switchTimeMode = useCallback(
     (mode: TimeMode) => {
+      // Re-clicking the active mode must not wipe the range it shows.
+      if (mode === timeMode) return;
       setTimeMode(mode);
-      setLookbackIdx(-1);
-      emitImmediate({ timestampMin: undefined, timestampMax: undefined });
+      if (mode === "lookback") {
+        setLookbackIdx(DEFAULT_LOOKBACK_IDX);
+        emitImmediate({
+          timestampMin: msToNs(Date.now() - DEFAULT_LOOKBACK_MS),
+          timestampMax: undefined,
+        });
+      } else {
+        emitImmediate({ timestampMin: undefined, timestampMax: undefined });
+      }
     },
-    [emitImmediate]
+    [emitImmediate, timeMode]
   );
 
   // -- Filter summary for collapsed state -----------------------------------
@@ -622,12 +642,12 @@ export function LogFilter({
 
             {timeMode === "lookback" ? (
               <select
-                value={lookbackIdx}
+                value={wholeTrace ? -1 : lookbackIdx}
                 onChange={(e) => handleLookback(Number(e.target.value))}
                 className={`${INPUT_CLS} max-w-xs`}
                 data-testid="filter-lookback"
               >
-                <option value={-1}>All time</option>
+                {wholeTrace && <option value={-1}>Whole trace</option>}
                 {LOOKBACK_OPTIONS.map((opt, i) => (
                   <option key={i} value={i}>
                     {opt.label}

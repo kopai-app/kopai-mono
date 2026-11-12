@@ -91,7 +91,7 @@ kopai traces search --span-attr "http.method=GET" --resource-attr "k8s.pod.name=
 - `--span-kind` - CLIENT, SERVER, PRODUCER, CONSUMER, INTERNAL
 - `--status-code` - OK, ERROR, UNSET
 - `--scope` - instrumentation scope
-- `--timestamp-min`, `--timestamp-max` - nanoseconds
+- `--timestamp-min`, `--timestamp-max` - nanoseconds. Without either, the search covers the last 24 hours (a `--trace-id` lookup is not limited).
 - `--duration-min`, `--duration-max` - nanoseconds
 - `--span-attr <key=value>` - repeatable
 - `--resource-attr <key=value>` - repeatable
@@ -119,7 +119,7 @@ kopai logs search --log-attr "user.id=123"
 - `--severity-text` - DEBUG, INFO, WARN, ERROR, FATAL
 - `--severity-min`, `--severity-max` - 0-24
 - `-b, --body` - body content substring
-- `--timestamp-min`, `--timestamp-max` - nanoseconds
+- `--timestamp-min`, `--timestamp-max` - nanoseconds. Without either, the search covers the last 24 hours (a `--trace-id` lookup is not limited).
 - `--log-attr <key=value>` - repeatable
 - `--resource-attr <key=value>` - repeatable
 - `--scope-attr <key=value>` - repeatable

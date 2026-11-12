@@ -39,6 +39,11 @@ import type {
 import { useDebouncedValue } from "../components/observability/utils/use-debounced-value.js";
 
 import { SERVICES_SHORTCUTS } from "../components/observability/ServiceList/shortcuts.js";
+import {
+  CUSTOM_RANGE_LOOKBACK,
+  DEFAULT_LOOKBACK,
+  DEFAULT_LOOKBACK_MS,
+} from "../components/observability/default-lookback.js";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 
@@ -430,8 +435,27 @@ function LogsTab() {
     writeLogFiltersToURL(filters, selectedServices, selectedLogId);
   }, [filters, selectedServices, selectedLogId]);
 
+  // With no time range a fetch would scan the workspace's whole history
+  // (KOP-216), so it starts an hour back. The start is taken when the filters
+  // change, not on every render, which would change the query each time. A
+  // lookup by trace ID stays unlimited, like the datasource default.
+  const liveParams = useMemo(
+    () =>
+      filters.timestampMin == null &&
+      filters.timestampMax == null &&
+      !filters.traceId
+        ? {
+            ...filters,
+            timestampMin: String(
+              BigInt(Date.now() - DEFAULT_LOOKBACK_MS) * 1_000_000n
+            ),
+          }
+        : filters,
+    [filters]
+  );
+
   const { logs, isLive, loading, error, setLive } = useLiveLogs({
-    params: filters,
+    params: liveParams,
     pollIntervalMs: 3_000,
   });
 
@@ -522,8 +546,13 @@ function TraceSearchView({
     };
     if (service) params.serviceName = service;
     if (urlState.operation) params.spanName = urlState.operation;
-    if (urlState.lookback) {
-      const ms = LOOKBACK_MS[urlState.lookback];
+    // An absolute range from the URL stands on its own; the default lookback
+    // fills in only when the URL gives no time range at all (KOP-216).
+    const lookback =
+      urlState.lookback ??
+      (urlState.tsMin || urlState.tsMax ? null : DEFAULT_LOOKBACK);
+    if (lookback) {
+      const ms = LOOKBACK_MS[lookback];
       if (ms) {
         params.timestampMin = String((Date.now() - ms) * 1e6);
       }
@@ -564,12 +593,17 @@ function TraceSearchView({
     // The form submits every field, so an absent one means the user cleared it.
     // Falling back to the URL's service here would make "All Services"
     // unselectable — it would just re-apply whatever was already filtered.
+    // "Custom range" keeps the URL's absolute range; a preset replaces it.
+    const keepRange = filters.lookback === CUSTOM_RANGE_LOOKBACK;
+    const current = readURLState();
     pushURLState({
       tab: "services",
       service: filters.service ?? null,
       operation: filters.operation ?? null,
       tags: filters.tags ?? null,
-      lookback: filters.lookback ?? null,
+      lookback: keepRange ? null : (filters.lookback ?? null),
+      tsMin: keepRange ? current.tsMin : null,
+      tsMax: keepRange ? current.tsMax : null,
       minDuration: filters.minDuration ?? null,
       maxDuration: filters.maxDuration ?? null,
       limit: filters.limit,
@@ -600,7 +634,11 @@ function TraceSearchView({
       service: urlState.service ?? "",
       operation: urlState.operation ?? "",
       tags: urlState.tags ?? "",
-      lookback: urlState.lookback ?? "",
+      lookback:
+        urlState.lookback ??
+        (urlState.tsMin || urlState.tsMax
+          ? CUSTOM_RANGE_LOOKBACK
+          : DEFAULT_LOOKBACK),
       minDuration: urlState.minDuration ?? "",
       maxDuration: urlState.maxDuration ?? "",
       limit: urlState.limit ?? 20,
@@ -610,6 +648,8 @@ function TraceSearchView({
       urlState.operation,
       urlState.tags,
       urlState.lookback,
+      urlState.tsMin,
+      urlState.tsMax,
       urlState.minDuration,
       urlState.maxDuration,
       urlState.limit,

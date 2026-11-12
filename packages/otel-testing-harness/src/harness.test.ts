@@ -467,6 +467,60 @@ describe("clear()", () => {
 });
 
 describe("datasource escape hatch", () => {
+  // Test fixtures often carry fixed, past timestamps. The API's 24-hour
+  // default for searches with no time range (KOP-216) does not apply here.
+  it("getTraces and getLogs return data of any age when no range is given", async () => {
+    const harness = await createOtelTestingHarness({ port: 0 });
+    try {
+      await harness.datasource.writeTraces({
+        resourceSpans: [
+          {
+            resource: { attributes: [] },
+            scopeSpans: [
+              {
+                scope: { name: "fixture" },
+                spans: [
+                  {
+                    traceId: "old-trace",
+                    spanId: "old-span",
+                    name: "old",
+                    startTimeUnixNano: "1700000000000000000",
+                    endTimeUnixNano: "1700000000500000000",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      await harness.datasource.writeLogs({
+        resourceLogs: [
+          {
+            resource: { attributes: [] },
+            scopeLogs: [
+              {
+                scope: { name: "fixture" },
+                logRecords: [
+                  {
+                    timeUnixNano: "1700000000000000000",
+                    body: { stringValue: "old-log" },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const traces = await harness.getTraces({});
+      expect(traces.data.map((r) => r.SpanId)).toEqual(["old-span"]);
+      const logs = await harness.getLogs({});
+      expect(logs.data.map((r) => r.Body)).toEqual(["old-log"]);
+    } finally {
+      await harness.stop();
+    }
+  });
+
   it("harness.datasource exposes TelemetryDatasource methods", async () => {
     const harness = await createOtelTestingHarness({ port: 0 });
     try {

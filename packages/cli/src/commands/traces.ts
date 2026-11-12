@@ -75,7 +75,10 @@ export function createTracesCommand(): Command {
       .option("--span-kind <kind>", "Filter by span kind")
       .option("--status-code <code>", "Filter by status code")
       .option("--scope <name>", "Filter by scope name")
-      .option("--timestamp-min <ns>", "Min timestamp (nanoseconds)")
+      .option(
+        "--timestamp-min <ns>",
+        "Min timestamp (nanoseconds). Default: 24 hours before --timestamp-max, or before now"
+      )
       .option("--timestamp-max <ns>", "Max timestamp (nanoseconds)")
       .option("--duration-min <ns>", "Min duration (nanoseconds)")
       .option("--duration-max <ns>", "Max duration (nanoseconds)")

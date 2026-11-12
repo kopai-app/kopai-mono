@@ -14,7 +14,7 @@ import {
   kopaiQueryCompiler,
   type datasource,
   type otlpMetrics,
-  type dataFilterSchemas,
+  dataFilterSchemas,
   type denormalizedSignals,
   type kopaiQuery as kopaiQueryNs,
 } from "@kopai/core";
@@ -316,11 +316,12 @@ export class DbDatasource implements datasource.TelemetryDatasource {
     return { rejectedLogRecords: "" };
   }
 
-  async getTraces(filter: dataFilterSchemas.TracesDataFilter): Promise<{
+  async getTraces(requestFilter: dataFilterSchemas.TracesDataFilter): Promise<{
     data: denormalizedSignals.OtelTracesRow[];
     nextCursor: string | null;
   }> {
     try {
+      const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
       const limit = filter.limit ?? 100;
       const sortOrder = filter.sortOrder ?? "DESC";
 
@@ -781,11 +782,12 @@ export class DbDatasource implements datasource.TelemetryDatasource {
     }
   }
 
-  async getLogs(filter: dataFilterSchemas.LogsDataFilter): Promise<{
+  async getLogs(requestFilter: dataFilterSchemas.LogsDataFilter): Promise<{
     data: denormalizedSignals.OtelLogsRow[];
     nextCursor: string | null;
   }> {
     try {
+      const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
       const limit = filter.limit ?? 100;
       const sortOrder = filter.sortOrder ?? "DESC";
 
@@ -1127,12 +1129,13 @@ export class DbDatasource implements datasource.TelemetryDatasource {
   }
 
   async getTraceSummaries(
-    filter: dataFilterSchemas.TraceSummariesFilter
+    requestFilter: dataFilterSchemas.TraceSummariesFilter
   ): Promise<{
     data: dataFilterSchemas.TraceSummaryRow[];
     nextCursor: string | null;
   }> {
     try {
+      const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
       const limit = filter.limit ?? 20;
       const sortOrder = filter.sortOrder ?? "DESC";
 

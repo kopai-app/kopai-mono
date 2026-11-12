@@ -6,6 +6,7 @@ import {
   getServiceTint,
 } from "../utils/colors.js";
 import { SearchForm, filtersKey } from "./SearchForm.js";
+import { DEFAULT_LOOKBACK } from "../default-lookback.js";
 import type { SearchFormValues } from "./SearchForm.js";
 import { ScatterPlot } from "./ScatterPlot.js";
 import { SortDropdown } from "./SortDropdown.js";
@@ -91,7 +92,7 @@ const EMPTY_FILTERS: SearchFormValues = {
   service: "",
   operation: "",
   tags: "",
-  lookback: "",
+  lookback: DEFAULT_LOOKBACK,
   minDuration: "",
   maxDuration: "",
   limit: 20,

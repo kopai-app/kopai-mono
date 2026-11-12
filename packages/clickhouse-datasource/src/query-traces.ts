@@ -1,4 +1,4 @@
-import { kopaiQueryCompiler, type dataFilterSchemas } from "@kopai/core";
+import { dataFilterSchemas, kopaiQueryCompiler } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
 // Canonical StatusCode value for errored spans (e.g. "Error" in the OTel
@@ -35,11 +35,12 @@ export function buildOperationsQuery(filter: { serviceName: string }): {
 }
 
 export function buildTraceSummariesQuery(
-  filter: dataFilterSchemas.TraceSummariesFilter
+  requestFilter: dataFilterSchemas.TraceSummariesFilter
 ): {
   query: string;
   params: Record<string, unknown>;
 } {
+  const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
   const outerConditions: string[] = [];
   const spanConditions: string[] = [];
   const havingConditions: string[] = [];
@@ -79,6 +80,10 @@ export function buildTraceSummariesQuery(
     }
   }
 
+  // Span-level filters other than the time range. Without one, the outer
+  // time range alone selects the same traces, so the subquery is skipped.
+  const hasSpanFilter = spanConditions.length > 0;
+
   // Time range — applied to both outer query and span subquery
   if (filter.timestampMin != null) {
     outerConditions.push("Timestamp >= {tsMin:DateTime64(9)}");
@@ -92,7 +97,7 @@ export function buildTraceSummariesQuery(
   }
 
   // Restrict to matching TraceIds when span-level filters are present
-  if (spanConditions.length > 0) {
+  if (hasSpanFilter) {
     outerConditions.push(
       `TraceId IN (SELECT DISTINCT TraceId FROM otel_traces WHERE ${spanConditions.join(" AND ")})`
     );
@@ -171,10 +176,13 @@ LIMIT {limit:UInt32}`;
   return { query, params };
 }
 
-export function buildTracesQuery(filter: dataFilterSchemas.TracesDataFilter): {
+export function buildTracesQuery(
+  requestFilter: dataFilterSchemas.TracesDataFilter
+): {
   query: string;
   params: Record<string, unknown>;
 } {
+  const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
   const limit = filter.limit ?? 100;

@@ -47,7 +47,10 @@ export function createLogsCommand(): Command {
       .option("--severity-min <n>", "Min severity number")
       .option("--severity-max <n>", "Max severity number")
       .option("-b, --body <text>", "Filter by body contains")
-      .option("--timestamp-min <ns>", "Min timestamp (nanoseconds)")
+      .option(
+        "--timestamp-min <ns>",
+        "Min timestamp (nanoseconds). Default: 24 hours before --timestamp-max, or before now"
+      )
       .option("--timestamp-max <ns>", "Max timestamp (nanoseconds)")
       .option(
         "--log-attr <key=value>",
