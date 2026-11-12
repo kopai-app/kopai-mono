@@ -137,8 +137,10 @@ report a bug.
 The plugin sends requests to Kopai's MCP server at
 `https://api.kopai.app/v2/mcp`, with the credential your admin configured.
 It reads telemetry and alerts from your Kopai workspace, and writes only
-to your on-call repo, your Slack channels and, with the opt-in, new Kopai
-alert rules. Kopai's privacy policy: <https://kopai.app/privacy/>.
+to your on-call repo, your Slack channels, the Claude pages or Slack
+canvases you ask for, a Kopai dashboard when you ask for one in
+`root-cause-analysis` code mode and, with the opt-in, new Kopai alert
+rules. Kopai's privacy policy: <https://kopai.app/privacy/>.
 
 `root-cause-analysis` also has a code mode, used only where Claude can run
 Node (Claude Code, or a Claude Tag sandbox) and only for questions that
@@ -153,7 +155,8 @@ project or your home directory, the same file the Kopai CLI uses.
 
 - `evals/` holds `claude plugin eval` cases that run the skills against
   mocked Kopai tools; see `evals/README.md`.
-- `plugins/test-fixtures/checkout-deploy-regression` in this repository
+- [`plugins/test-fixtures/checkout-deploy-regression`](https://github.com/kopai-app/kopai-mono/tree/main/plugins/test-fixtures/checkout-deploy-regression)
+  in kopai-mono
   sends a fictional incident to a local Kopai and gives you an alert to
   paste and an answer key. See its README.
 

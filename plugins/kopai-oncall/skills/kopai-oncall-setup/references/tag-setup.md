@@ -64,9 +64,6 @@ on-call here`. Claude checks it can reach Kopai, proposes the watch
    message**. Claude answers it in its thread with a health check: the
    identity in use, the alert rules it sees, the last alert, and that the
    watch is running. That reply means onboarding worked.
-6. Optional: each person who wants to create, change or pause rules as
-   themselves connects Kopai on their own claude.ai account. Claude asks
-   them to allow it the first time; their changes are made as them.
 
 Without steps 3–5 the plugin still works on request: anyone with their own
 Kopai connector can ask `@Claude triage this` in a thread. Routines use
@@ -77,9 +74,8 @@ only the channel's own access, so nothing is triaged on its own until the
 
 - **Preferred:** from the Claude Directory listing (Kopai's connector and
   plugin), then add `kopai-oncall` to the `kopai` bundle.
-- **Fallbacks:** a private fork of `kopai-app/kopai-mono` added as a
-  skills repository, with the Claude GitHub App linked to it; or upload
-  the plugin's folder as a zip from the console.
+- **Fallback:** upload the plugin's folder (`plugins/kopai-oncall` in
+  `kopai-app/kopai-mono`) as a zip from the console.
 
 ## Don't
 

@@ -137,23 +137,13 @@ grant off a link to the token on Kopai's Tokens page. Post those lines as
 they are and stop; do not retry. `invalid_input` names the field: fix your
 own mistake once, then fall back to the editor link.
 
-**Existing rules change only at an owner's or admin's request, as them.**
-Never call `alert_rule_update`
-or `alert_rule_set_enabled` on your own initiative, and never through the
-channel's shared Kopai connection: the `agent` token never offers them, so
-if the shared connection does, it is someone's own sign-in (warn as in
-`kopai-alert.md` section 3). Pausing a rule is the silencing rule 1
-forbids.
+**Existing rules change only in Kopai, by an owner or admin, as them.**
+Never call `alert_rule_update` or `alert_rule_set_enabled`, even when a
+connection offers them: the `agent` token never does, so if one does, it
+is someone's own sign-in (warn as in `kopai-alert.md` section 3). Pausing
+a rule is the silencing rule 1 forbids.
 
-A change is a person's act, as themselves. When someone asks you to
-change or pause a rule:
-
-- link its `editor_url`, where an owner or admin can make the change; and
-- if they are an owner or admin and want it done from the thread, it goes
-  through **their own** Kopai connector: Claude Tag asks them, and only
-  them, to allow it, and the result's `caller` is that person. Read the
-  rule with `alert_rules_list`, restate the exact change ("pause _checkout
-  latency_", or which fields go from what to what), make it only after
-  their explicit yes, send only the changed fields, and log it to
-  `lessons.md` as their change. Kopai refuses it if their role cannot
-  write.
+When someone asks you to change or pause a rule, link its `editor_url`
+from `alert_rules_list`, say what to change there ("pause _checkout
+latency_", or which fields go from what to what), and leave it to an
+owner or admin to make the change.

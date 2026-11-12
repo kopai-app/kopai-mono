@@ -48,9 +48,8 @@ tools: `alerts_list`, `alert_get`, `alert_history`, `alert_rules_list` and
 channel's `agent` token holds the rule-creation grant. Their prefix
 depends on how Kopai is connected; use whichever is present, and take
 field names, row caps and the aggregate cap from each tool's own schema.
-Never call `alert_rule_update` or `alert_rule_set_enabled` on your own
-initiative or through the channel's shared connection: a rule change is
-an owner's or admin's act, through the editor or their own connector
+Never call `alert_rule_update` or `alert_rule_set_enabled`: a rule change
+is an owner's or admin's act, in Kopai's rule editor
 (`references/rule-proposal.md`).
 
 - **Pin the window.** During an incident, use `absolute` time from about
