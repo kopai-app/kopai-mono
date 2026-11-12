@@ -4,9 +4,11 @@ on:
   push:
     branches: [main]
 
+# Don't cancel a running release: a cancel after npm publish but before the
+# docker job pushes would leave a published version with no image.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -20,6 +22,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      app-version: ${{ steps.app.outputs.version }}
     steps:
       - uses: actions/checkout@v7
 
@@ -37,9 +41,32 @@ jobs:
         run: pnpm turbo build
 
       - name: Create Release PR or Publish
+        id: changesets
         uses: changesets/action@v2
         with:
           version-script: pnpm changeset version
           publish-script: pnpm changeset publish
           commit-message: "chore: version packages"
           pr-title: "chore: version packages"
+
+      # Changesets bumps @kopai/app whenever one of its workspace dependencies
+      # is released, so this covers changes to any of them.
+      - name: Get published @kopai/app version
+        id: app
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+        run: |
+          version=$(jq -r '.[] | select(.name == "@kopai/app") | .version' <<< "$PUBLISHED_PACKAGES")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  docker:
+    needs: release
+    if: needs.release.outputs.app-version != ''
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      version: ${{ needs.release.outputs.app-version }}
+    secrets: inherit
