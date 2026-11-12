@@ -1,13 +1,14 @@
 name: Docker
 
+# Called by release.yml after @kopai/app is published to npm, so every image
+# version also exists on npm.
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      version:
+        description: "@kopai/app version that was published to npm"
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -42,9 +43,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+            type=semver,pattern={{version}},value=${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }}
             type=sha
 
       - uses: docker/build-push-action@v7
