@@ -592,15 +592,36 @@ describe("LogFilter", () => {
     expect(screen.getByTestId("filter-timestampMax")).toBeDefined();
   });
 
-  it("switching time modes clears timestamp values", () => {
-    const { onChange } = setup({ value: { timestampMin: "123000000000" } });
+  it("switching from lookback to absolute mode clears timestamp values", () => {
+    const { onChange } = setup();
     expand();
+    fireEvent.change(getSelect("filter-lookback"), { target: { value: "0" } });
 
     fireEvent.click(screen.getByTestId("time-mode-absolute"));
 
     const call = lastCall(onChange);
     expect(call.timestampMin).toBeUndefined();
     expect(call.timestampMax).toBeUndefined();
+  });
+
+  it("clicking the mode that is already active keeps the bounds", () => {
+    const { onChange } = setup({
+      value: { timestampMin: "123000000000", timestampMax: "456000000000" },
+    });
+    expand();
+
+    fireEvent.click(screen.getByTestId("time-mode-absolute"));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("shows 'Whole trace' for a trace ID search with no time range", () => {
+    setup({ value: { traceId: "abc" } });
+    expand();
+
+    expect(getSelect("filter-lookback").selectedOptions[0]?.textContent).toBe(
+      "Whole trace"
+    );
   });
 
   it("switching back to lookback restores the 1 hour default", () => {

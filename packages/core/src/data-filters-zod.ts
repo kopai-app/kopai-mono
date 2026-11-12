@@ -57,7 +57,7 @@ export const tracesDataFilterSchema = z.object({
   timestampMin: nanosStringSchema
     .optional()
     .describe(
-      "Minimum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours (unless traceId is set); if only timestampMax is set, the 24 hours before it."
+      "Minimum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours (unless traceId is set); if only timestampMax is set, the 24 hours before it, or before now if it is later."
     ),
   timestampMax: nanosStringSchema
     .optional()
@@ -170,7 +170,7 @@ export const logsDataFilterSchema = z.object({
   timestampMin: nanosStringSchema
     .optional()
     .describe(
-      "Minimum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours (unless traceId is set); if only timestampMax is set, the 24 hours before it."
+      "Minimum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours (unless traceId is set); if only timestampMax is set, the 24 hours before it, or before now if it is later."
     ),
   timestampMax: nanosStringSchema
     .optional()
@@ -321,12 +321,12 @@ export const traceSummariesFilterSchema = z.object({
   timestampMin: nanosStringSchema
     .optional()
     .describe(
-      "Earliest start time of a span in the trace. UNIX Epoch time in nanoseconds, as a string. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours; if only timestampMax is set, the 24 hours before it."
+      "Start of the time range to search. UNIX Epoch time in nanoseconds, as a string. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours; if only timestampMax is set, the 24 hours before it, or before now if it is later."
     ),
   timestampMax: nanosStringSchema
     .optional()
     .describe(
-      "Latest start time of a span in the trace. UNIX Epoch time in nanoseconds, as a string."
+      "End of the time range to search. UNIX Epoch time in nanoseconds, as a string."
     ),
   durationMin: nanosStringSchema.optional(),
   durationMax: nanosStringSchema.optional(),
@@ -370,22 +370,44 @@ const DEFAULT_TIME_WINDOW_NS = BigInt(DEFAULT_TIME_WINDOW_MS) * 1_000_000n;
  * whole history (KOP-216).
  *
  * - No `timestampMin` and no `timestampMax`: the last 24 hours.
- * - Only `timestampMax`: the 24 hours before it.
+ * - Only `timestampMax`: the 24 hours before it, or before now if it is later.
+ * - An ascending page with a cursor: from 24 hours before the cursor. The
+ *   window is recomputed per request, and a start that moved past the cursor
+ *   would skip the rows between pages; starting a day early also keeps whole
+ *   a trace that began just before the cursor.
  * - `timestampMin` given, or a lookup by a non-empty `traceId`: unchanged.
  *
- * Every datasource applies this to span search, log search and trace
- * summaries, so a request means the same on every backend.
+ * Every datasource applies this default to span search, log search and trace
+ * summaries. A client that pages through a fixed window should send
+ * `timestampMin`.
  */
 export function withDefaultTimeWindow<
-  T extends { timestampMin?: string; timestampMax?: string; traceId?: string },
+  T extends {
+    timestampMin?: string;
+    timestampMax?: string;
+    traceId?: string;
+    cursor?: string;
+    sortOrder?: "ASC" | "DESC";
+  },
 >(filter: T, nowMs: number = Date.now()): T {
   // An empty traceId adds no predicate in any datasource, so it is no lookup.
   if (filter.timestampMin != null || filter.traceId) return filter;
-  const end =
-    filter.timestampMax != null
-      ? BigInt(filter.timestampMax)
-      : BigInt(nowMs) * 1_000_000n;
+  let anchor = BigInt(nowMs) * 1_000_000n;
+  if (filter.timestampMax != null) {
+    const max = BigInt(filter.timestampMax);
+    if (max < anchor) anchor = max;
+  }
+  if (filter.sortOrder === "ASC") {
+    const cursorTs = cursorTimestamp(filter.cursor);
+    if (cursorTs != null && cursorTs < anchor) anchor = cursorTs;
+  }
   const start =
-    end > DEFAULT_TIME_WINDOW_NS ? end - DEFAULT_TIME_WINDOW_NS : 0n;
+    anchor > DEFAULT_TIME_WINDOW_NS ? anchor - DEFAULT_TIME_WINDOW_NS : 0n;
   return { ...filter, timestampMin: String(start) };
+}
+
+/** Timestamp of a `{nanoseconds}:{id}` page cursor, as every datasource writes it. */
+function cursorTimestamp(cursor: string | undefined): bigint | undefined {
+  const match = cursor ? /^(\d+):/.exec(cursor) : null;
+  return match?.[1] != null ? BigInt(match[1]) : undefined;
 }

@@ -435,21 +435,23 @@ function LogsTab() {
     writeLogFiltersToURL(filters, selectedServices, selectedLogId);
   }, [filters, selectedServices, selectedLogId]);
 
-  // With no time range the first fetch would scan the workspace's whole
-  // history (KOP-216), so it starts from an hour before the tab opened. A
-  // lookup by trace ID stays unlimited, like the datasource default. Fixed
-  // at mount: a fresh value per render would change the query on every render.
-  const [defaultTimestampMin] = useState(() =>
-    String(BigInt(Date.now() - DEFAULT_LOOKBACK_MS) * 1_000_000n)
-  );
+  // With no time range a fetch would scan the workspace's whole history
+  // (KOP-216), so it starts an hour back. The start is taken when the filters
+  // change, not on every render, which would change the query each time. A
+  // lookup by trace ID stays unlimited, like the datasource default.
   const liveParams = useMemo(
     () =>
       filters.timestampMin == null &&
       filters.timestampMax == null &&
       !filters.traceId
-        ? { ...filters, timestampMin: defaultTimestampMin }
+        ? {
+            ...filters,
+            timestampMin: String(
+              BigInt(Date.now() - DEFAULT_LOOKBACK_MS) * 1_000_000n
+            ),
+          }
         : filters,
-    [filters, defaultTimestampMin]
+    [filters]
   );
 
   const { logs, isLive, loading, error, setLive } = useLiveLogs({

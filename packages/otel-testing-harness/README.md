@@ -46,16 +46,16 @@ await harness.stop();
 
 `createOtelTestingHarness(opts?)` returns a `Promise<OtelTestingHarness>` with:
 
-| Member               | Description                                           |
-| -------------------- | ----------------------------------------------------- |
-| `port`               | Actual port the server is listening on                |
-| `getTraces(filter?)` | Query stored traces                                   |
-| `getLogs(filter?)`   | Query stored logs                                     |
-| `getMetrics(filter)` | Query stored metrics (`metricType` required)          |
-| `discoverMetrics()`  | List all collected metric names and types             |
-| `clear()`            | Delete all telemetry data                             |
-| `stop()`             | Shut down the server and close the database           |
-| `datasource`         | Direct access to the underlying `TelemetryDatasource` |
+| Member               | Description                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `port`               | Actual port the server is listening on                                                                              |
+| `getTraces(filter?)` | Query stored traces, of any age unless `timestampMin` is set                                                        |
+| `getLogs(filter?)`   | Query stored logs, of any age unless `timestampMin` is set                                                          |
+| `getMetrics(filter)` | Query stored metrics (`metricType` required)                                                                        |
+| `discoverMetrics()`  | List all collected metric names and types                                                                           |
+| `clear()`            | Delete all telemetry data                                                                                           |
+| `stop()`             | Shut down the server and close the database                                                                         |
+| `datasource`         | Direct access to the underlying `TelemetryDatasource`. Its searches with no time range cover only the last 24 hours |
 
 ## Options
 

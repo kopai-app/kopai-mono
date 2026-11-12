@@ -234,6 +234,11 @@ export function LogFilter({
   );
   const [lookbackIdx, setLookbackIdx] = useState(DEFAULT_LOOKBACK_IDX);
 
+  // A search by trace ID with no range is not limited to the default hour
+  // (KOP-216), so the lookback must not claim it is.
+  const wholeTrace =
+    !!value.traceId && value.timestampMin == null && value.timestampMax == null;
+
   // -- Derive filterable options from rows (sticky — accumulates over time) --
   const svcRef = useRef(new Set<string>());
   const sevRef = useRef(new Set<string>());
@@ -395,6 +400,8 @@ export function LogFilter({
   // -- Time mode switch -----------------------------------------------------
   const switchTimeMode = useCallback(
     (mode: TimeMode) => {
+      // Re-clicking the active mode must not wipe the range it shows.
+      if (mode === timeMode) return;
       setTimeMode(mode);
       if (mode === "lookback") {
         setLookbackIdx(DEFAULT_LOOKBACK_IDX);
@@ -406,7 +413,7 @@ export function LogFilter({
         emitImmediate({ timestampMin: undefined, timestampMax: undefined });
       }
     },
-    [emitImmediate]
+    [emitImmediate, timeMode]
   );
 
   // -- Filter summary for collapsed state -----------------------------------
@@ -635,11 +642,12 @@ export function LogFilter({
 
             {timeMode === "lookback" ? (
               <select
-                value={lookbackIdx}
+                value={wholeTrace ? -1 : lookbackIdx}
                 onChange={(e) => handleLookback(Number(e.target.value))}
                 className={`${INPUT_CLS} max-w-xs`}
                 data-testid="filter-lookback"
               >
+                {wholeTrace && <option value={-1}>Whole trace</option>}
                 {LOOKBACK_OPTIONS.map((opt, i) => (
                   <option key={i} value={i}>
                     {opt.label}

@@ -320,8 +320,8 @@ export class DbDatasource implements datasource.TelemetryDatasource {
     data: denormalizedSignals.OtelTracesRow[];
     nextCursor: string | null;
   }> {
-    const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
     try {
+      const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
       const limit = filter.limit ?? 100;
       const sortOrder = filter.sortOrder ?? "DESC";
 
@@ -786,8 +786,8 @@ export class DbDatasource implements datasource.TelemetryDatasource {
     data: denormalizedSignals.OtelLogsRow[];
     nextCursor: string | null;
   }> {
-    const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
     try {
+      const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
       const limit = filter.limit ?? 100;
       const sortOrder = filter.sortOrder ?? "DESC";
 
@@ -1134,8 +1134,8 @@ export class DbDatasource implements datasource.TelemetryDatasource {
     data: dataFilterSchemas.TraceSummaryRow[];
     nextCursor: string | null;
   }> {
-    const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
     try {
+      const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
       const limit = filter.limit ?? 20;
       const sortOrder = filter.sortOrder ?? "DESC";
 

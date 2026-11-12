@@ -551,6 +551,42 @@ describe("default lookback (KOP-216)", () => {
     expectLastHour(filter?.timestampMin, before, nowNs());
   });
 
+  it("restarts the logs default hour from now when a filter changes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const t0 = new Date("2027-01-15T08:00:00Z").getTime();
+      vi.setSystemTime(t0);
+      setURL("?tab=logs");
+
+      render(
+        createElement(ObservabilityPage, {
+          client: mockClient as unknown as KopaiClient,
+        })
+      );
+      await waitFor(() => {
+        expect(mockClient.searchLogsPage).toHaveBeenCalled();
+      });
+
+      // Five hours later the user changes the sort order.
+      const t1 = t0 + 5 * 60 * 60_000;
+      vi.setSystemTime(t1);
+      fireEvent.click(screen.getByTestId("log-filter-toggle"));
+      fireEvent.change(screen.getByTestId("filter-sortOrder"), {
+        target: { value: "ASC" },
+      });
+
+      await waitFor(() => {
+        const filter = mockClient.searchLogsPage.mock.calls.at(-1)?.[0];
+        expect(filter?.sortOrder).toBe("ASC");
+        expect(filter?.timestampMin).toBe(
+          String(BigInt(t1 - 60 * 60_000) * 1_000_000n)
+        );
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not limit a log search by trace ID to the last hour", async () => {
     setURL("?tab=logs&traceId=abc");
 

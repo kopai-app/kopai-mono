@@ -2963,6 +2963,18 @@ describe("default time window (KOP-216)", () => {
     expect(logs.data.map((r) => r.Body)).toEqual(["old-log"]);
   });
 
+  it("reports a timestampMax it cannot read as a query error", async () => {
+    await expect(
+      ds.getTraces({ timestampMax: "not-a-number" })
+    ).rejects.toThrow(SqliteDatasourceQueryError);
+    await expect(ds.getLogs({ timestampMax: "not-a-number" })).rejects.toThrow(
+      SqliteDatasourceQueryError
+    );
+    await expect(
+      ds.getTraceSummaries({ timestampMax: "not-a-number" })
+    ).rejects.toThrow(SqliteDatasourceQueryError);
+  });
+
   it("an explicit range still reaches old data", async () => {
     const result = await ds.getTraceSummaries({ timestampMin: "0" });
     expect(result.data.map((r) => r.traceId).sort()).toEqual([
