@@ -568,6 +568,17 @@ describe("LogFilter", () => {
     expect(select.selectedOptions[0]?.textContent).toBe("Last 1 Hour");
   });
 
+  it("opens in absolute mode, showing the bounds, when the value has a time range", () => {
+    const min = String(
+      BigInt(new Date("2025-01-15T12:00").getTime()) * 1_000_000n
+    );
+    setup({ value: { timestampMin: min } });
+    expand();
+
+    expect(screen.queryByTestId("filter-lookback")).toBeNull();
+    expect(getInput("filter-timestampMin").value).toBe("2025-01-15T12:00");
+  });
+
   // -- Time mode switching --------------------------------------------------
 
   it("switching to absolute mode shows datetime inputs", () => {

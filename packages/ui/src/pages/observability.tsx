@@ -40,6 +40,7 @@ import { useDebouncedValue } from "../components/observability/utils/use-debounc
 
 import { SERVICES_SHORTCUTS } from "../components/observability/ServiceList/shortcuts.js";
 import {
+  CUSTOM_RANGE_LOOKBACK,
   DEFAULT_LOOKBACK,
   DEFAULT_LOOKBACK_MS,
 } from "../components/observability/default-lookback.js";
@@ -435,14 +436,17 @@ function LogsTab() {
   }, [filters, selectedServices, selectedLogId]);
 
   // With no time range the first fetch would scan the workspace's whole
-  // history (KOP-216), so it starts from an hour before the tab opened. Fixed
+  // history (KOP-216), so it starts from an hour before the tab opened. A
+  // lookup by trace ID stays unlimited, like the datasource default. Fixed
   // at mount: a fresh value per render would change the query on every render.
   const [defaultTimestampMin] = useState(() =>
     String(BigInt(Date.now() - DEFAULT_LOOKBACK_MS) * 1_000_000n)
   );
   const liveParams = useMemo(
     () =>
-      filters.timestampMin == null && filters.timestampMax == null
+      filters.timestampMin == null &&
+      filters.timestampMax == null &&
+      !filters.traceId
         ? { ...filters, timestampMin: defaultTimestampMin }
         : filters,
     [filters, defaultTimestampMin]
@@ -587,12 +591,17 @@ function TraceSearchView({
     // The form submits every field, so an absent one means the user cleared it.
     // Falling back to the URL's service here would make "All Services"
     // unselectable — it would just re-apply whatever was already filtered.
+    // "Custom range" keeps the URL's absolute range; a preset replaces it.
+    const keepRange = filters.lookback === CUSTOM_RANGE_LOOKBACK;
+    const current = readURLState();
     pushURLState({
       tab: "services",
       service: filters.service ?? null,
       operation: filters.operation ?? null,
       tags: filters.tags ?? null,
-      lookback: filters.lookback ?? null,
+      lookback: keepRange ? null : (filters.lookback ?? null),
+      tsMin: keepRange ? current.tsMin : null,
+      tsMax: keepRange ? current.tsMax : null,
       minDuration: filters.minDuration ?? null,
       maxDuration: filters.maxDuration ?? null,
       limit: filters.limit,
@@ -623,7 +632,11 @@ function TraceSearchView({
       service: urlState.service ?? "",
       operation: urlState.operation ?? "",
       tags: urlState.tags ?? "",
-      lookback: urlState.lookback ?? DEFAULT_LOOKBACK,
+      lookback:
+        urlState.lookback ??
+        (urlState.tsMin || urlState.tsMax
+          ? CUSTOM_RANGE_LOOKBACK
+          : DEFAULT_LOOKBACK),
       minDuration: urlState.minDuration ?? "",
       maxDuration: urlState.maxDuration ?? "",
       limit: urlState.limit ?? 20,
@@ -633,6 +646,8 @@ function TraceSearchView({
       urlState.operation,
       urlState.tags,
       urlState.lookback,
+      urlState.tsMin,
+      urlState.tsMax,
       urlState.minDuration,
       urlState.maxDuration,
       urlState.limit,

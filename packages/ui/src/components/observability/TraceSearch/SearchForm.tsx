@@ -9,7 +9,10 @@
  */
 
 import { useState } from "react";
-import { DEFAULT_LOOKBACK } from "../default-lookback.js";
+import {
+  CUSTOM_RANGE_LOOKBACK,
+  DEFAULT_LOOKBACK,
+} from "../default-lookback.js";
 
 export interface SearchFormValues {
   service: string;
@@ -170,6 +173,9 @@ export function SearchForm({
           onChange={(e) => setLookback(e.target.value)}
           className={inputClass}
         >
+          {initialValues?.lookback === CUSTOM_RANGE_LOOKBACK && (
+            <option value={CUSTOM_RANGE_LOOKBACK}>Custom range</option>
+          )}
           {LOOKBACK_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}

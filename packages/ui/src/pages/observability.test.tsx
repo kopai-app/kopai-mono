@@ -551,6 +551,99 @@ describe("default lookback (KOP-216)", () => {
     expectLastHour(filter?.timestampMin, before, nowNs());
   });
 
+  it("does not limit a log search by trace ID to the last hour", async () => {
+    setURL("?tab=logs&traceId=abc");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockClient.searchLogsPage).toHaveBeenCalled();
+    });
+    const filter = mockClient.searchLogsPage.mock.calls[0]?.[0];
+    expect(filter?.traceId).toBe("abc");
+    expect(filter?.timestampMin).toBeUndefined();
+  });
+
+  it("shows an absolute URL range as Custom range and keeps it when other filters are submitted", async () => {
+    setURL("?tab=services&tsMin=1700000000000000000&tsMax=1700000600000000000");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    const lookback = (await screen.findByRole("combobox", {
+      name: /lookback/i,
+    })) as HTMLSelectElement;
+    expect(lookback.selectedOptions[0]?.textContent).toBe("Custom range");
+
+    fireEvent.change(screen.getByRole("textbox", { name: /tags/i }), {
+      target: { value: "http.route=/cart" },
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /find traces/i })
+    );
+
+    await waitFor(() => {
+      expect(window.location.search).toContain("tags=");
+    });
+    expect(window.location.search).toContain("tsMin=1700000000000000000");
+    expect(window.location.search).toContain("tsMax=1700000600000000000");
+    expect(window.location.search).not.toContain("lookback=");
+    await waitFor(() => {
+      const filter = mockClient.searchTraceSummariesPage.mock.calls.at(-1)?.[0];
+      expect(filter).toMatchObject({
+        timestampMin: "1700000000000000000",
+        timestampMax: "1700000600000000000",
+        spanAttributes: { "http.route": "/cart" },
+      });
+    });
+  });
+
+  it("replaces an absolute URL range when a lookback is picked", async () => {
+    setURL("?tab=services&tsMin=1700000000000000000");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    const lookback = (await screen.findByRole("combobox", {
+      name: /lookback/i,
+    })) as HTMLSelectElement;
+    fireEvent.change(lookback, { target: { value: "2h" } });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /find traces/i })
+    );
+
+    await waitFor(() => {
+      expect(window.location.search).toContain("lookback=2h");
+    });
+    expect(window.location.search).not.toContain("tsMin=");
+  });
+
+  it("offers no Custom range when the URL has no absolute range", async () => {
+    setURL("?tab=services");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    const lookback = (await screen.findByRole("combobox", {
+      name: /lookback/i,
+    })) as HTMLSelectElement;
+    const labels = Array.from(lookback.options).map((o) => o.textContent);
+    expect(labels).not.toContain("Custom range");
+  });
+
   it("keeps a log start time from the URL", async () => {
     setURL("?tab=logs&tsMin=1700000000000000000");
 

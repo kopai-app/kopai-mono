@@ -226,7 +226,12 @@ export function LogFilter({
   onSelectedServicesChange,
 }: LogFilterProps) {
   const [open, setOpen] = useState(false);
-  const [timeMode, setTimeMode] = useState<TimeMode>("lookback");
+  // A range from the URL is shown as it is; the lookback list cannot express it.
+  const [timeMode, setTimeMode] = useState<TimeMode>(() =>
+    value.timestampMin != null || value.timestampMax != null
+      ? "absolute"
+      : "lookback"
+  );
   const [lookbackIdx, setLookbackIdx] = useState(DEFAULT_LOOKBACK_IDX);
 
   // -- Derive filterable options from rows (sticky — accumulates over time) --

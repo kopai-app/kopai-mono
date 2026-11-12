@@ -371,7 +371,7 @@ const DEFAULT_TIME_WINDOW_NS = BigInt(DEFAULT_TIME_WINDOW_MS) * 1_000_000n;
  *
  * - No `timestampMin` and no `timestampMax`: the last 24 hours.
  * - Only `timestampMax`: the 24 hours before it.
- * - `timestampMin` given, or a `traceId` lookup: unchanged.
+ * - `timestampMin` given, or a lookup by a non-empty `traceId`: unchanged.
  *
  * Every datasource applies this to span search, log search and trace
  * summaries, so a request means the same on every backend.
@@ -379,7 +379,8 @@ const DEFAULT_TIME_WINDOW_NS = BigInt(DEFAULT_TIME_WINDOW_MS) * 1_000_000n;
 export function withDefaultTimeWindow<
   T extends { timestampMin?: string; timestampMax?: string; traceId?: string },
 >(filter: T, nowMs: number = Date.now()): T {
-  if (filter.timestampMin != null || filter.traceId != null) return filter;
+  // An empty traceId adds no predicate in any datasource, so it is no lookup.
+  if (filter.timestampMin != null || filter.traceId) return filter;
   const end =
     filter.timestampMax != null
       ? BigInt(filter.timestampMax)

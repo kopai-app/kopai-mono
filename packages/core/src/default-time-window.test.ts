@@ -59,6 +59,11 @@ describe("withDefaultTimeWindow", () => {
     expect(withDefaultTimeWindow(filter, NOW_MS)).toBe(filter);
   });
 
+  it("treats an empty traceId as no lookup and still bounds the search", () => {
+    const result = window({ traceId: "" }, NOW_MS);
+    expect(result.timestampMin).toBe(String(NOW_NS - DAY_NS));
+  });
+
   it("does not mutate the input", () => {
     const filter: Filter = {};
     window(filter, NOW_MS);
