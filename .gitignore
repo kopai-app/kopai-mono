@@ -40,3 +40,6 @@ coverage
 
 # Publish test
 .tarballs/
+
+# claude plugin eval output
+plugins/*/evals/results/

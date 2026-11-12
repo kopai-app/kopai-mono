@@ -111,14 +111,27 @@ getting the plugin and the known limits, is
 
 ## Use it in Claude Code
 
-```bash
-claude plugin marketplace add kopai-app/kopai-mono
-claude plugin install kopai-oncall@kopai
-```
+Install `kopai-oncall` from the Claude Directory: run `/plugin directory`
+in Claude Code, or add it on claude.ai under **Customize › Plugins**,
+which syncs it to Claude Code.
 
 Ask Claude Code to triage an alert, or run it in your on-call repo and
-ask it to build your on-call playbooks. Claude Code connects to hosted Kopai through the plugin's MCP server and
-asks you to sign in the first time; there you act as yourself.
+ask it to build your on-call playbooks. Claude Code connects to hosted
+Kopai through the plugin's MCP server and asks you to sign in the first
+time; there you act as yourself.
+
+To run a checkout instead, for development or before a release reaches
+the Directory, load the plugin folder for one session:
+
+```bash
+git clone https://github.com/kopai-app/kopai-mono.git
+claude --plugin-dir kopai-mono/plugins/kopai-oncall
+```
+
+`main` can be ahead of production, so a checkout may call Kopai tools
+that aren't deployed yet. Use the Directory version for real on-call
+work, and give the `version` from `.claude-plugin/plugin.json` when you
+report a bug.
 
 ## Data and privacy
 

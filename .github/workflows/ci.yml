@@ -32,3 +32,18 @@ jobs:
 
       - name: Build, lint, type-check, test
         run: pnpm turbo build lint type-check test
+
+  plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Check the plugins' copies of skills/
+        run: node scripts/sync-plugin-skills.mjs --check
+
+      - name: Validate the Claude plugins
+        run: npx --yes @anthropic-ai/claude-code@2.1.322 plugin validate --strict plugins/kopai-oncall
