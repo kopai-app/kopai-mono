@@ -1,5 +1,15 @@
 # @kopai/cli
 
+## 0.10.5
+
+### Patch Changes
+
+- 162ed85: `traces search` and `logs search` say in `--timestamp-min` help that with no
+  time range the search covers the last 24 hours.
+- Updated dependencies [162ed85]
+  - @kopai/core@0.14.0
+  - @kopai/sdk@0.11.1
+
 ## 0.10.4
 
 ### Patch Changes

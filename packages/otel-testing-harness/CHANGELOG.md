@@ -1,5 +1,18 @@
 # @kopai/otel-testing-harness
 
+## 0.1.9
+
+### Patch Changes
+
+- 162ed85: `getTraces` and `getLogs` keep returning stored data of any age when the
+  filter has no `timestampMin`, so fixtures with fixed timestamps still match.
+  The underlying datasource now limits such searches to the last 24 hours;
+  `harness.datasource` follows that rule.
+- Updated dependencies [162ed85]
+  - @kopai/core@0.14.0
+  - @kopai/sqlite-datasource@0.15.0
+  - @kopai/collector@0.7.6
+
 ## 0.1.8
 
 ### Patch Changes

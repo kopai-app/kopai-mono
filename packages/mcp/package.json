@@ -1,6 +1,6 @@
 {
   "name": "@kopai/mcp",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "license": "Apache-2.0",
   "author": "Vladimir Adamic",
   "repository": {
@@ -34,7 +34,7 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@kopai/core": "^0.13.0",
+    "@kopai/core": "^0.14.0",
     "fastify": "^5.12.7",
     "zod": "^4.0.0"
   },
