@@ -26,6 +26,10 @@ import { getDiscoverMVSchema } from "./discover-mv-schema.js";
 import { DISCOVER_NAMES_TABLE, DISCOVER_ATTRS_TABLE } from "./query-metrics.js";
 import { createOtelTables } from "./test/otel-ddl.js";
 
+// The fixtures carry fixed, past timestamps, and a search with no time range
+// covers only the last 24 hours (KOP-216), so these tests ask for all time.
+const ALL_TIME = { timestampMin: "0" } as const;
+
 /** Returns the first element of an array, failing the test if the array is empty. */
 function firstRow<T>(data: T[]): T {
   expect(data.length).toBeGreaterThan(0);
@@ -898,9 +902,47 @@ async function seedMultiAttrMetric(client: ClickHouseClient) {
 }
 
 describe("ClickHouseReadDatasource", () => {
+  // A search with no time range covers only the last 24 hours (KOP-216). The
+  // only fixtures that recent are the two "trace-recent-svc" spans.
+  describe("default time window (KOP-216)", () => {
+    it("span search with no range returns only the last 24 hours", async () => {
+      const result = await ds.getTraces({ requestContext: requestContext() });
+      expect(result.data.map((r) => r.SpanId).sort()).toEqual([
+        "span-recent-svc-001",
+        "span-recent-svc-002",
+      ]);
+    });
+
+    it("trace summaries with no range return only the last 24 hours", async () => {
+      const result = await ds.getTraceSummaries({
+        requestContext: requestContext(),
+      });
+      expect(result.data.map((r) => r.traceId).sort()).toEqual([
+        "trace-recent-svc-001",
+        "trace-recent-svc-002",
+      ]);
+    });
+
+    it("log search with no range skips the 2024 fixtures", async () => {
+      const result = await ds.getLogs({ requestContext: requestContext() });
+      expect(result.data).toEqual([]);
+    });
+
+    it("a lookup by traceId still finds a 2024 trace", async () => {
+      const result = await ds.getTraces({
+        traceId: "trace-001",
+        requestContext: requestContext(),
+      });
+      expect(result.data.length).toBeGreaterThan(0);
+    });
+  });
+
   describe("getTraces", () => {
     it("returns all traces with no filters", async () => {
-      const result = await ds.getTraces({ requestContext: requestContext() });
+      const result = await ds.getTraces({
+        ...ALL_TIME,
+        requestContext: requestContext(),
+      });
 
       // 5 original + 2 recent-timestamp spans seeded for getServices/getOperations
       expect(result.data.length).toBe(7);
@@ -909,6 +951,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("filters by traceId", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         traceId: "trace-001",
         requestContext: requestContext(),
       });
@@ -921,6 +964,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("filters by serviceName", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         serviceName: "order-service",
         requestContext: requestContext(),
       });
@@ -934,6 +978,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("returns timestamps as nanosecond strings", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         traceId: "trace-001",
         spanId: "span-001",
         requestContext: requestContext(),
@@ -946,6 +991,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("coerces attribute values", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         spanId: "span-001",
         requestContext: requestContext(),
       });
@@ -958,6 +1004,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("filters by spanAttributes", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         spanAttributes: { "http.method": "POST" },
         requestContext: requestContext(),
       });
@@ -968,6 +1015,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("returns Duration as string", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         spanId: "span-001",
         requestContext: requestContext(),
       });
@@ -977,6 +1025,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("maps Events correctly", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         spanId: "span-002",
         requestContext: requestContext(),
       });
@@ -988,6 +1037,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("maps Links correctly", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         spanId: "span-003",
         requestContext: requestContext(),
       });
@@ -999,6 +1049,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("supports cursor pagination", async () => {
       const page1 = await ds.getTraces({
+        ...ALL_TIME,
         traceId: "trace-001",
         limit: 1,
         sortOrder: "DESC",
@@ -1009,6 +1060,7 @@ describe("ClickHouseReadDatasource", () => {
       const cursor = defined(page1.nextCursor, "nextCursor");
 
       const page2 = await ds.getTraces({
+        ...ALL_TIME,
         traceId: "trace-001",
         limit: 1,
         sortOrder: "DESC",
@@ -1022,6 +1074,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("supports ASC sort order", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         sortOrder: "ASC",
         requestContext: requestContext(),
       });
@@ -1031,6 +1084,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("returns empty result for no matches", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         traceId: "nonexistent",
         requestContext: requestContext(),
       });
@@ -1040,34 +1094,39 @@ describe("ClickHouseReadDatasource", () => {
     });
 
     it("throws without requestContext", async () => {
-      await expect(ds.getTraces({})).rejects.toThrow(
+      await expect(ds.getTraces({ ...ALL_TIME })).rejects.toThrow(
         "requestContext must provide { database, username, password }"
       );
     });
 
     it("throws for partial requestContext (missing password)", async () => {
       await expect(
-        ds.getTraces({ requestContext: { database: "db", username: "user" } })
+        ds.getTraces({
+          ...ALL_TIME,
+          requestContext: { database: "db", username: "user" },
+        })
       ).rejects.toThrow("requestContext must provide");
     });
 
     it("throws for non-string fields in requestContext", async () => {
       await expect(
         ds.getTraces({
+          ...ALL_TIME,
           requestContext: { database: "db", username: "user", password: 123 },
         })
       ).rejects.toThrow("requestContext must provide");
     });
 
     it("throws for null requestContext", async () => {
-      await expect(ds.getTraces({ requestContext: null })).rejects.toThrow(
-        "requestContext must provide"
-      );
+      await expect(
+        ds.getTraces({ ...ALL_TIME, requestContext: null })
+      ).rejects.toThrow("requestContext must provide");
     });
 
     it("throws on malformed cursor", async () => {
       await expect(
         ds.getTraces({
+          ...ALL_TIME,
           cursor: "malformed-no-colon",
           requestContext: requestContext(),
         })
@@ -1076,6 +1135,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("filters by spanAttributes AND resourceAttributes combined", async () => {
       const result = await ds.getTraces({
+        ...ALL_TIME,
         spanAttributes: { "http.method": "GET" },
         resourceAttributes: { "service.version": "1.0" },
         requestContext: requestContext(),
@@ -1088,6 +1148,7 @@ describe("ClickHouseReadDatasource", () => {
     it("accepts attribute keys with colons (valid OTel semconv)", async () => {
       await expect(
         ds.getTraces({
+          ...ALL_TIME,
           spanAttributes: { "k8s.pod:name": "foo" },
           requestContext: requestContext(),
         })
@@ -1145,6 +1206,7 @@ describe("ClickHouseReadDatasource", () => {
   describe("getTraceSummaries", () => {
     it("returns all trace summaries (no filter)", async () => {
       const result = await ds.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "DESC",
         requestContext: requestContext(),
@@ -1156,6 +1218,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("aggregates trace-001 correctly", async () => {
       const result = await ds.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "DESC",
         requestContext: requestContext(),
@@ -1174,6 +1237,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("aggregates trace-002 with error", async () => {
       const result = await ds.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "DESC",
         requestContext: requestContext(),
@@ -1189,6 +1253,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("filters by serviceName and preserves full trace", async () => {
       const result = await ds.getTraceSummaries({
+        ...ALL_TIME,
         serviceName: "order-service",
         limit: 20,
         sortOrder: "DESC",
@@ -1213,6 +1278,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("sorts DESC by default", async () => {
       const result = await ds.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "DESC",
         requestContext: requestContext(),
@@ -1226,6 +1292,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("sorts ASC", async () => {
       const result = await ds.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "ASC",
         requestContext: requestContext(),
@@ -1236,6 +1303,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("supports cursor pagination", async () => {
       const page1 = await ds.getTraceSummaries({
+        ...ALL_TIME,
         limit: 1,
         sortOrder: "DESC",
         requestContext: requestContext(),
@@ -1245,6 +1313,7 @@ describe("ClickHouseReadDatasource", () => {
       const cursor = defined(page1.nextCursor, "nextCursor");
 
       const page2 = await ds.getTraceSummaries({
+        ...ALL_TIME,
         limit: 1,
         sortOrder: "DESC",
         cursor,
@@ -1258,6 +1327,7 @@ describe("ClickHouseReadDatasource", () => {
     it("throws on malformed cursor", async () => {
       await expect(
         ds.getTraceSummaries({
+          ...ALL_TIME,
           limit: 20,
           sortOrder: "DESC",
           cursor: "malformed-no-colon",
@@ -1269,13 +1339,17 @@ describe("ClickHouseReadDatasource", () => {
 
   describe("getLogs", () => {
     it("returns all logs with no filters", async () => {
-      const result = await ds.getLogs({ requestContext: requestContext() });
+      const result = await ds.getLogs({
+        ...ALL_TIME,
+        requestContext: requestContext(),
+      });
 
       expect(result.data.length).toBe(6);
     });
 
     it("filters by serviceName", async () => {
       const result = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "order-service",
         requestContext: requestContext(),
       });
@@ -1286,6 +1360,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("filters by bodyContains (case-insensitive)", async () => {
       const result = await ds.getLogs({
+        ...ALL_TIME,
         bodyContains: "database",
         requestContext: requestContext(),
       });
@@ -1296,6 +1371,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("filters by severity range", async () => {
       const result = await ds.getLogs({
+        ...ALL_TIME,
         severityNumberMin: 13,
         requestContext: requestContext(),
       });
@@ -1308,6 +1384,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("coerces log attributes", async () => {
       const result = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "user-service",
         severityText: "INFO",
         requestContext: requestContext(),
@@ -1320,6 +1397,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("returns EventName when present", async () => {
       const result = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "user-service",
         severityText: "ERROR",
         requestContext: requestContext(),
@@ -1330,6 +1408,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("returns undefined EventName for logs without it", async () => {
       const result = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "order-service",
         requestContext: requestContext(),
       });
@@ -1340,6 +1419,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("filters by eventName", async () => {
       const result = await ds.getLogs({
+        ...ALL_TIME,
         eventName: "db.connection.error",
         requestContext: requestContext(),
       });
@@ -1350,6 +1430,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("supports cursor pagination", async () => {
       const page1 = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "user-service",
         limit: 1,
         sortOrder: "DESC",
@@ -1360,6 +1441,7 @@ describe("ClickHouseReadDatasource", () => {
       const cursor = defined(page1.nextCursor, "nextCursor");
 
       const page2 = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "user-service",
         limit: 1,
         sortOrder: "DESC",
@@ -1373,6 +1455,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("supports ASC sort order", async () => {
       const result = await ds.getLogs({
+        ...ALL_TIME,
         sortOrder: "ASC",
         requestContext: requestContext(),
       });
@@ -1382,6 +1465,7 @@ describe("ClickHouseReadDatasource", () => {
 
     it("cursor pagination does not skip rows with identical timestamps", async () => {
       const page1 = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "dup-service",
         limit: 1,
         sortOrder: "ASC",
@@ -1391,6 +1475,7 @@ describe("ClickHouseReadDatasource", () => {
       expect(page1.nextCursor).not.toBeNull();
 
       const page2 = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "dup-service",
         limit: 1,
         sortOrder: "ASC",
@@ -1401,6 +1486,7 @@ describe("ClickHouseReadDatasource", () => {
       expect(page2.nextCursor).not.toBeNull();
 
       const page3 = await ds.getLogs({
+        ...ALL_TIME,
         serviceName: "dup-service",
         limit: 1,
         sortOrder: "ASC",
@@ -1419,6 +1505,7 @@ describe("ClickHouseReadDatasource", () => {
     it("escapes ILIKE special characters in bodyContains", async () => {
       // "%" should not match everything — none of our seed log bodies contain literal "%"
       const result = await ds.getLogs({
+        ...ALL_TIME,
         bodyContains: "%",
         requestContext: requestContext(),
       });
@@ -1429,6 +1516,7 @@ describe("ClickHouseReadDatasource", () => {
     it("accepts attribute keys with colons (valid OTel semconv)", async () => {
       await expect(
         ds.getLogs({
+          ...ALL_TIME,
           logAttributes: { "k8s.pod:name": "foo" },
           requestContext: requestContext(),
         })
@@ -1927,9 +2015,11 @@ GROUP BY MetricName, MetricType, source, attr_key`,
   describe("multi-tenant isolation", () => {
     it("routes traces to the correct database", async () => {
       const tenantA = await ds.getTraces({
+        ...ALL_TIME,
         requestContext: requestContext(),
       });
       const tenantB = await ds.getTraces({
+        ...ALL_TIME,
         requestContext: tenantBRequestContext(),
       });
 
@@ -1947,9 +2037,11 @@ GROUP BY MetricName, MetricType, source, attr_key`,
 
     it("routes logs to the correct database", async () => {
       const tenantA = await ds.getLogs({
+        ...ALL_TIME,
         requestContext: requestContext(),
       });
       const tenantB = await ds.getLogs({
+        ...ALL_TIME,
         requestContext: tenantBRequestContext(),
       });
 
@@ -2018,6 +2110,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
     it("logs success for getTraces", async () => {
       const spy = createSpyLogger();
       await ds.getTraces({
+        ...ALL_TIME,
         requestContext: { ...requestContext(), logger: spy },
       });
 
@@ -2034,6 +2127,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
     it("logs success for getLogs", async () => {
       const spy = createSpyLogger();
       await ds.getLogs({
+        ...ALL_TIME,
         requestContext: { ...requestContext(), logger: spy },
       });
 
@@ -2074,7 +2168,9 @@ GROUP BY MetricName, MetricType, source, attr_key`,
         logger: spy,
       };
 
-      await expect(ds.getTraces({ requestContext: badCtx })).rejects.toThrow();
+      await expect(
+        ds.getTraces({ ...ALL_TIME, requestContext: badCtx })
+      ).rejects.toThrow();
 
       expect(spy.error).toHaveBeenCalledOnce();
       const logObj = spy.error.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -2120,7 +2216,7 @@ GROUP BY MetricName, MetricType, source, attr_key`,
     };
 
     it.each([
-      ["getLogs", () => localDs.getLogs({ requestContext: ctx })],
+      ["getLogs", () => localDs.getLogs({ ...ALL_TIME, requestContext: ctx })],
       [
         "getMetrics",
         () => localDs.getMetrics({ metricType: "Gauge", requestContext: ctx }),
@@ -2140,9 +2236,12 @@ GROUP BY MetricName, MetricType, source, attr_key`,
       ],
       [
         "getTraceSummaries",
-        () => localDs.getTraceSummaries({ requestContext: ctx }),
+        () => localDs.getTraceSummaries({ ...ALL_TIME, requestContext: ctx }),
       ],
-      ["getTraces", () => localDs.getTraces({ requestContext: ctx })],
+      [
+        "getTraces",
+        () => localDs.getTraces({ ...ALL_TIME, requestContext: ctx }),
+      ],
     ])("%s forwards clickhouseSettings", async (_, call) => {
       await call().catch(() => {});
       expect(querySpy).toHaveBeenCalledWith(
@@ -2162,7 +2261,9 @@ GROUP BY MetricName, MetricType, source, attr_key`,
 
     it("omits clickhouse_settings when absent", async () => {
       const bare = { database: "db", username: "u", password: "p" };
-      await localDs.getLogs({ requestContext: bare }).catch(() => {});
+      await localDs
+        .getLogs({ ...ALL_TIME, requestContext: bare })
+        .catch(() => {});
       await localDs.discoverMetrics({ requestContext: bare }).catch(() => {});
       for (const [args] of querySpy.mock.calls) {
         expect(args).not.toMatchObject({

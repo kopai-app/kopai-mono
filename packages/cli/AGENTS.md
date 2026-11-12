@@ -102,7 +102,7 @@ Flags marked `(repeatable)` can be specified multiple times; all conditions must
 
 - `--trace-id`, `--span-id`, `--parent-span-id`
 - `--service` / `-s`, `--span-name`, `--span-kind`, `--status-code`, `--scope`
-- `--timestamp-min`, `--timestamp-max` (nanoseconds)
+- `--timestamp-min`, `--timestamp-max` (nanoseconds). Without either, the search covers the last 24 hours (a `--trace-id` lookup is not limited).
 - `--duration-min`, `--duration-max` (nanoseconds)
 - `--span-attr key=value` (repeatable)
 - `--resource-attr key=value` (repeatable)
@@ -114,7 +114,7 @@ Flags marked `(repeatable)` can be specified multiple times; all conditions must
 - `--service` / `-s`, `--scope`
 - `--severity-text`, `--severity-min`, `--severity-max`
 - `--body` / `-b` (substring match)
-- `--timestamp-min`, `--timestamp-max` (nanoseconds)
+- `--timestamp-min`, `--timestamp-max` (nanoseconds). Without either, the search covers the last 24 hours (a `--trace-id` lookup is not limited).
 - `--log-attr key=value` (repeatable)
 - `--resource-attr key=value` (repeatable)
 - `--scope-attr key=value` (repeatable)

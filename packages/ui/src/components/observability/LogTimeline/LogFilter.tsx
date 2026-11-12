@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { dataFilterSchemas, denormalizedSignals } from "@kopai/core";
 import { useDebouncedValue } from "../utils/use-debounced-value.js";
+import { DEFAULT_LOOKBACK_MS } from "../default-lookback.js";
 
 type LogsDataFilter = dataFilterSchemas.LogsDataFilter;
 type OtelLogsRow = denormalizedSignals.OtelLogsRow;
@@ -25,6 +26,11 @@ const LOOKBACK_OPTIONS = [
   { label: "Last 12 Hours", ms: 12 * 60 * 60_000 },
   { label: "Last 24 Hours", ms: 24 * 60 * 60_000 },
 ] as const;
+
+/** No "All time": an unbounded search times out on a large workspace (KOP-216). */
+const DEFAULT_LOOKBACK_IDX = LOOKBACK_OPTIONS.findIndex(
+  (opt) => opt.ms === DEFAULT_LOOKBACK_MS
+);
 
 const DEBOUNCE_MS = 500;
 
@@ -221,7 +227,7 @@ export function LogFilter({
 }: LogFilterProps) {
   const [open, setOpen] = useState(false);
   const [timeMode, setTimeMode] = useState<TimeMode>("lookback");
-  const [lookbackIdx, setLookbackIdx] = useState(-1);
+  const [lookbackIdx, setLookbackIdx] = useState(DEFAULT_LOOKBACK_IDX);
 
   // -- Derive filterable options from rows (sticky — accumulates over time) --
   const svcRef = useRef(new Set<string>());
@@ -347,16 +353,11 @@ export function LogFilter({
   // -- Lookback handler -----------------------------------------------------
   const handleLookback = useCallback(
     (idx: number) => {
+      const opt = LOOKBACK_OPTIONS[idx];
+      if (!opt) return;
       setLookbackIdx(idx);
-      if (idx < 0) {
-        emitImmediate({ timestampMin: undefined, timestampMax: undefined });
-      } else {
-        const opt = LOOKBACK_OPTIONS[idx];
-        if (opt) {
-          const tsMin = msToNs(Date.now() - opt.ms);
-          emitImmediate({ timestampMin: tsMin, timestampMax: undefined });
-        }
-      }
+      const tsMin = msToNs(Date.now() - opt.ms);
+      emitImmediate({ timestampMin: tsMin, timestampMax: undefined });
     },
     [emitImmediate]
   );
@@ -390,8 +391,15 @@ export function LogFilter({
   const switchTimeMode = useCallback(
     (mode: TimeMode) => {
       setTimeMode(mode);
-      setLookbackIdx(-1);
-      emitImmediate({ timestampMin: undefined, timestampMax: undefined });
+      if (mode === "lookback") {
+        setLookbackIdx(DEFAULT_LOOKBACK_IDX);
+        emitImmediate({
+          timestampMin: msToNs(Date.now() - DEFAULT_LOOKBACK_MS),
+          timestampMax: undefined,
+        });
+      } else {
+        emitImmediate({ timestampMin: undefined, timestampMax: undefined });
+      }
     },
     [emitImmediate]
   );
@@ -627,7 +635,6 @@ export function LogFilter({
                 className={`${INPUT_CLS} max-w-xs`}
                 data-testid="filter-lookback"
               >
-                <option value={-1}>All time</option>
                 {LOOKBACK_OPTIONS.map((opt, i) => (
                   <option key={i} value={i}>
                     {opt.label}

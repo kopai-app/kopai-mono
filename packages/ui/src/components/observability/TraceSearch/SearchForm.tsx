@@ -9,6 +9,7 @@
  */
 
 import { useState } from "react";
+import { DEFAULT_LOOKBACK } from "../default-lookback.js";
 
 export interface SearchFormValues {
   service: string;
@@ -75,7 +76,9 @@ export function SearchForm({
   const [service, setService] = useState(initialValues?.service ?? "");
   const [operation, setOperation] = useState(initialValues?.operation ?? "");
   const [tags, setTags] = useState(initialValues?.tags ?? "");
-  const [lookback, setLookback] = useState(initialValues?.lookback ?? "");
+  const [lookback, setLookback] = useState(
+    initialValues?.lookback || DEFAULT_LOOKBACK
+  );
   const [minDuration, setMinDuration] = useState(
     initialValues?.minDuration ?? ""
   );
@@ -167,7 +170,6 @@ export function SearchForm({
           onChange={(e) => setLookback(e.target.value)}
           className={inputClass}
         >
-          <option value="">All time</option>
           {LOOKBACK_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}

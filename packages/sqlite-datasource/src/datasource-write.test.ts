@@ -4,6 +4,10 @@ import { createOptimizedDatasource } from "./optimized-datasource.js";
 import { otlp, type datasource } from "@kopai/core";
 import { initializeDatabase } from "./initialize-database.js";
 
+// The fixtures carry fixed, past timestamps, and a search with no time range
+// covers only the last 24 hours (KOP-216), so these tests ask for all time.
+const ALL_TIME = { timestampMin: "0" } as const;
+
 describe("OptimizedDatasource", () => {
   describe("writeMetrics", () => {
     let testConnection: DatabaseSync;
@@ -893,7 +897,7 @@ describe("OptimizedDatasource", () => {
         ScopeSchemaUrl: "",
       });
 
-      const readResult = await ds.getLogs({ limit: 10 });
+      const readResult = await ds.getLogs({ ...ALL_TIME, limit: 10 });
       expect(readResult.data).toHaveLength(1);
       const log = readResult.data[0];
       expect(log).toMatchObject({

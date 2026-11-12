@@ -175,7 +175,9 @@ describe("/mcp on the app", () => {
         host: "attacker.example:8000",
         "content-type": "application/json",
       },
-      payload: {},
+      // The fixture span is from 2023; with no range the search covers only
+      // the last 24 hours (KOP-216).
+      payload: { timestampMin: "0" },
     });
     expect(res.statusCode).toBe(200);
     expect((res.json() as { data: unknown[] }).data).toHaveLength(1);

@@ -8,6 +8,10 @@ import { otlp, denormalizedSignals, type datasource } from "@kopai/core";
 import { initializeDatabase } from "./initialize-database.js";
 import { SqliteDatasourceQueryError } from "./sqlite-datasource-error.js";
 
+// The fixtures carry fixed, past timestamps, and a search with no time range
+// covers only the last 24 hours (KOP-216), so these tests ask for all time.
+const ALL_TIME = { timestampMin: "0" } as const;
+
 function assertDefined<T>(
   value: T | undefined | null,
   msg = "Expected defined"
@@ -47,7 +51,7 @@ describe("OptimizedDatasource", () => {
         endTimeNanos: "2001000000000000",
       });
 
-      const result = await readDs.getTraces({});
+      const result = await readDs.getTraces({ ...ALL_TIME });
 
       expect(result.data).toHaveLength(2);
       const row0 = result.data[0];
@@ -73,7 +77,10 @@ describe("OptimizedDatasource", () => {
         endTimeNanos: "2001000000000000",
       });
 
-      const result = await readDs.getTraces({ traceId: "target-trace" });
+      const result = await readDs.getTraces({
+        ...ALL_TIME,
+        traceId: "target-trace",
+      });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
@@ -97,7 +104,10 @@ describe("OptimizedDatasource", () => {
         endTimeNanos: "2001000000000000",
       });
 
-      const result = await readDs.getTraces({ serviceName: "target-service" });
+      const result = await readDs.getTraces({
+        ...ALL_TIME,
+        serviceName: "target-service",
+      });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
@@ -127,13 +137,17 @@ describe("OptimizedDatasource", () => {
         endTimeNanos: "2001000000000000",
       });
 
-      const resultBySpanName = await readDs.getTraces({ spanName: "GET /api" });
+      const resultBySpanName = await readDs.getTraces({
+        ...ALL_TIME,
+        spanName: "GET /api",
+      });
       expect(resultBySpanName.data).toHaveLength(1);
       const spanNameRow = resultBySpanName.data[0];
       assertDefined(spanNameRow);
       expect(spanNameRow.SpanName).toBe("GET /api");
 
       const resultBySpanKind = await readDs.getTraces({
+        ...ALL_TIME,
         spanKind: "Server",
       });
       expect(resultBySpanKind.data).toHaveLength(1);
@@ -142,6 +156,7 @@ describe("OptimizedDatasource", () => {
       expect(spanKindRow.SpanKind).toBe("Server");
 
       const resultByStatusCode = await readDs.getTraces({
+        ...ALL_TIME,
         statusCode: "Ok",
       });
       expect(resultByStatusCode.data).toHaveLength(1);
@@ -150,6 +165,7 @@ describe("OptimizedDatasource", () => {
       expect(statusCodeRow.StatusCode).toBe("Ok");
 
       const resultByScopeName = await readDs.getTraces({
+        ...ALL_TIME,
         scopeName: "http-scope",
       });
       expect(resultByScopeName.data).toHaveLength(1);
@@ -183,6 +199,7 @@ describe("OptimizedDatasource", () => {
 
       // Filter: >= 1500ms and <= 2500ms
       const result = await readDs.getTraces({
+        ...ALL_TIME,
         timestampMin: "1500000000000000", // 1500ms in nanos
         timestampMax: "2500000000000000", // 2500ms in nanos
       });
@@ -218,6 +235,7 @@ describe("OptimizedDatasource", () => {
 
       // Filter: >= 200ms and <= 600ms (in nanos)
       const result = await readDs.getTraces({
+        ...ALL_TIME,
         durationMin: "200000000", // 200ms in nanos
         durationMax: "600000000", // 600ms in nanos
       });
@@ -245,6 +263,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraces({
+        ...ALL_TIME,
         spanAttributes: { "http.method": "GET" },
       });
 
@@ -271,6 +290,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraces({
+        ...ALL_TIME,
         resourceAttributes: { env: "prod" },
       });
 
@@ -290,7 +310,7 @@ describe("OptimizedDatasource", () => {
         });
       }
 
-      const result = await readDs.getTraces({ limit: 3 });
+      const result = await readDs.getTraces({ ...ALL_TIME, limit: 3 });
 
       expect(result.data).toHaveLength(3);
       expect(result.nextCursor).not.toBeNull();
@@ -310,7 +330,7 @@ describe("OptimizedDatasource", () => {
         endTimeNanos: "1001000000000000",
       });
 
-      const result = await readDs.getTraces({ sortOrder: "ASC" });
+      const result = await readDs.getTraces({ ...ALL_TIME, sortOrder: "ASC" });
 
       const row0 = result.data[0];
       assertDefined(row0);
@@ -334,7 +354,7 @@ describe("OptimizedDatasource", () => {
         endTimeNanos: "2001000000000000",
       });
 
-      const result = await readDs.getTraces({ sortOrder: "DESC" });
+      const result = await readDs.getTraces({ ...ALL_TIME, sortOrder: "DESC" });
 
       const row0 = result.data[0];
       assertDefined(row0);
@@ -355,7 +375,11 @@ describe("OptimizedDatasource", () => {
       }
 
       // First page (DESC order)
-      const page1 = await readDs.getTraces({ limit: 2, sortOrder: "DESC" });
+      const page1 = await readDs.getTraces({
+        ...ALL_TIME,
+        limit: 2,
+        sortOrder: "DESC",
+      });
       expect(page1.data).toHaveLength(2);
       const p1r0 = page1.data[0];
       assertDefined(p1r0);
@@ -368,6 +392,7 @@ describe("OptimizedDatasource", () => {
       // Second page
       assertDefined(page1.nextCursor);
       const page2 = await readDs.getTraces({
+        ...ALL_TIME,
         limit: 2,
         sortOrder: "DESC",
         cursor: page1.nextCursor,
@@ -406,7 +431,11 @@ describe("OptimizedDatasource", () => {
       const seen = new Set<string>();
 
       // Page 1
-      const page1 = await readDs.getTraces({ limit: 1, sortOrder: "DESC" });
+      const page1 = await readDs.getTraces({
+        ...ALL_TIME,
+        limit: 1,
+        sortOrder: "DESC",
+      });
       expect(page1.data).toHaveLength(1);
       const p1row = page1.data[0];
       assertDefined(p1row);
@@ -416,6 +445,7 @@ describe("OptimizedDatasource", () => {
       // Page 2
       assertDefined(page1.nextCursor);
       const page2 = await readDs.getTraces({
+        ...ALL_TIME,
         limit: 1,
         sortOrder: "DESC",
         cursor: page1.nextCursor,
@@ -429,6 +459,7 @@ describe("OptimizedDatasource", () => {
       // Page 3
       assertDefined(page2.nextCursor);
       const page3 = await readDs.getTraces({
+        ...ALL_TIME,
         limit: 1,
         sortOrder: "DESC",
         cursor: page2.nextCursor,
@@ -473,6 +504,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraces({
+        ...ALL_TIME,
         serviceName: "target-service",
         spanKind: "Server",
       });
@@ -491,7 +523,10 @@ describe("OptimizedDatasource", () => {
         endTimeNanos: "1001000000000000",
       });
 
-      const result = await readDs.getTraces({ traceId: "nonexistent" });
+      const result = await readDs.getTraces({
+        ...ALL_TIME,
+        traceId: "nonexistent",
+      });
 
       expect(result.data).toEqual([]);
       expect(result.nextCursor).toBeNull();
@@ -507,7 +542,7 @@ describe("OptimizedDatasource", () => {
         resourceAttributes: { env: "prod" },
       });
 
-      const result = await readDs.getTraces({});
+      const result = await readDs.getTraces({ ...ALL_TIME });
 
       const row = result.data[0];
       assertDefined(row);
@@ -562,6 +597,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraces({
+        ...ALL_TIME,
         traceId: "trace-with-array-attr",
       });
 
@@ -666,6 +702,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraces({
+        ...ALL_TIME,
         traceId: "trace-with-nested-attr",
       });
 
@@ -712,6 +749,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraces({
+        ...ALL_TIME,
         traceId: "trace-with-events-links",
       });
 
@@ -740,7 +778,7 @@ describe("OptimizedDatasource", () => {
       const badDs = createOptimizedDatasource(badConnection);
       badConnection.close();
 
-      await expect(badDs.getTraces({})).rejects.toThrow(
+      await expect(badDs.getTraces({ ...ALL_TIME })).rejects.toThrow(
         SqliteDatasourceQueryError
       );
     });
@@ -767,7 +805,7 @@ describe("OptimizedDatasource", () => {
       await insertLog({ timeNanos: "1000000000000000" });
       await insertLog({ timeNanos: "2000000000000000" });
 
-      const result = await readDs.getLogs({});
+      const result = await readDs.getLogs({ ...ALL_TIME });
 
       expect(result.data).toHaveLength(2);
       const row0 = result.data[0];
@@ -789,7 +827,10 @@ describe("OptimizedDatasource", () => {
         traceId: "other-trace",
       });
 
-      const result = await readDs.getLogs({ traceId: "target-trace" });
+      const result = await readDs.getLogs({
+        ...ALL_TIME,
+        traceId: "target-trace",
+      });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
@@ -801,7 +842,10 @@ describe("OptimizedDatasource", () => {
       await insertLog({ timeNanos: "1000000000000000", spanId: "target-span" });
       await insertLog({ timeNanos: "2000000000000000", spanId: "other-span" });
 
-      const result = await readDs.getLogs({ spanId: "target-span" });
+      const result = await readDs.getLogs({
+        ...ALL_TIME,
+        spanId: "target-span",
+      });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
@@ -819,7 +863,10 @@ describe("OptimizedDatasource", () => {
         serviceName: "other-service",
       });
 
-      const result = await readDs.getLogs({ serviceName: "target-service" });
+      const result = await readDs.getLogs({
+        ...ALL_TIME,
+        serviceName: "target-service",
+      });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
@@ -837,7 +884,10 @@ describe("OptimizedDatasource", () => {
         scopeName: "grpc-scope",
       });
 
-      const result = await readDs.getLogs({ scopeName: "http-scope" });
+      const result = await readDs.getLogs({
+        ...ALL_TIME,
+        scopeName: "http-scope",
+      });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
@@ -849,7 +899,10 @@ describe("OptimizedDatasource", () => {
       await insertLog({ timeNanos: "1000000000000000", severityText: "ERROR" });
       await insertLog({ timeNanos: "2000000000000000", severityText: "INFO" });
 
-      const result = await readDs.getLogs({ severityText: "ERROR" });
+      const result = await readDs.getLogs({
+        ...ALL_TIME,
+        severityText: "ERROR",
+      });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
@@ -863,6 +916,7 @@ describe("OptimizedDatasource", () => {
       await insertLog({ timeNanos: "3000000000000000", severityNumber: 15 });
 
       const result = await readDs.getLogs({
+        ...ALL_TIME,
         severityNumberMin: 8,
         severityNumberMax: 12,
       });
@@ -883,7 +937,10 @@ describe("OptimizedDatasource", () => {
         body: "Database connection failed",
       });
 
-      const result = await readDs.getLogs({ bodyContains: "logged in" });
+      const result = await readDs.getLogs({
+        ...ALL_TIME,
+        bodyContains: "logged in",
+      });
 
       expect(result.data).toHaveLength(1);
       const row = result.data[0];
@@ -897,6 +954,7 @@ describe("OptimizedDatasource", () => {
       await insertLog({ timeNanos: "3000000000000000" }); // 3000ms
 
       const result = await readDs.getLogs({
+        ...ALL_TIME,
         timestampMin: "1500000000000000",
         timestampMax: "2500000000000000",
       });
@@ -918,6 +976,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getLogs({
+        ...ALL_TIME,
         logAttributes: { "request.id": "abc123" },
       });
 
@@ -938,6 +997,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getLogs({
+        ...ALL_TIME,
         resourceAttributes: { env: "prod" },
       });
 
@@ -958,6 +1018,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getLogs({
+        ...ALL_TIME,
         scopeAttributes: { "library.version": "1.0.0" },
       });
 
@@ -974,7 +1035,7 @@ describe("OptimizedDatasource", () => {
         });
       }
 
-      const result = await readDs.getLogs({ limit: 3 });
+      const result = await readDs.getLogs({ ...ALL_TIME, limit: 3 });
 
       expect(result.data).toHaveLength(3);
       expect(result.nextCursor).not.toBeNull();
@@ -984,7 +1045,7 @@ describe("OptimizedDatasource", () => {
       await insertLog({ timeNanos: "2000000000000000" });
       await insertLog({ timeNanos: "1000000000000000" });
 
-      const result = await readDs.getLogs({ sortOrder: "ASC" });
+      const result = await readDs.getLogs({ ...ALL_TIME, sortOrder: "ASC" });
 
       const row0 = result.data[0];
       assertDefined(row0);
@@ -998,7 +1059,7 @@ describe("OptimizedDatasource", () => {
       await insertLog({ timeNanos: "1000000000000000" });
       await insertLog({ timeNanos: "2000000000000000" });
 
-      const result = await readDs.getLogs({ sortOrder: "DESC" });
+      const result = await readDs.getLogs({ ...ALL_TIME, sortOrder: "DESC" });
 
       const row0 = result.data[0];
       assertDefined(row0);
@@ -1014,7 +1075,11 @@ describe("OptimizedDatasource", () => {
       }
 
       // First page (DESC order)
-      const page1 = await readDs.getLogs({ limit: 2, sortOrder: "DESC" });
+      const page1 = await readDs.getLogs({
+        ...ALL_TIME,
+        limit: 2,
+        sortOrder: "DESC",
+      });
       expect(page1.data).toHaveLength(2);
       const p1r0 = page1.data[0];
       assertDefined(p1r0);
@@ -1024,6 +1089,7 @@ describe("OptimizedDatasource", () => {
       // Second page
       assertDefined(page1.nextCursor);
       const page2 = await readDs.getLogs({
+        ...ALL_TIME,
         limit: 2,
         sortOrder: "DESC",
         cursor: page1.nextCursor,
@@ -1043,7 +1109,11 @@ describe("OptimizedDatasource", () => {
       const seen = new Set<string>();
 
       // Page 1
-      const page1 = await readDs.getLogs({ limit: 1, sortOrder: "DESC" });
+      const page1 = await readDs.getLogs({
+        ...ALL_TIME,
+        limit: 1,
+        sortOrder: "DESC",
+      });
       expect(page1.data).toHaveLength(1);
       const p1row = page1.data[0];
       assertDefined(p1row);
@@ -1054,6 +1124,7 @@ describe("OptimizedDatasource", () => {
       // Page 2
       assertDefined(page1.nextCursor);
       const page2 = await readDs.getLogs({
+        ...ALL_TIME,
         limit: 1,
         sortOrder: "DESC",
         cursor: page1.nextCursor,
@@ -1068,6 +1139,7 @@ describe("OptimizedDatasource", () => {
       // Page 3
       assertDefined(page2.nextCursor);
       const page3 = await readDs.getLogs({
+        ...ALL_TIME,
         limit: 1,
         sortOrder: "DESC",
         cursor: page2.nextCursor,
@@ -1101,6 +1173,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getLogs({
+        ...ALL_TIME,
         serviceName: "target-service",
         severityText: "ERROR",
       });
@@ -1115,7 +1188,10 @@ describe("OptimizedDatasource", () => {
     it("returns empty result with null cursor when no matches", async () => {
       await insertLog({ timeNanos: "1000000000000000" });
 
-      const result = await readDs.getLogs({ traceId: "nonexistent" });
+      const result = await readDs.getLogs({
+        ...ALL_TIME,
+        traceId: "nonexistent",
+      });
 
       expect(result.data).toEqual([]);
       expect(result.nextCursor).toBeNull();
@@ -1130,7 +1206,7 @@ describe("OptimizedDatasource", () => {
         scopeAttributes: { "lib.name": "test" },
       });
 
-      const result = await readDs.getLogs({});
+      const result = await readDs.getLogs({ ...ALL_TIME });
 
       const row = result.data[0];
       assertDefined(row);
@@ -1146,7 +1222,7 @@ describe("OptimizedDatasource", () => {
         body: "Hello world",
       });
 
-      const result = await readDs.getLogs({});
+      const result = await readDs.getLogs({ ...ALL_TIME });
 
       const row = result.data[0];
       assertDefined(row);
@@ -1166,7 +1242,7 @@ describe("OptimizedDatasource", () => {
         },
       });
 
-      const result = await readDs.getLogs({});
+      const result = await readDs.getLogs({ ...ALL_TIME });
 
       const row = result.data[0];
       assertDefined(row);
@@ -1178,7 +1254,7 @@ describe("OptimizedDatasource", () => {
       const badDs = createOptimizedDatasource(badConnection);
       badConnection.close();
 
-      await expect(badDs.getLogs({})).rejects.toThrow(
+      await expect(badDs.getLogs({ ...ALL_TIME })).rejects.toThrow(
         SqliteDatasourceQueryError
       );
     });
@@ -2528,6 +2604,7 @@ describe("OptimizedDatasource", () => {
 
     it("returns empty array when no traces match", async () => {
       const result = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         serviceName: "nonexistent",
         limit: 20,
         sortOrder: "DESC",
@@ -2569,6 +2646,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "DESC",
       });
@@ -2619,6 +2697,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "DESC",
       });
@@ -2649,6 +2728,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         serviceName: "svc-a",
         limit: 20,
         sortOrder: "DESC",
@@ -2679,6 +2759,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         spanName: "GET /users",
         limit: 20,
         sortOrder: "DESC",
@@ -2714,6 +2795,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const result = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         timestampMin: "1500000000000000",
         timestampMax: "2500000000000000",
         limit: 20,
@@ -2739,6 +2821,7 @@ describe("OptimizedDatasource", () => {
 
       // Page 1 (DESC)
       const page1 = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         limit: 2,
         sortOrder: "DESC",
       });
@@ -2754,6 +2837,7 @@ describe("OptimizedDatasource", () => {
       // Page 2
       assertDefined(page1.nextCursor);
       const page2 = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         limit: 2,
         sortOrder: "DESC",
         cursor: page1.nextCursor,
@@ -2769,6 +2853,7 @@ describe("OptimizedDatasource", () => {
       // Page 3 — last item
       assertDefined(page2.nextCursor);
       const page3 = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         limit: 2,
         sortOrder: "DESC",
         cursor: page2.nextCursor,
@@ -2794,6 +2879,7 @@ describe("OptimizedDatasource", () => {
       });
 
       const descResult = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "DESC",
       });
@@ -2802,6 +2888,7 @@ describe("OptimizedDatasource", () => {
       expect(d0.traceId).toBe("trace-new");
 
       const ascResult = await readDs.getTraceSummaries({
+        ...ALL_TIME,
         limit: 20,
         sortOrder: "ASC",
       });
@@ -2809,6 +2896,79 @@ describe("OptimizedDatasource", () => {
       assertDefined(a0);
       expect(a0.traceId).toBe("trace-old");
     });
+  });
+});
+
+// A search with no time range covers only the last 24 hours, so a request
+// can never scan a workspace's whole history (KOP-216).
+describe("default time window (KOP-216)", () => {
+  const nowNs = () => BigInt(Date.now()) * 1_000_000n;
+  const HOUR_NS = 60n * 60n * 1_000_000_000n;
+  let testConnection: DatabaseSync;
+  let ds: OptimizedDatasource;
+  let insertSpan: ReturnType<typeof createInsertSpan>;
+  let insertLog: ReturnType<typeof createInsertLog>;
+
+  beforeEach(async () => {
+    testConnection = initializeDatabase(":memory:");
+    ds = createOptimizedDatasource(testConnection);
+    insertSpan = createInsertSpan(ds);
+    insertLog = createInsertLog(ds);
+
+    const recent = nowNs() - HOUR_NS;
+    const old = nowNs() - 48n * HOUR_NS;
+    await insertSpan({
+      traceId: "recent-trace",
+      spanId: "recent-span",
+      startTimeNanos: String(recent),
+      endTimeNanos: String(recent + 1_000_000n),
+    });
+    await insertSpan({
+      traceId: "old-trace",
+      spanId: "old-span",
+      startTimeNanos: String(old),
+      endTimeNanos: String(old + 1_000_000n),
+    });
+    await insertLog({ timeNanos: String(recent), body: "recent-log" });
+    await insertLog({
+      timeNanos: String(old),
+      traceId: "old-trace",
+      body: "old-log",
+    });
+  });
+
+  afterEach(() => {
+    testConnection.close();
+  });
+
+  it("span search returns only the last 24 hours", async () => {
+    const result = await ds.getTraces({});
+    expect(result.data.map((r) => r.SpanId)).toEqual(["recent-span"]);
+  });
+
+  it("log search returns only the last 24 hours", async () => {
+    const result = await ds.getLogs({});
+    expect(result.data.map((r) => r.Body)).toEqual(["recent-log"]);
+  });
+
+  it("trace summaries return only the last 24 hours", async () => {
+    const result = await ds.getTraceSummaries({});
+    expect(result.data.map((r) => r.traceId)).toEqual(["recent-trace"]);
+  });
+
+  it("a lookup by traceId still finds an old trace and its logs", async () => {
+    const spans = await ds.getTraces({ traceId: "old-trace" });
+    expect(spans.data.map((r) => r.SpanId)).toEqual(["old-span"]);
+    const logs = await ds.getLogs({ traceId: "old-trace" });
+    expect(logs.data.map((r) => r.Body)).toEqual(["old-log"]);
+  });
+
+  it("an explicit range still reaches old data", async () => {
+    const result = await ds.getTraceSummaries({ timestampMin: "0" });
+    expect(result.data.map((r) => r.traceId).sort()).toEqual([
+      "old-trace",
+      "recent-trace",
+    ]);
   });
 });
 

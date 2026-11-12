@@ -39,6 +39,10 @@ import type {
 import { useDebouncedValue } from "../components/observability/utils/use-debounced-value.js";
 
 import { SERVICES_SHORTCUTS } from "../components/observability/ServiceList/shortcuts.js";
+import {
+  DEFAULT_LOOKBACK,
+  DEFAULT_LOOKBACK_MS,
+} from "../components/observability/default-lookback.js";
 
 type OtelTracesRow = denormalizedSignals.OtelTracesRow;
 
@@ -430,8 +434,22 @@ function LogsTab() {
     writeLogFiltersToURL(filters, selectedServices, selectedLogId);
   }, [filters, selectedServices, selectedLogId]);
 
+  // With no time range the first fetch would scan the workspace's whole
+  // history (KOP-216), so it starts from an hour before the tab opened. Fixed
+  // at mount: a fresh value per render would change the query on every render.
+  const [defaultTimestampMin] = useState(() =>
+    String(BigInt(Date.now() - DEFAULT_LOOKBACK_MS) * 1_000_000n)
+  );
+  const liveParams = useMemo(
+    () =>
+      filters.timestampMin == null && filters.timestampMax == null
+        ? { ...filters, timestampMin: defaultTimestampMin }
+        : filters,
+    [filters, defaultTimestampMin]
+  );
+
   const { logs, isLive, loading, error, setLive } = useLiveLogs({
-    params: filters,
+    params: liveParams,
     pollIntervalMs: 3_000,
   });
 
@@ -522,8 +540,13 @@ function TraceSearchView({
     };
     if (service) params.serviceName = service;
     if (urlState.operation) params.spanName = urlState.operation;
-    if (urlState.lookback) {
-      const ms = LOOKBACK_MS[urlState.lookback];
+    // An absolute range from the URL stands on its own; the default lookback
+    // fills in only when the URL gives no time range at all (KOP-216).
+    const lookback =
+      urlState.lookback ??
+      (urlState.tsMin || urlState.tsMax ? null : DEFAULT_LOOKBACK);
+    if (lookback) {
+      const ms = LOOKBACK_MS[lookback];
       if (ms) {
         params.timestampMin = String((Date.now() - ms) * 1e6);
       }
@@ -600,7 +623,7 @@ function TraceSearchView({
       service: urlState.service ?? "",
       operation: urlState.operation ?? "",
       tags: urlState.tags ?? "",
-      lookback: urlState.lookback ?? "",
+      lookback: urlState.lookback ?? DEFAULT_LOOKBACK,
       minDuration: urlState.minDuration ?? "",
       maxDuration: urlState.maxDuration ?? "",
       limit: urlState.limit ?? 20,

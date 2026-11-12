@@ -454,3 +454,116 @@ describe("trace search tags filter", () => {
     });
   });
 });
+
+// KOP-216: with no time range the page used to ask for the workspace's whole
+// history, which times out on a large one. Assert on what reaches the client.
+describe("default lookback (KOP-216)", () => {
+  const HOUR_NS = 60n * 60n * 1_000_000_000n;
+
+  function nowNs(): bigint {
+    return BigInt(Date.now()) * 1_000_000n;
+  }
+
+  /** The request covers about the last hour: start within a minute of now - 1h. */
+  function expectLastHour(
+    timestampMin: unknown,
+    before: bigint,
+    after: bigint
+  ) {
+    expect(typeof timestampMin).toBe("string");
+    const min = BigInt(timestampMin as string);
+    expect(min).toBeGreaterThanOrEqual(before - HOUR_NS - 60_000_000_000n);
+    expect(min).toBeLessThanOrEqual(after - HOUR_NS);
+  }
+
+  it("searches traces over the last hour when the URL has no time range", async () => {
+    setURL("?tab=services");
+    const before = nowNs();
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockClient.searchTraceSummariesPage).toHaveBeenCalled();
+    });
+    const filter = mockClient.searchTraceSummariesPage.mock.calls[0]?.[0];
+    expectLastHour(filter?.timestampMin, before, nowNs());
+    expect(filter?.timestampMax).toBeUndefined();
+
+    const lookback = screen.getByRole("combobox", {
+      name: /lookback/i,
+    }) as HTMLSelectElement;
+    expect(lookback.value).toBe("1h");
+    const labels = Array.from(lookback.options).map((o) => o.textContent);
+    expect(labels).not.toContain("All time");
+  });
+
+  it("keeps an absolute end time from the URL without adding the default start", async () => {
+    setURL("?tab=services&tsMax=1700000000000000000");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockClient.searchTraceSummariesPage).toHaveBeenCalled();
+    });
+    const filter = mockClient.searchTraceSummariesPage.mock.calls[0]?.[0];
+    expect(filter?.timestampMax).toBe("1700000000000000000");
+    expect(filter?.timestampMin).toBeUndefined();
+  });
+
+  it("keeps an absolute start time from the URL", async () => {
+    setURL("?tab=services&tsMin=1700000000000000000");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockClient.searchTraceSummariesPage).toHaveBeenCalled();
+    });
+    const filter = mockClient.searchTraceSummariesPage.mock.calls[0]?.[0];
+    expect(filter?.timestampMin).toBe("1700000000000000000");
+  });
+
+  it("tails logs from the last hour when the URL has no time range", async () => {
+    setURL("?tab=logs");
+    const before = nowNs();
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockClient.searchLogsPage).toHaveBeenCalled();
+    });
+    const filter = mockClient.searchLogsPage.mock.calls[0]?.[0];
+    expectLastHour(filter?.timestampMin, before, nowNs());
+  });
+
+  it("keeps a log start time from the URL", async () => {
+    setURL("?tab=logs&tsMin=1700000000000000000");
+
+    render(
+      createElement(ObservabilityPage, {
+        client: mockClient as unknown as KopaiClient,
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockClient.searchLogsPage).toHaveBeenCalled();
+    });
+    const filter = mockClient.searchLogsPage.mock.calls[0]?.[0];
+    expect(filter?.timestampMin).toBe("1700000000000000000");
+  });
+});

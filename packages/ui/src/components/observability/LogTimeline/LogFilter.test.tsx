@@ -556,15 +556,16 @@ describe("LogFilter", () => {
     expect(call.timestampMax).toBeUndefined();
   });
 
-  it("lookback 'All time' clears timestampMin", () => {
-    const { onChange } = setup({ value: { timestampMin: "123" } });
+  // KOP-216: an unbounded search scans the workspace's whole history and
+  // times out on a large one, so there is no "All time" choice.
+  it("offers no 'All time' lookback and starts on Last 1 Hour", () => {
+    setup();
     expand();
     const select = getSelect("filter-lookback");
 
-    fireEvent.change(select, { target: { value: "-1" } });
-
-    const call = lastCall(onChange);
-    expect(call.timestampMin).toBeUndefined();
+    const labels = Array.from(select.options).map((o) => o.textContent);
+    expect(labels).not.toContain("All time");
+    expect(select.selectedOptions[0]?.textContent).toBe("Last 1 Hour");
   });
 
   // -- Time mode switching --------------------------------------------------
@@ -591,7 +592,8 @@ describe("LogFilter", () => {
     expect(call.timestampMax).toBeUndefined();
   });
 
-  it("switching back to lookback clears timestamps", () => {
+  it("switching back to lookback restores the 1 hour default", () => {
+    vi.setSystemTime(new Date("2025-01-15T12:00:00Z"));
     const { onChange } = setup({
       value: { timestampMin: "123", timestampMax: "456" },
     });
@@ -603,8 +605,12 @@ describe("LogFilter", () => {
     fireEvent.click(screen.getByTestId("time-mode-lookback"));
 
     const call = lastCall(onChange);
-    expect(call.timestampMin).toBeUndefined();
+    const expectedNs = String(BigInt(Date.now() - 60 * 60_000) * 1_000_000n);
+    expect(call.timestampMin).toBe(expectedNs);
     expect(call.timestampMax).toBeUndefined();
+    expect(getSelect("filter-lookback").selectedOptions[0]?.textContent).toBe(
+      "Last 1 Hour"
+    );
   });
 
   // -- Absolute time inputs -------------------------------------------------

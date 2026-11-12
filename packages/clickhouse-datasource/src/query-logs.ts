@@ -1,4 +1,4 @@
-import type { dataFilterSchemas } from "@kopai/core";
+import { dataFilterSchemas } from "@kopai/core";
 import { nanosToDateTime64 } from "./timestamp.js";
 
 /**
@@ -9,10 +9,13 @@ function escapeLikePattern(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
-export function buildLogsQuery(filter: dataFilterSchemas.LogsDataFilter): {
+export function buildLogsQuery(
+  requestFilter: dataFilterSchemas.LogsDataFilter
+): {
   query: string;
   params: Record<string, unknown>;
 } {
+  const filter = dataFilterSchemas.withDefaultTimeWindow(requestFilter);
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
   const limit = filter.limit ?? 100;

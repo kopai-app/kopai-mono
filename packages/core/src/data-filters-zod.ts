@@ -57,7 +57,7 @@ export const tracesDataFilterSchema = z.object({
   timestampMin: nanosStringSchema
     .optional()
     .describe(
-      "Minimum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
+      "Minimum start time of the span. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours (unless traceId is set); if only timestampMax is set, the 24 hours before it."
     ),
   timestampMax: nanosStringSchema
     .optional()
@@ -170,7 +170,7 @@ export const logsDataFilterSchema = z.object({
   timestampMin: nanosStringSchema
     .optional()
     .describe(
-      "Minimum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON."
+      "Minimum time when the event occurred. UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970. Expressed as string in JSON. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours (unless traceId is set); if only timestampMax is set, the 24 hours before it."
     ),
   timestampMax: nanosStringSchema
     .optional()
@@ -318,8 +318,16 @@ export type MetricsDataFilter = z.infer<typeof metricsDataFilterBaseSchema>;
 export const traceSummariesFilterSchema = z.object({
   serviceName: z.string().optional(),
   spanName: z.string().optional(),
-  timestampMin: nanosStringSchema.optional(),
-  timestampMax: nanosStringSchema.optional(),
+  timestampMin: nanosStringSchema
+    .optional()
+    .describe(
+      "Earliest start time of a span in the trace. UNIX Epoch time in nanoseconds, as a string. If neither timestampMin nor timestampMax is set, the search covers the last 24 hours; if only timestampMax is set, the 24 hours before it."
+    ),
+  timestampMax: nanosStringSchema
+    .optional()
+    .describe(
+      "Latest start time of a span in the trace. UNIX Epoch time in nanoseconds, as a string."
+    ),
   durationMin: nanosStringSchema.optional(),
   durationMax: nanosStringSchema.optional(),
   spanAttributes: z.record(z.string(), z.string()).optional(),
@@ -349,3 +357,34 @@ export const traceSummaryRowSchema = z.object({
 });
 
 export type TraceSummaryRow = z.infer<typeof traceSummaryRowSchema>;
+
+// --- Default time window ---
+
+/** Window a search covers when the request gives no time range: 24 hours. */
+export const DEFAULT_TIME_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+const DEFAULT_TIME_WINDOW_NS = BigInt(DEFAULT_TIME_WINDOW_MS) * 1_000_000n;
+
+/**
+ * Bounds a search that gives no start time, so it never scans a workspace's
+ * whole history (KOP-216).
+ *
+ * - No `timestampMin` and no `timestampMax`: the last 24 hours.
+ * - Only `timestampMax`: the 24 hours before it.
+ * - `timestampMin` given, or a `traceId` lookup: unchanged.
+ *
+ * Every datasource applies this to span search, log search and trace
+ * summaries, so a request means the same on every backend.
+ */
+export function withDefaultTimeWindow<
+  T extends { timestampMin?: string; timestampMax?: string; traceId?: string },
+>(filter: T, nowMs: number = Date.now()): T {
+  if (filter.timestampMin != null || filter.traceId != null) return filter;
+  const end =
+    filter.timestampMax != null
+      ? BigInt(filter.timestampMax)
+      : BigInt(nowMs) * 1_000_000n;
+  const start =
+    end > DEFAULT_TIME_WINDOW_NS ? end - DEFAULT_TIME_WINDOW_NS : 0n;
+  return { ...filter, timestampMin: String(start) };
+}
