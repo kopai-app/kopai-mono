@@ -35,9 +35,8 @@ It gives Claude:
   token the grant "may create alert rules".
 
 The skills never change or pause a rule on their own, and the channel's
-`agent` token never can. An owner or admin can, as themselves: in Kopai's
-rule editor, or by asking Claude in the thread and allowing it through
-their own Kopai connector.
+`agent` token never can. An owner or admin changes rules as themselves,
+in Kopai's rule editor; Claude links it.
 
 ## How Claude handles a Kopai alert
 
@@ -135,11 +134,20 @@ report a bug.
 
 ## Data and privacy
 
-The plugin sends requests only to Kopai's MCP server at
+The plugin sends requests to Kopai's MCP server at
 `https://api.kopai.app/v2/mcp`, with the credential your admin configured.
 It reads telemetry and alerts from your Kopai workspace, and writes only
 to your on-call repo, your Slack channels and, with the opt-in, new Kopai
 alert rules. Kopai's privacy policy: <https://kopai.app/privacy/>.
+
+`root-cause-analysis` also has a code mode, used only where Claude can run
+Node (Claude Code, or a Claude Tag sandbox) and only for questions that
+need many queries in a loop. In code mode Claude downloads packages from
+the public npm registry: `@kopai/sdk`, `tsx` and, as a fallback,
+`@kopai/cli`. The script calls Kopai's query API: in a Claude Tag
+sandbox at `https://api.kopai.app/v2`, with the channel's credential;
+elsewhere at the URL and with the token in a `.kopairc` file in the
+project or your home directory, the same file the Kopai CLI uses.
 
 ## Test it
 
