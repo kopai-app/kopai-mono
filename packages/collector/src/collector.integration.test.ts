@@ -75,9 +75,7 @@ describe("collector integration", () => {
       },
     });
 
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    const addr = server.addresses()[0]!;
-    baseUrl = `http://127.0.0.1:${addr.port}`;
+    baseUrl = await server.listen({ port: 0, host: "127.0.0.1" });
 
     const resource = resourceFromAttributes({
       [ATTR_SERVICE_NAME]: "integration-test-service",
@@ -235,9 +233,7 @@ describe("collector integration (protobuf)", () => {
       },
     });
 
-    await server.listen({ port: 0, host: "127.0.0.1" });
-    const addr = server.addresses()[0]!;
-    baseUrl = `http://127.0.0.1:${addr.port}`;
+    baseUrl = await server.listen({ port: 0, host: "127.0.0.1" });
 
     const resource = resourceFromAttributes({
       [ATTR_SERVICE_NAME]: "integration-test-service",
