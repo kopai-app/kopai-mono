@@ -65,7 +65,7 @@ export async function createOtelTestingHarness(
   }
 
   const addr = server.addresses()[0];
-  if (!addr) {
+  if (!addr || typeof addr === "string") {
     database.close();
     await server.close();
     throw new Error("Failed to get server address");
