@@ -1,25 +1,111 @@
 ---
 name: root-cause-analysis
-description: Investigate and root-cause production issues from live OpenTelemetry telemetry (traces, logs, metrics) with the Kopai SDK in TypeScript code mode. Use this skill to debug errors and error-rate spikes, investigate latency/slowness and timeouts, trace requests across services, find failing or cascading services, and correlate logs to a trace — including vague symptom reports like 'why is my API slow', 'getting 500 errors', 'service is down', 'requests are timing out', or 'something is failing in prod', even when the user never says 'traces' or 'observability'. This analyzes existing telemetry to find a cause. Do NOT use it to add instrumentation (use otel-instrumentation), to build dashboards or visualizations (use create-dashboard), or to fix non-telemetry problems like failing CI, lint errors, unit tests, or SQL query tuning.
+description: Investigate and root-cause production issues from live OpenTelemetry telemetry (traces, logs, metrics) through the Kopai connector or the Kopai SDK in TypeScript code mode. Use this skill to debug errors and error-rate spikes, investigate latency/slowness and timeouts, trace requests across services, find failing or cascading services, and correlate logs to a trace — including vague symptom reports like 'why is my API slow', 'getting 500 errors', 'service is down', 'requests are timing out', or 'something is failing in prod', even when the user never says 'traces' or 'observability'. This analyzes existing telemetry to find a cause. Do NOT use it to add instrumentation (use otel-instrumentation), to build dashboards or visualizations (use create-dashboard), or to fix non-telemetry problems like failing CI, lint errors, unit tests, or SQL query tuning. For on-call alerts where ONCALL.md exists, use kopai-triage (from the Kopai On-Call plugin).
 license: Apache-2.0
 metadata:
   author: kopai
-  version: "1.5.0"
+  version: "1.6.0"
 ---
 
 # Root Cause Analysis with Kopai
 
 Debug production issues from telemetry (traces, logs, metrics). Kopai's analytical
 power — error rate, throughput, latency, group-by, time-series bucketing — lives in
-the **SDK query API**, which the CLI does not expose. So lead every investigation by
-writing a short TypeScript script; the CLI stays as a quick-lookup fallback.
+the **query API**, which the Kopai connector's `query` tool and the SDK both expose
+and the CLI does not. So lead every investigation with queries, through the connector
+or a short TypeScript script; the CLI stays as a quick-lookup fallback.
 
 ## Prerequisites
 
 - Services are sending OpenTelemetry data to Kopai (see the `otel-instrumentation` skill).
-- `@kopai/sdk` is installed in the project: `npm i @kopai/sdk` (it ships the query API and the `.kopairc` reader).
+- One way to reach Kopai: the Kopai connector's `query` tool, or `@kopai/sdk`
+  (`npm i @kopai/sdk`, which ships the query API and the `.kopairc` reader).
 
-## Code mode (recommended)
+## Choose a mode
+
+| You have                                                                                                                                                      | Use                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| A Kopai `query` tool (Claude Tag channel, claude.ai connector, or Claude Code with the Kopai MCP server)                                                      | **Connector mode** below, for most investigations |
+| A sandbox or project where you can run Node, and a question the connector answers awkwardly (many queries in a loop, joining results, arithmetic across rows) | **Code mode**                                     |
+| Neither                                                                                                                                                       | The CLI fallback at the end                       |
+
+Both modes run the same queries: the workflow, patterns and gotchas below
+apply to each.
+
+## Connector mode
+
+The Kopai connector exposes two read-only tools: `query`, which takes one
+KopaiQuery object under `query`, and `metrics_discover`. Their names carry
+a prefix that depends on how Kopai is connected (`mcp__kopai__query`,
+`mcp__claude_ai_Kopai__query`, …); use whichever is present. The tool's
+own schema is authoritative for field names, row caps and the aggregate
+cap; on `invalid_input`, repair the query from the returned `issues`.
+
+Every SDK builder call in this skill has a JSON equivalent. Measure ops
+are upper-case (`errorRate` → `ERROR_RATE`, `avg` → `AVG`, `p95` → `P95`),
+`.summary()`/`.timeSeries("5m")` become `output`, and `.timeRelative("1h")`
+becomes `timeDimension`. Step 1 of the workflow, ranking services by
+error rate:
+
+```json
+{
+  "signal": "traces",
+  "mode": "aggregate",
+  "measures": [
+    { "op": "ERROR_RATE", "as": "error_rate" },
+    { "op": "COUNT", "as": "spans" }
+  ],
+  "dimensions": ["service.name"],
+  "timeDimension": { "type": "relative", "lookback": "1h" },
+  "output": { "type": "summary" },
+  "orderBy": [
+    { "type": "measure", "alias": "error_rate", "direction": "desc" }
+  ],
+  "limit": 20
+}
+```
+
+And step 3, the logs of one trace:
+
+```json
+{
+  "signal": "logs",
+  "mode": "raw",
+  "filters": [{ "column": "TraceId", "op": "eq", "value": "<traceId>" }],
+  "timeDimension": { "type": "relative", "lookback": "1h" },
+  "limit": 100
+}
+```
+
+For an incident, prefer an `absolute` window (`startTime`/`endTime`, ISO
+datetimes) over `relative`, so the evidence you cite doesn't slide.
+
+Differences from the SDK in connector mode:
+
+- `Duration` comparisons (`gt`, `lte`, …) take a number of nanoseconds,
+  not a string like `"1s"`: `{ "column": "Duration", "op": "gt", "value": 1000000000 }`.
+- Row caps are 200 in `raw` mode and 500 in `aggregate` mode (buckets ×
+  groups for a time series). An over-cap result is refused, not
+  truncated: narrow the window, coarsen the granularity, or filter groups.
+- There is no compile-time check on values: `"ERROR"` or `"SERVER"`
+  silently match nothing. Use the exact values (`"Error"`, `"Server"`,
+  `"Client"`), and treat an unexpected zero as a wrong value first.
+- A time series has no row for a bucket with no data.
+
+**Credentials.** In connector mode Claude never handles a Kopai token. In a
+Claude Tag channel, Kopai access is a credential the admin attached to the
+channel, applied outside the sandbox. Never ask anyone to paste a token
+into a thread.
+
+**Code mode in a Claude Tag sandbox.** The sandbox has no `.kopairc` and
+needs none: requests to `api.kopai.app` get the channel's Kopai credential
+attached on the way out. Connect with
+`clientFromConfig({ url: "https://api.kopai.app/v2" })` and no token. If
+requests come back unauthorized, the channel's Kopai connection doesn't
+cover that address; use connector mode and tell the user which host was
+refused.
+
+## Code mode
 
 **Connect** — `clientFromConfig()` reads `.kopairc` exactly like the CLI:
 

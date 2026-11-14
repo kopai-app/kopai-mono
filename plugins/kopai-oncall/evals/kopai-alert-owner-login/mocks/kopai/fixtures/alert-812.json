@@ -1,0 +1,91 @@
+{
+  "event": {
+    "id": "812",
+    "ruleId": "8f14e45f-ceea-467f-a0e6-0b1f1e5a8c2d",
+    "ruleName": "checkout latency",
+    "transition": "FIRING",
+    "occurredAt": "2026-11-09T14:02:00.000Z",
+    "observedValue": 2.1,
+    "threshold": 0.5,
+    "comparison": "gt",
+    "windowStart": "2026-11-09T13:55:00.000Z",
+    "windowEnd": "2026-11-09T14:00:00.000Z",
+    "resolveReason": null,
+    "conditionFirstMetAt": "2026-11-09T14:00:00.000Z",
+    "firedAt": "2026-11-09T14:02:00.000Z",
+    "unit": "s",
+    "display": {
+      "observed": { "value": 2.1, "unit": "s", "text": "p95 ≈ 2.1 s" },
+      "threshold": { "value": 0.5, "unit": "s", "text": "500 ms" }
+    },
+    "deliveryStatus": "sent"
+  },
+  "pair": null,
+  "rule": {
+    "id": "8f14e45f-ceea-467f-a0e6-0b1f1e5a8c2d",
+    "deleted": false,
+    "current": {
+      "id": "8f14e45f-ceea-467f-a0e6-0b1f1e5a8c2d",
+      "name": "checkout latency",
+      "metricName": "http.server.request.duration",
+      "metricType": "Histogram",
+      "aggregation": "QUANTILE",
+      "quantile": 0.95,
+      "filters": [
+        { "scope": "resource", "key": "service.name", "value": "checkout" }
+      ],
+      "windowSeconds": 300,
+      "comparison": "gt",
+      "threshold": 0.5,
+      "forSeconds": 120,
+      "keepFiringForSeconds": 300,
+      "intervalSeconds": 60,
+      "offsetSeconds": 120,
+      "severity": "critical",
+      "summary": "Checkout is slow: p95 of POST /checkout is above 500 ms.",
+      "runbookNote": "Check payments and recent checkout deploys.",
+      "enabled": true,
+      "unit": "s",
+      "status": "active",
+      "createdAt": "2026-10-20T09:00:00.000Z",
+      "updatedAt": "2026-10-20T09:00:00.000Z",
+      "createdBy": "user:5a1c9e0b-2f4d-4b8e-9a51-3d7f2c1e8b40",
+      "approvalUrl": null
+    }
+  },
+  "query": {
+    "endpoint": "/signals/query",
+    "reconstructed": false,
+    "body": {
+      "signal": "metrics",
+      "mode": "aggregate",
+      "metricName": "http.server.request.duration",
+      "metricType": "Histogram",
+      "timeRange": {
+        "type": "absolute",
+        "from": "2026-11-09T13:55:00Z",
+        "to": "2026-11-09T14:00:00Z"
+      },
+      "filters": [
+        {
+          "field": "service.name",
+          "scope": "resource",
+          "op": "eq",
+          "value": "checkout"
+        }
+      ],
+      "summary": {
+        "measures": [{ "op": "QUANTILE", "quantile": 0.95, "alias": "value" }]
+      }
+    }
+  },
+  "delivery": {
+    "status": "sent",
+    "attempts": 1,
+    "lastAttemptAt": "2026-11-09T14:02:03.000Z"
+  },
+  "observed": { "value": 2.1, "unit": "s", "text": "p95 ≈ 2.1 s" },
+  "threshold": { "value": 0.5, "unit": "s", "text": "500 ms" },
+  "incident_url": "https://app.kopai.app/alerts/rules/8f14e45f-ceea-467f-a0e6-0b1f1e5a8c2d/incidents/812",
+  "caller": { "kind": "person", "role": "owner" }
+}

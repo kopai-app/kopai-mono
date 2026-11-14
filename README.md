@@ -46,6 +46,8 @@ The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-i
 
 `npx skills add kopai-app/kopai-mono` installs Kopai's agent skills from [`skills/`](./skills); see [kopai.app/skills](https://kopai.app/skills) for what each one does.
 
+[`plugins/kopai-oncall`](./plugins/kopai-oncall) is the Kopai On-Call plugin for Claude: it puts Claude on call in Claude Tag, claude.ai and Claude Code, triaging alerts with your Kopai telemetry.
+
 ## Packages
 
 | Package                                                          | Description                     | Version                                                                                                                                      |

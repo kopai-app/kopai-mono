@@ -1,0 +1,38 @@
+Kopai On-Call
+Copyright 2026 Kopai
+
+This plugin includes material adapted from the On-Call Kit
+(https://github.com/anthropics/oncall-kit), Copyright 2026 Anthropic PBC,
+licensed under the Apache License, Version 2.0.
+
+Adapted files keep their original copyright and SPDX headers and carry a
+"Modified for Kopai" note describing what changed. The adaptations:
+
+- skills/kopai-oncall-playbooks
+                              from skills/oncall-setup, plus templates/,
+                              eval/replay.md and ONBOARD.md
+- skills/kopai-oncall-setup/references/tag-setup.md
+                              from TAG-SETUP.md
+- skills/kopai-triage         from skills/triage (failure-class references
+                              rewritten for service telemetry in Kopai)
+- skills/kopai-handoff        from skills/handoff
+- skills/kopai-weather        from skills/weather
+- skills/kopai-oncall-playbooks/templates/ONCALL-RULES.md
+                              from the standing rules in CLAUDE.md
+- skills/kopai-verify-fix     new; expands step 9 of skills/triage
+- skills/kopai-evidence-page  new; a snapshot page, only on request
+- skills/kopai-oncall-setup   new; connects one alert channel and creates
+                              its watch routine
+- skills/kopai-triage/references/
+                              new content for Kopai, in the structure of
+                              the kit's triage references
+
+Main changes: skills are renamed with a kopai- prefix; telemetry
+capabilities (metrics, logs, traces) bind to the Kopai MCP connector;
+team-specific playbooks live in the team's own repository instead of the
+plugin; and the standing rules ship as ONCALL-RULES.md, which setup copies
+into the team's repository. Kopai is also the alerting tool: triage reads
+Kopai alerts by event id, and rule proposals use Kopai's rule editor link.
+
+The skills root-cause-analysis and create-live-page are Kopai's own and are copied from the repository's
+top-level skills/ directory by scripts/sync-plugin-skills.mjs.
