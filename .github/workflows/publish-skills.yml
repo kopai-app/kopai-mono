@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - "skills/**"
+      - ".github/workflows/publish-skills.yml"
 
 concurrency:
   group: publish-skills-${{ github.ref }}
@@ -22,6 +23,7 @@ jobs:
       matrix:
         skill:
           - create-dashboard
+          - create-live-page
           - otel-instrumentation
           - root-cause-analysis
     defaults:
