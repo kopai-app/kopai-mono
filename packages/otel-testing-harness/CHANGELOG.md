@@ -1,5 +1,14 @@
 # @kopai/otel-testing-harness
 
+## 0.1.10
+
+### Patch Changes
+
+- 73c5830: Bump runtime dependencies (fastify 5.12.8, @fastify/swagger, @fastify/swagger-ui, commander, @clickhouse/client, @bufbuild/protobuf, @modelcontextprotocol/*, kysely, @tanstack/react-virtual). Narrow `server.addresses()` results for fastify 5.12.8's `AddressInfo | string` typing.
+- Updated dependencies [73c5830]
+  - @kopai/collector@0.7.7
+  - @kopai/sqlite-datasource@0.15.1
+
 ## 0.1.9
 
 ### Patch Changes

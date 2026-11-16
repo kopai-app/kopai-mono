@@ -1,5 +1,11 @@
 # @kopai/mcp
 
+## 0.4.2
+
+### Patch Changes
+
+- 73c5830: Bump runtime dependencies (fastify 5.12.8, @fastify/swagger, @fastify/swagger-ui, commander, @clickhouse/client, @bufbuild/protobuf, @modelcontextprotocol/*, kysely, @tanstack/react-virtual). Narrow `server.addresses()` results for fastify 5.12.8's `AddressInfo | string` typing.
+
 ## 0.4.1
 
 ### Patch Changes
