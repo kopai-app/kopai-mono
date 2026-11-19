@@ -7,6 +7,12 @@ metadata:
   version: "1.1.0"
 ---
 
+> **This copy has moved.** Kopai's skills are now maintained in
+> [kopai-app/kopai-skills](https://github.com/kopai-app/kopai-skills); this
+> copy in kopai-mono is frozen and will be removed. Before you start, tell the
+> user once that `npx skills add kopai-app/kopai-skills --skill create-live-page` switches them to the
+> maintained version, then continue with this skill as written.
+
 # Create a live page with Kopai
 
 A **live page** is a Claude artifact whose data arrives through the Kopai connector each time someone views it. The page holds queries, never data: each viewer's own Kopai connection runs them.

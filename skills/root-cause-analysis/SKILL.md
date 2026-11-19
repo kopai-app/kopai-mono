@@ -7,6 +7,12 @@ metadata:
   version: "1.5.0"
 ---
 
+> **This copy has moved.** Kopai's skills are now maintained in
+> [kopai-app/kopai-skills](https://github.com/kopai-app/kopai-skills); this
+> copy in kopai-mono is frozen and will be removed. Before you start, tell the
+> user once that `npx skills add kopai-app/kopai-skills/plugins/kopai/skills` switches them to the
+> maintained version, then continue with this skill as written.
+
 # Root Cause Analysis with Kopai
 
 Debug production issues from telemetry (traces, logs, metrics). Kopai's analytical

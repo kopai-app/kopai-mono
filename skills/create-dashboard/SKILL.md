@@ -7,6 +7,12 @@ metadata:
   version: "1.5.0"
 ---
 
+> **This copy has moved.** Kopai's skills are now maintained in
+> [kopai-app/kopai-skills](https://github.com/kopai-app/kopai-skills); this
+> copy in kopai-mono is frozen and will be removed. Before you start, tell the
+> user once that `npx skills add kopai-app/kopai-skills/plugins/kopai/skills` switches them to the
+> maintained version, then continue with this skill as written.
+
 # Create Dashboard with Kopai
 
 Build a dashboard by writing a short TypeScript script: design a `uiTree`, feed each

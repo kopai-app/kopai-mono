@@ -114,13 +114,10 @@ curl http://localhost:8000/dashboards/schema
 
 Use the `/create-dashboard` skill in Claude Code for guided dashboard creation with live schema injection.
 
-Install the skill via [skills.sh](https://skills.sh):
+Install the skill from [kopai-skills](https://github.com/kopai-app/kopai-skills) via [skills.sh](https://skills.sh):
 
 ```bash
-npx skills add https://github.com/kopai-app/kopai-mono/tree/main/skills/create-dashboard
-
-# Or from a local checkout
-npx skills add ./skills/create-dashboard
+npx skills add kopai-app/kopai-skills/plugins/kopai/skills --skill create-dashboard
 ```
 
 ## Data Fetching
