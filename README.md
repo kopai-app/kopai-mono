@@ -44,7 +44,7 @@ The image is built on [Docker Hardened Images](https://hub.docker.com/hardened-i
 
 ## Agent skills
 
-Kopai's agent skills live in [kopai-app/kopai-skills](https://github.com/kopai-app/kopai-skills). `npx skills add kopai-app/kopai-skills/plugins/kopai/skills` installs them; see [kopai.app/skills](https://kopai.app/skills) for what each one does.
+Kopai's agent skills live in [kopai-app/kopai-skills](https://github.com/kopai-app/kopai-skills). `npx skills add kopai-app/kopai-skills/plugins/kopai/skills` installs the portable ones, and `npx skills add kopai-app/kopai-skills --skill create-live-page` adds the Claude-only `create-live-page`; see [kopai.app/skills](https://kopai.app/skills) for what each one does.
 
 ## Packages
 

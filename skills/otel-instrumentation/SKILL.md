@@ -9,9 +9,10 @@ metadata:
 
 > **This copy has moved.** Kopai's skills are now maintained in
 > [kopai-app/kopai-skills](https://github.com/kopai-app/kopai-skills); this
-> copy in kopai-mono is frozen and will be removed. Before you start, tell the
-> user once that `npx skills add kopai-app/kopai-skills/plugins/kopai/skills` switches them to the
-> maintained version, then continue with this skill as written.
+> copy in kopai-mono is frozen and will be removed. If a person is reading
+> your replies, tell them once in this conversation that `npx skills add kopai-app/kopai-skills/plugins/kopai/skills`
+> switches them to the maintained version (with `-g` if they installed it
+> globally). Then continue with this skill as written.
 
 # OpenTelemetry Instrumentation with Kopai
 
