@@ -32,9 +32,14 @@ import { passThroughValidator } from "./validator.js";
  * Each tool repeats its `title` inside `annotations`: the 2025-03-26 spec has
  * no top-level tool `title`, so clients and checks built on it (including the
  * Claude connector directory check) read it only from there.
+ *
+ * `destructiveHint` is stated even though the spec ignores it when
+ * `readOnlyHint` is true: OpenAI's plugin review requires `readOnlyHint`,
+ * `destructiveHint` and `openWorldHint` as explicit booleans on every tool.
  */
 const READ_ONLY = {
   readOnlyHint: true,
+  destructiveHint: false,
   idempotentHint: true,
   openWorldHint: false,
 } as const;

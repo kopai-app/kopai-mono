@@ -58,12 +58,13 @@ describe("registerTools", () => {
     expect(tools.map((t) => t.name)).toEqual(["query", "metrics_discover"]);
   });
 
-  it("marks both tools read-only, idempotent and closed-world", () => {
+  it("marks both tools read-only, non-destructive, idempotent and closed-world", () => {
     const { server, tools } = recordingServer();
     registerTools(server, { readTelemetryDatasource: fakeDatasource() });
     for (const tool of tools) {
       expect(tool.config.annotations).toEqual({
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
         title: tool.config.title,
